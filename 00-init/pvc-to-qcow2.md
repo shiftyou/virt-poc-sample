@@ -7,34 +7,45 @@ OpenShift Virtualization 환경에서 PVC의 VM 디스크를 로컬 qcow2 파일
 
 ## Part 1: PVC → qcow2 (다운로드)
 
-### 방법 1: virtctl 명령어로 직접 다운로드 (가장 권장)
+### 방법 1: virtctl vmexport로 다운로드 (권장)
 
-OpenShift Virtualization 전용 CLI 도구인 virtctl을 사용하면 PVC의 데이터를 로컬 파일로 간편하게 스트리밍할 수 있습니다.
+`virtctl image-upload`는 업로드 전용 명령입니다. PVC를 로컬로 내보내려면 `virtctl vmexport`를 사용합니다.
+(`--pull-method`, `--download` 플래그는 `image-upload`에 존재하지 않습니다.)
 
 #### 1. PVC 이름 확인
 
-`openshift-virtualization-os-images` 네임스페이스에서 대상 PVC 이름을 확인합니다.
-
 ```bash
-oc get pvc -n openshift-virtualization-os-images
+oc get pvc -n <NAMESPACE>
 ```
 
-#### 2. 이미지 다운로드
+#### 2. VMExport 생성
 
 ```bash
-virtctl image-upload pvc <PVC_NAME> \
-  --image-path=./rhel9-extracted.qcow2 \
-  --pull-method=http \
-  --download \
-  -n openshift-virtualization-os-images
+virtctl vmexport create rhel9-export \
+  --pvc=<PVC_NAME> \
+  -n <NAMESPACE>
+```
+
+#### 3. 이미지 다운로드
+
+```bash
+virtctl vmexport download rhel9-export \
+  --output=./rhel9-extracted.qcow2 \
+  -n <NAMESPACE>
 ```
 
 | 옵션 | 설명 |
 |------|------|
-| `--download` | PVC의 데이터를 로컬로 가져오겠다는 옵션 |
-| `--image-path` | 저장할 로컬 파일 경로 |
-| `--pull-method=http` | CDI uploadproxy를 통한 HTTP 스트리밍 방식 |
+| `create` | 내보내기 세션 생성 |
+| `download` | 내보내기 세션에서 로컬로 파일 다운로드 |
+| `--output` | 저장할 로컬 파일 경로 |
 | `-n` | PVC가 위치한 네임스페이스 |
+
+#### 4. VMExport 삭제 (정리)
+
+```bash
+virtctl vmexport delete rhel9-export -n <NAMESPACE>
+```
 
 ---
 
@@ -74,12 +85,10 @@ spec:
     apiGroup: snapshot.storage.k8s.io
 EOF
 
-# 3. 복원된 PVC를 virtctl로 다운로드
-virtctl image-upload pvc rhel9-export-pvc \
-  --image-path=./rhel9-extracted.qcow2 \
-  --pull-method=http \
-  --download \
-  -n openshift-virtualization-os-images
+# 3. 복원된 PVC를 virtctl vmexport로 다운로드
+virtctl vmexport create rhel9-export --pvc=rhel9-export-pvc -n openshift-virtualization-os-images
+virtctl vmexport download rhel9-export --output=./rhel9-extracted.qcow2 -n openshift-virtualization-os-images
+virtctl vmexport delete rhel9-export -n openshift-virtualization-os-images
 ```
 
 ---
