@@ -1,7 +1,19 @@
 # qcow2 이미지와 openshift-virtualization-os-images 간 변환 가이드
 
 OpenShift Virtualization 환경에서 PVC의 VM 디스크를 로컬 qcow2 파일로 추출하거나,
-로컬 qcow2 파일을 `openshift-virtualization-os-images` 네임스페이스에 업로드하여 VM 부팅 이미지로 등록하는 방법을 설명합니다.
+로컬 qcow2 파일 또는 HTTP/HTTPS URL에서 이미지를 `openshift-virtualization-os-images` 네임스페이스에 등록하여
+클러스터 전체에서 VM 부팅 이미지로 사용하는 방법을 설명합니다.
+
+---
+
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`upload-image.sh`](upload-image.sh) | 커스텀 이미지 업로드 대화형 스크립트 (로컬 파일 / HTTP URL 선택) |
+| [`datavolume-http.yaml`](datavolume-http.yaml) | HTTP/HTTPS URL에서 DataVolume 임포트 템플릿 |
+| [`datasource.yaml`](datasource.yaml) | DataVolume을 DataSource로 등록하는 템플릿 |
+| [`custom-image-consoleyamlsample.yaml`](custom-image-consoleyamlsample.yaml) | OpenShift Console Import YAML 샘플 |
 
 ---
 
@@ -148,15 +160,15 @@ virtctl vmexport delete rhel9-poc-export -n openshift-virtualization-os-images
 
 ---
 
-## Part 2: qcow2 → 클러스터 전체에서 VM 부팅 이미지로 등록
+## Part 2: 이미지 → openshift-virtualization-os-images 등록
 
-로컬 qcow2 파일을 `openshift-virtualization-os-images` 네임스페이스에 업로드하고 DataSource로 등록합니다.
-DataSource를 이 네임스페이스에 두면 **CDI가 VM 생성 시 자동으로 해당 네임스페이스에 PVC를 클론**하므로,
+로컬 qcow2 파일 또는 HTTP/HTTPS URL의 이미지를 `openshift-virtualization-os-images` 네임스페이스에 업로드하고
+DataSource로 등록합니다. DataSource를 이 네임스페이스에 두면 **CDI가 VM 생성 시 자동으로 해당 네임스페이스에 PVC를 클론**하므로,
 어떤 네임스페이스에서도 동일한 이미지로 VM을 생성할 수 있습니다.
 
 ```
-rhel9-poc-export.qcow2 (로컬)
-        │  virtctl image-upload
+이미지 (로컬 qcow2 또는 HTTP URL)
+        │  virtctl image-upload / DataVolume import
         ▼
 PVC: rhel9-poc-golden  (openshift-virtualization-os-images)
         │  DataSource 생성
@@ -167,9 +179,14 @@ DataSource: rhel9-poc-golden  (openshift-virtualization-os-images)
 PVC: <vm-name>-rootdisk  (어느 네임스페이스든)
 ```
 
+> **대화형 스크립트**: [`upload-image.sh`](upload-image.sh) 를 실행하면 방법 1 / 방법 2 를 선택하여 진행할 수 있습니다.
+> ```bash
+> ./upload-image.sh
+> ```
+
 ---
 
-### 1단계: qcow2 업로드
+### 방법 1: 로컬 파일 업로드 (virtctl image-upload)
 
 ```bash
 virtctl image-upload \
@@ -200,11 +217,65 @@ oc get pvc rhel9-poc-golden -n openshift-virtualization-os-images
 
 ---
 
-### 2단계: DataSource 생성
+### 방법 2: HTTP/HTTPS URL에서 가져오기 (DataVolume import)
 
-업로드한 PVC를 DataSource로 등록합니다.
+클러스터가 이미지 URL에 직접 접근할 수 있는 경우, CDI가 직접 다운로드합니다.
+[`datavolume-http.yaml`](datavolume-http.yaml) 을 사용하거나 아래 명령을 실행합니다.
+
+```bash
+# 환경 변수 설정
+export MY_IMAGE_NAME=rhel9-poc-golden
+export MY_IMAGE_URL=https://example.com/rhel9.qcow2
+export MY_IMAGE_SIZE=30Gi
+export MY_STORAGE_CLASS=ocs-storagecluster-ceph-rbd-virtualization
+
+# DataVolume 생성 (envsubst로 변수 치환)
+envsubst < datavolume-http.yaml | oc apply -f -
+```
+
+또는 직접 적용:
+
+```bash
+oc apply -f - <<EOF
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: rhel9-poc-golden-dv
+  namespace: openshift-virtualization-os-images
+  annotations:
+    cdi.kubevirt.io/storage.import.requiresScratch: "true"
+spec:
+  source:
+    http:
+      url: "https://example.com/rhel9.qcow2"
+  storage:
+    resources:
+      requests:
+        storage: 30Gi
+    storageClassName: ocs-storagecluster-ceph-rbd-virtualization
+    accessModes:
+      - ReadWriteMany
+    volumeMode: Block
+EOF
+```
+
+임포트 진행 상황을 확인합니다 (최대 30분 소요).
+
+```bash
+oc get dv rhel9-poc-golden-dv -n openshift-virtualization-os-images -w
+```
+
+`Succeeded` 상태가 되면 다음 단계로 진행합니다.
+
+---
+
+### DataSource 생성 (공통)
+
+업로드 또는 임포트 완료 후 DataSource를 등록합니다.
 DataSource가 있어야 OpenShift Virtualization UI의 **부팅 소스** 목록에 나타나고,
 다른 네임스페이스에서 VM 생성 시 CDI가 이 DataSource를 참조하여 PVC를 자동 클론합니다.
+
+[`datasource.yaml`](datasource.yaml) 을 사용하거나 아래 명령을 실행합니다.
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -235,7 +306,38 @@ rhel9-poc-golden    true
 
 ---
 
-### 3단계: 어느 네임스페이스에서든 VM 생성
+### 등록 확인
+
+```bash
+# DataSource 목록 확인
+oc get datasource -n openshift-virtualization-os-images
+
+# DataSource 상세 확인
+oc describe datasource rhel9-poc-golden -n openshift-virtualization-os-images
+```
+
+OpenShift Virtualization UI에서 확인:
+**Virtualization > Catalog > Boot source available** 항목에 `rhel9-poc-golden` 이 표시됩니다.
+
+---
+
+### VM 생성 방법
+
+#### 방법 A: VM Template으로 생성 (권장)
+
+`rhel9-poc-golden-template` 을 사용하면 파라미터만 지정하여 VM을 생성할 수 있습니다.
+(`01-environment/vm-template/rhel9-poc-golden-template.yaml` 참고)
+
+```bash
+oc process -n openshift rhel9-poc-golden-template \
+  -p NAME=poc-test-vm \
+  -p NAMESPACE=poc-vms \
+  -p CPU_CORES=2 \
+  -p MEMORY=4Gi \
+  -p DISK_SIZE=30Gi | oc apply -f -
+```
+
+#### 방법 B: VM YAML 직접 적용
 
 VM의 `dataVolumeTemplates`에서 `sourceRef`로 DataSource를 참조합니다.
 CDI가 VM이 생성되는 네임스페이스로 PVC를 **자동으로 클론**합니다.
@@ -246,7 +348,7 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: my-rhel9-vm
-  namespace: my-project          # 어떤 네임스페이스든 가능
+  namespace: poc-test          # 어떤 네임스페이스든 가능
 spec:
   running: false
   template:
@@ -286,10 +388,59 @@ VM 생성 후 클론 진행 상황을 확인합니다.
 
 ```bash
 # DataVolume 클론 상태 확인
-oc get datavolume my-rhel9-vm-rootdisk -n my-project
+oc get datavolume my-rhel9-vm-rootdisk -n poc-test
 
 # 클론 완료 후 VM 시작
-virtctl start my-rhel9-vm -n my-project
+virtctl start my-rhel9-vm -n poc-test
+```
+
+---
+
+### 등록된 이미지 삭제
+
+```bash
+# DataSource 삭제
+oc delete datasource rhel9-poc-golden -n openshift-virtualization-os-images
+
+# PVC 삭제 (업로드된 이미지 데이터)
+oc delete pvc rhel9-poc-golden -n openshift-virtualization-os-images
+```
+
+---
+
+### 트러블슈팅
+
+#### DataVolume 임포트 실패
+
+```bash
+# DataVolume 상태 확인
+oc get dv -n openshift-virtualization-os-images
+
+# 상세 이벤트 확인
+oc describe dv rhel9-poc-golden-dv -n openshift-virtualization-os-images
+
+# 임포트 Pod 로그 확인
+oc get pods -n openshift-virtualization-os-images | grep importer
+oc logs <importer-pod-name> -n openshift-virtualization-os-images
+```
+
+#### DataSource READY=false
+
+```bash
+# DataSource 상세 확인
+oc describe datasource rhel9-poc-golden -n openshift-virtualization-os-images
+
+# 참조하는 PVC가 존재하는지 확인
+oc get pvc rhel9-poc-golden -n openshift-virtualization-os-images
+```
+
+#### 스크래치 공간 부족 (Scratch PVC)
+
+HTTP import 시 `requiresScratch: "true"` 어노테이션이 설정된 경우, CDI가 임시 스크래치 PVC를 생성합니다.
+스토리지 용량이 충분한지 확인하세요.
+
+```bash
+oc get pvc -n openshift-virtualization-os-images
 ```
 
 ---
@@ -297,5 +448,5 @@ virtctl start my-rhel9-vm -n my-project
 ## 참고
 
 - `virtctl` 설치: OpenShift Console > `?` 메뉴 > **Command line tools** 에서 다운로드
-- 커스텀 이미지 업로드 스크립트(대화형): `01-environment/custom-image/upload-image.sh`
+- 커스텀 이미지 업로드 스크립트(대화형): [`upload-image.sh`](upload-image.sh)
 - StorageClass는 `oc get storageclass` 로 확인하세요.

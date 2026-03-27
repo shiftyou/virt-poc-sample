@@ -18,7 +18,6 @@ airgap 환경에서 GitHub으로부터 다운로드 후 바로 사용할 수 있
 - [01-environment/README.md](01-environment/README.md) — 환경 구성 개요
 - [01-environment/htpasswd/README.md](01-environment/htpasswd/README.md) — htpasswd 사용자 생성
 - [01-environment/vm-template/README.md](01-environment/vm-template/README.md) — VM 템플릿 생성
-- [01-environment/custom-image/README.md](01-environment/custom-image/README.md) — 커스텀 이미지 업로드
 - [01-environment/image-registry/README.md](01-environment/image-registry/README.md) — 내부 이미지 레지스트리 + VDDK
 - [01-environment/nncp/README.md](01-environment/nncp/README.md) — NodeNetworkConfigurationPolicy
 - [01-environment/nad/README.md](01-environment/nad/README.md) — NetworkAttachmentDefinition
@@ -100,12 +99,16 @@ virt-poc-sample/
 ├── setup.sh                    # 환경 변수 수집 및 env.conf 생성
 ├── env.conf.example            # 환경 변수 예시 파일
 │
-├── 00-init/               # Operator 설치 가이드
+├── 00-init/               # Operator 설치 가이드 + 커스텀 이미지 등록
 │   ├── 01-openshift-virtualization.md
 │   ├── 02-oadp-operator.md
 │   ├── 03-far-operator.md
 │   ├── 04-snr-operator.md
-│   └── 05-descheduler-operator.md
+│   ├── 05-descheduler-operator.md
+│   ├── pvc-to-qcow2.md         # qcow2 ↔ openshift-virtualization-os-images
+│   ├── upload-image.sh         # 커스텀 이미지 업로드 스크립트
+│   ├── datavolume-http.yaml    # HTTP URL DataVolume 임포트 템플릿
+│   └── datasource.yaml         # DataSource 등록 템플릿
 │
 ├── 01-environment/             # 기본 환경 구성
 │   ├── htpasswd/               # htpasswd 사용자 생성

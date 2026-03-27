@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../../env.conf"
+ENV_FILE="${SCRIPT_DIR}/../env.conf"
 TARGET_NS="openshift-virtualization-os-images"
 
 # 색상 출력
