@@ -47,6 +47,45 @@ virtctl vmexport download rhel9-export \
 virtctl vmexport delete rhel9-export -n <NAMESPACE>
 ```
 
+#### ⚠️ 트러블슈팅: `waiting for VM Export ... status to be ready` 무한 반복
+
+`virtctl vmexport download` 실행 시 아래 메시지가 반복되면서 멈추는 경우:
+
+```
+waiting for VM Export rhel9-poc-vm status to be ready...
+waiting for VM Export rhel9-poc-vm status to be ready...
+```
+
+**원인**: PVC가 실행 중인 VM에 마운트되어 있으면, export Pod가 PVC에 접근하지 못해 `Ready` 상태가 되지 않습니다.
+특히 PVC의 accessMode가 `ReadWriteOnce(RWO)` 인 경우 VM이 점유하는 동안 다른 Pod가 동시에 마운트할 수 없습니다.
+
+**해결 방법 1: VM을 먼저 중지 (권장)**
+
+```bash
+# VM 중지
+virtctl stop <VM_NAME> -n <NAMESPACE>
+
+# VM이 완전히 중지될 때까지 대기
+oc wait vm/<VM_NAME> -n <NAMESPACE> \
+  --for=jsonpath='{.status.printableStatus}'=Stopped --timeout=120s
+
+# VMExport 재생성 후 다운로드
+virtctl vmexport delete rhel9-export -n <NAMESPACE>
+virtctl vmexport create rhel9-export --pvc=<PVC_NAME> -n <NAMESPACE>
+virtctl vmexport download rhel9-export --output=./rhel9-extracted.qcow2 -n <NAMESPACE>
+```
+
+**해결 방법 2: export 상태 직접 확인**
+
+```bash
+# VMExport 상태 확인
+oc get virtualmachineexport -n <NAMESPACE>
+oc describe virtualmachineexport rhel9-export -n <NAMESPACE>
+
+# export Pod 확인 (export Pod가 생성됐는지)
+oc get pods -n <NAMESPACE> | grep virt-export
+```
+
 ---
 
 ### 방법 2: VolumeSnapshot + DataVolume export (스냅샷 기반)
