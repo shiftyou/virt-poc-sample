@@ -1,14 +1,17 @@
-# PVC를 qcow2 이미지로 만드는 방법
+# qcow2 이미지와 openshift-virtualization-os-images 간 변환 가이드
 
-OpenShift Virtualization 환경에서 PVC에 저장된 VM 디스크 데이터를 로컬의 qcow2 이미지 파일로 추출하는 방법을 설명합니다.
+OpenShift Virtualization 환경에서 PVC의 VM 디스크를 로컬 qcow2 파일로 추출하거나,
+로컬 qcow2 파일을 `openshift-virtualization-os-images` 네임스페이스에 업로드하여 VM 부팅 이미지로 등록하는 방법을 설명합니다.
 
 ---
 
-## 방법 1: virtctl 명령어로 직접 다운로드 (가장 권장)
+## Part 1: PVC → qcow2 (다운로드)
+
+### 방법 1: virtctl 명령어로 직접 다운로드 (가장 권장)
 
 OpenShift Virtualization 전용 CLI 도구인 virtctl을 사용하면 PVC의 데이터를 로컬 파일로 간편하게 스트리밍할 수 있습니다.
 
-### 1. PVC 이름 확인
+#### 1. PVC 이름 확인
 
 `openshift-virtualization-os-images` 네임스페이스에서 대상 PVC 이름을 확인합니다.
 
@@ -16,7 +19,7 @@ OpenShift Virtualization 전용 CLI 도구인 virtctl을 사용하면 PVC의 데
 oc get pvc -n openshift-virtualization-os-images
 ```
 
-### 2. 이미지 다운로드
+#### 2. 이미지 다운로드
 
 ```bash
 virtctl image-upload pvc <PVC_NAME> \
@@ -35,11 +38,11 @@ virtctl image-upload pvc <PVC_NAME> \
 
 ---
 
-## 방법 2: Pod를 통한 수동 복사
+### 방법 2: Pod를 통한 수동 복사
 
 virtctl을 사용할 수 없는 경우, PVC를 마운트한 임시 Pod를 생성하여 `oc cp`로 파일을 추출합니다.
 
-### 1. PVC를 마운트한 임시 Pod 생성
+#### 1. PVC를 마운트한 임시 Pod 생성
 
 ```bash
 cat <<EOF | oc apply -f -
@@ -64,14 +67,14 @@ spec:
 EOF
 ```
 
-### 2. Pod가 Running 상태가 될 때까지 대기
+#### 2. Pod가 Running 상태가 될 때까지 대기
 
 ```bash
 oc wait pod/pvc-export -n openshift-virtualization-os-images \
   --for=condition=Ready --timeout=60s
 ```
 
-### 3. 파일 목록 확인 후 복사
+#### 3. 파일 목록 확인 후 복사
 
 ```bash
 # 파일 목록 확인
@@ -81,7 +84,7 @@ oc exec -n openshift-virtualization-os-images pvc-export -- ls -lh /data/
 oc cp openshift-virtualization-os-images/pvc-export:/data/disk.img ./rhel9-extracted.qcow2
 ```
 
-### 4. 임시 Pod 삭제
+#### 4. 임시 Pod 삭제
 
 ```bash
 oc delete pod pvc-export -n openshift-virtualization-os-images
@@ -89,7 +92,7 @@ oc delete pod pvc-export -n openshift-virtualization-os-images
 
 ---
 
-## 방법 3: VolumeSnapshot + DataVolume export (스냅샷 기반)
+### 방법 3: VolumeSnapshot + DataVolume export (스냅샷 기반)
 
 CSI 스냅샷을 지원하는 스토리지 환경에서, 스냅샷으로부터 새 PVC를 생성하고 해당 PVC를 방법 1 또는 방법 2로 내보냅니다.
 
@@ -135,7 +138,102 @@ virtctl image-upload pvc rhel9-export-pvc \
 
 ---
 
+## Part 2: qcow2 → openshift-virtualization-os-images (업로드)
+
+로컬 qcow2 파일을 클러스터에 업로드하여 VM 부팅 이미지로 등록합니다.
+업로드 후 DataSource를 생성하면 VM 생성 시 부팅 이미지로 선택할 수 있습니다.
+
+### 1단계: virtctl로 qcow2 업로드
+
+```bash
+IMAGE_NAME=my-rhel9          # 등록할 이미지 이름 (소문자, 하이픈 허용)
+IMAGE_FILE=./rhel9.qcow2     # 업로드할 로컬 qcow2 파일 경로
+DISK_SIZE=30Gi               # PVC 크기 (이미지보다 충분히 크게)
+STORAGE_CLASS=ocs-storagecluster-ceph-rbd-virtualization
+
+virtctl image-upload \
+  --image-path="${IMAGE_FILE}" \
+  --pvc-name="${IMAGE_NAME}" \
+  --pvc-size="${DISK_SIZE}" \
+  --storage-class="${STORAGE_CLASS}" \
+  --access-mode=ReadWriteMany \
+  --block-volume \
+  -n openshift-virtualization-os-images \
+  --insecure
+```
+
+| 옵션 | 설명 |
+|------|------|
+| `--pvc-name` | 생성할 PVC 이름 |
+| `--pvc-size` | PVC 크기 (이미지 파일보다 커야 함) |
+| `--storage-class` | 사용할 StorageClass (RWX 지원 필요) |
+| `--access-mode=ReadWriteMany` | 라이브 마이그레이션을 위해 RWX 권장 |
+| `--block-volume` | Block 모드 PVC 생성 (성능 향상) |
+| `--insecure` | 자체 서명 인증서 환경에서 TLS 검증 생략 |
+
+업로드 완료 후 PVC 상태를 확인합니다.
+
+```bash
+oc get pvc "${IMAGE_NAME}" -n openshift-virtualization-os-images
+```
+
+---
+
+### 2단계: DataSource 생성
+
+업로드한 PVC를 VM 부팅 이미지로 사용할 수 있도록 DataSource를 생성합니다.
+DataSource가 있어야 OpenShift Virtualization UI의 **부팅 소스** 목록에 나타납니다.
+
+```bash
+IMAGE_NAME=my-rhel9
+
+cat <<EOF | oc apply -f -
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataSource
+metadata:
+  name: ${IMAGE_NAME}
+  namespace: openshift-virtualization-os-images
+spec:
+  source:
+    pvc:
+      name: ${IMAGE_NAME}
+      namespace: openshift-virtualization-os-images
+EOF
+```
+
+DataSource 상태를 확인합니다. `Ready` 상태여야 합니다.
+
+```bash
+oc get datasource "${IMAGE_NAME}" -n openshift-virtualization-os-images
+```
+
+---
+
+### 3단계: VM 생성 시 이미지 사용
+
+등록된 DataSource를 VM의 `dataVolumeTemplates`에서 참조합니다.
+
+```yaml
+dataVolumeTemplates:
+  - apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    metadata:
+      name: my-vm-rootdisk
+    spec:
+      sourceRef:
+        kind: DataSource
+        name: my-rhel9                           # 등록한 DataSource 이름
+        namespace: openshift-virtualization-os-images
+      storage:
+        resources:
+          requests:
+            storage: 30Gi
+```
+
+---
+
 ## 참고
 
 - `virtctl` 설치: OpenShift Console > `?` 메뉴 > **Command line tools** 에서 다운로드
-- 추출한 qcow2 파일은 `01-environment/custom-image/` 가이드를 참조하여 다시 클러스터에 업로드할 수 있습니다.
+- 커스텀 이미지 업로드 스크립트(대화형): `01-environment/custom-image/upload-image.sh`
+- StorageClass는 `oc get storageclass` 로 확인하세요.
