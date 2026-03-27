@@ -83,6 +83,67 @@ check_oc() {
     return 0
 }
 
+# 오퍼레이터 설치 확인
+check_operators() {
+    print_header "사전 준비: 오퍼레이터 설치 확인"
+
+    DESCHEDULER_INSTALLED=false
+    FAR_INSTALLED=false
+    NMO_INSTALLED=false
+    NHC_INSTALLED=false
+    SNR_INSTALLED=false
+
+    if check_oc 2>/dev/null; then
+        oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
+
+        grep -qi "kube-descheduler"          /tmp/_poc_csv.txt 2>/dev/null && DESCHEDULER_INSTALLED=true
+        grep -qi "fence-agents-remediation"  /tmp/_poc_csv.txt 2>/dev/null && FAR_INSTALLED=true
+        grep -qi "node-maintenance"          /tmp/_poc_csv.txt 2>/dev/null && NMO_INSTALLED=true
+        grep -qi "node-healthcheck"          /tmp/_poc_csv.txt 2>/dev/null && NHC_INSTALLED=true
+        grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
+        rm -f /tmp/_poc_csv.txt
+    else
+        print_warn "클러스터에 연결되지 않아 오퍼레이터 상태를 확인할 수 없습니다."
+        print_info "오퍼레이터 설치 방법: 00-init/README.md 참조"
+        echo ""
+        return
+    fi
+
+    local ok="${GREEN}[✔]${NC}"
+    local ng="${RED}[✘]${NC}"
+    local wa="${YELLOW}[~]${NC}"
+
+    echo ""
+    printf "  %-45s %s\n" "오퍼레이터" "상태"
+    echo "  ──────────────────────────────────────────────────────────"
+    if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
+        echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
+    else
+        echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-init/05-descheduler-operator.md)"
+    fi
+    if [ "$FAR_INSTALLED" = "true" ]; then
+        echo -e "  $ok Fence Agents Remediation           → FAR 구성 가능"
+    else
+        echo -e "  $ng Fence Agents Remediation           → FAR 구성 건너뜀  (00-init/03-far-operator.md)"
+    fi
+    if [ "$NMO_INSTALLED" = "true" ]; then
+        echo -e "  $ok Node Maintenance Operator          → 노드 유지보수 가능"
+    else
+        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀"
+    fi
+    if [ "$NHC_INSTALLED" = "true" ] && [ "$SNR_INSTALLED" = "true" ]; then
+        echo -e "  $ok NHC + Self Node Remediation        → SNR 구성 가능"
+    elif [ "$NHC_INSTALLED" = "true" ]; then
+        echo -e "  $wa NHC (설치됨) / SNR (없음)           → SNR 구성 불완전  (00-init/04-snr-operator.md)"
+    elif [ "$SNR_INSTALLED" = "true" ]; then
+        echo -e "  $wa SNR (설치됨) / NHC (없음)           → SNR 구성 불완전  (00-init/06-nhc-operator.md)"
+    else
+        echo -e "  $ng NHC + Self Node Remediation        → SNR 구성 건너뜀  (00-init/04-snr-operator.md)"
+    fi
+    echo "  ──────────────────────────────────────────────────────────"
+    echo ""
+}
+
 # 클러스터 정보 자동 감지
 auto_detect_cluster() {
     if check_oc; then
@@ -124,6 +185,9 @@ fi
 
 # 클러스터 자동 감지
 auto_detect_cluster
+
+# 오퍼레이터 설치 확인
+check_operators
 
 # =============================================================================
 # 1. 클러스터 기본 정보
@@ -268,6 +332,13 @@ TEST_NODE=${TEST_NODE}
 
 # Grafana
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
+
+# 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
+DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
+FAR_INSTALLED=${FAR_INSTALLED:-false}
+NMO_INSTALLED=${NMO_INSTALLED:-false}
+NHC_INSTALLED=${NHC_INSTALLED:-false}
+SNR_INSTALLED=${SNR_INSTALLED:-false}
 EOF
 
 print_ok "env.conf 파일이 생성되었습니다: $ENV_FILE"
@@ -325,10 +396,37 @@ echo -e "${GREEN}  설정 완료!${NC}"
 echo -e "${GREEN}============================================================${NC}"
 echo ""
 echo -e "  다음 단계:"
-echo -e "  1. ${CYAN}00-operators/${NC}                   - Operator 설치 가이드를 참조하여 필요한 Operator를 설치하세요."
-echo -e "  2. ${CYAN}01-environment/${NC}                 - 기본 환경을 구성하세요. (README.md 참조)"
-echo -e "     ${CYAN}01-environment/custom-image/${NC}    - 커스텀 이미지를 등록하려면 upload-image.sh 를 실행하세요."
-echo -e "  3. ${CYAN}02-tests/${NC}                       - 기능 테스트를 수행하세요. (README.md 참조)"
+echo -e ""
+echo -e "  ${CYAN}[사전 준비]${NC}"
+echo -e "  1. 00-init/README.md              — 오퍼레이터 설치 확인 및 설치 가이드"
+echo -e "  2. 00-init/custom-vm-image.md     — POC용 커스텀 VM 이미지 생성 가이드"
+echo -e "  3. 00-init/pvc-to-qcow2.md        — qcow2 업로드 및 openshift-virtualization-os-images 등록"
+echo -e ""
+echo -e "  ${CYAN}[환경 구성]${NC}"
+echo -e "  4. 01-environment/README.md       — 기본 환경 구성"
+echo -e ""
+echo -e "  ${CYAN}[기능 테스트]${NC} (오퍼레이터 설치 필요 항목)"
+
+if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
+    echo -e "  ${GREEN}[✔]${NC} 02-tests/descheduler/           — Descheduler 테스트 가능"
+else
+    echo -e "  ${RED}[✘]${NC} 02-tests/descheduler/           — Kube Descheduler Operator 미설치 (건너뜀)"
+fi
+if [ "${FAR_INSTALLED:-false}" = "true" ]; then
+    echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR 구성 가능"
+else
+    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation 미설치 (건너뜀)"
+fi
+if [ "${NMO_INSTALLED:-false}" = "true" ]; then
+    echo -e "  ${GREEN}[✔]${NC} 02-tests/node-maintenance/      — 노드 유지보수 테스트 가능"
+else
+    echo -e "  ${RED}[✘]${NC} 02-tests/node-maintenance/      — Node Maintenance Operator 미설치 (건너뜀)"
+fi
+if [ "${NHC_INSTALLED:-false}" = "true" ] && [ "${SNR_INSTALLED:-false}" = "true" ]; then
+    echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR 구성 가능"
+else
+    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — NHC + SNR Operator 미설치 (건너뜀)"
+fi
 echo ""
 echo -e "  환경변수가 적용된 최종 YAML:"
 echo -e "  ${CYAN}rendered/${NC} 디렉토리에서 각 YAML을 바로 적용할 수 있습니다."

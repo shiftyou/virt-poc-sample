@@ -1,0 +1,55 @@
+# =============================================================================
+# VirtualMachine - network-policy1-vm (poc-network-policy1 네임스페이스)
+#
+# rhel9-poc-golden DataSource를 사용하여 VM을 생성합니다.
+# 생성 전 00-init/pvc-to-qcow2.md 에 따라 rhel9-poc-golden DataSource가
+# openshift-virtualization-os-images 에 등록되어 있어야 합니다.
+#
+# 적용: oc apply -f vm-ns1.yaml
+# =============================================================================
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: network-policy1-vm
+  namespace: poc-network-policy1
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        app: network-policy1-vm
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: network-policy1-vm-rootdisk
+  dataVolumeTemplates:
+    - apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        name: network-policy1-vm-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9-poc-golden
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi

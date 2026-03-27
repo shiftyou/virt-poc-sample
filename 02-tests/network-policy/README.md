@@ -1,19 +1,15 @@
-# Network Policy (Allow / Deny 예제)
+# Network Policy — VM 간 트래픽 제어 실습
 
 ## 개요
 
-NetworkPolicy를 사용하여 Pod 및 VM 간의 네트워크 트래픽을 제어합니다.
-기본 Deny-All 정책으로 시작하여 필요한 트래픽만 허용하는 방식을 실습합니다.
+두 개의 네임스페이스(`poc-network-policy1`, `poc-network-policy2`)에 각각 VM을 배치하고,
+NetworkPolicy로 트래픽을 제어합니다.
 
----
-
-## 적용 방법
-
-```bash
-source ../../env.conf
-cd 02-tests/network-policy
-./apply.sh
-```
+**시나리오 목표:**
+1. 기본 상태: Deny-All + Allow-Same-Namespace → 다른 네임스페이스 VM 간 ping 불가
+2. `network-policy1-vm`의 IP를 `poc-network-policy2`에서 허용 → 단방향 ping 가능
+   - policy1-vm → policy2-vm: **ping 가능** ✔
+   - policy2-vm → policy1-vm: **ping 불가** ✘
 
 ---
 
@@ -21,51 +17,133 @@ cd 02-tests/network-policy
 
 | 파일 | 설명 |
 |------|------|
-| [`namespace.yaml`](namespace.yaml) | poc-netpol 네임스페이스 |
-| [`networkpolicy-deny-all.yaml`](networkpolicy-deny-all.yaml) | 모든 트래픽 차단 (기본 정책) |
+| [`namespace.yaml`](namespace.yaml) | poc-network-policy1, poc-network-policy2 네임스페이스 |
+| [`vm-ns1.yaml`](vm-ns1.yaml) | network-policy1-vm (poc-network-policy1) |
+| [`vm-ns2.yaml`](vm-ns2.yaml) | network-policy2-vm (poc-network-policy2) |
+| [`networkpolicy-deny-all.yaml`](networkpolicy-deny-all.yaml) | 두 네임스페이스에 Deny-All 정책 |
 | [`networkpolicy-allow-same-ns.yaml`](networkpolicy-allow-same-ns.yaml) | 동일 네임스페이스 내 통신 허용 |
-| [`networkpolicy-allow-ingress.yaml`](networkpolicy-allow-ingress.yaml) | 외부 인그레스 트래픽 허용 |
+| [`networkpolicy-allow-from-ns1.yaml`](networkpolicy-allow-from-ns1.yaml) | ns1 VM IP → ns2 단방향 허용 |
+| [`apply.sh`](apply.sh) | 기본 정책 일괄 적용 스크립트 |
 
 ---
 
-## 상태 확인
+## 사전 조건
+
+- `rhel9-poc-golden` DataSource가 `openshift-virtualization-os-images`에 등록되어 있어야 합니다.
+  (`00-init/pvc-to-qcow2.md` Part 2 참조)
+
+---
+
+## Step 1: 네임스페이스 및 기본 정책 적용
 
 ```bash
-# NetworkPolicy 목록 확인
-oc get networkpolicy -n poc-netpol
+# 네임스페이스 생성
+oc apply -f namespace.yaml
 
-# 특정 NetworkPolicy 상세 확인
-oc describe networkpolicy deny-all -n poc-netpol
+# Deny-All 정책 적용 (두 네임스페이스)
+oc apply -f networkpolicy-deny-all.yaml
 
-# Pod 간 통신 테스트
-oc run test-client --image=busybox -n poc-netpol --restart=Never -- \
-  wget -qO- --timeout=3 http://<target-pod-ip>:80
+# 동일 네임스페이스 내 통신 허용 (두 네임스페이스)
+oc apply -f networkpolicy-allow-same-ns.yaml
+
+# 현재 적용된 정책 확인
+oc get networkpolicy -n poc-network-policy1
+oc get networkpolicy -n poc-network-policy2
 ```
 
 ---
 
-## 테스트 방법
+## Step 2: VM 생성 및 시작
 
 ```bash
-# 1. 테스트 Pod 생성
-oc run server --image=nginx --expose --port=80 -n poc-netpol
-oc run client --image=busybox -n poc-netpol --restart=Never -- sleep 3600
+# VM 생성
+oc apply -f vm-ns1.yaml
+oc apply -f vm-ns2.yaml
 
-# 2. Deny-All 정책 적용 전 통신 확인 (성공해야 함)
-SERVER_IP=$(oc get pod server -n poc-netpol -o jsonpath='{.status.podIP}')
-oc exec client -n poc-netpol -- wget -qO- --timeout=3 http://${SERVER_IP}
+# VM 시작
+virtctl start network-policy1-vm -n poc-network-policy1
+virtctl start network-policy2-vm -n poc-network-policy2
 
-# 3. Deny-All 정책 적용
-oc apply -f networkpolicy-deny-all.yaml
+# VM Running 상태 대기
+oc wait vmi/network-policy1-vm -n poc-network-policy1 \
+  --for=condition=Ready --timeout=300s
+oc wait vmi/network-policy2-vm -n poc-network-policy2 \
+  --for=condition=Ready --timeout=300s
 
-# 4. Deny-All 적용 후 통신 확인 (실패해야 함 - timeout)
-oc exec client -n poc-netpol -- wget -qO- --timeout=3 http://${SERVER_IP}
+# VM IP 확인
+oc get vmi -n poc-network-policy1
+oc get vmi -n poc-network-policy2
+```
 
-# 5. Allow 정책 적용
-oc apply -f networkpolicy-allow-same-ns.yaml
+---
 
-# 6. Allow 적용 후 통신 확인 (성공해야 함)
-oc exec client -n poc-netpol -- wget -qO- --timeout=3 http://${SERVER_IP}
+## Step 3: 크로스 네임스페이스 ping 차단 확인
+
+```bash
+# network-policy2-vm IP 확인
+NS2_VM_IP=$(oc get vmi network-policy2-vm -n poc-network-policy2 \
+  -o jsonpath='{.status.interfaces[0].ipAddress}')
+echo "network-policy2-vm IP: $NS2_VM_IP"
+
+# network-policy1-vm 콘솔에서 network-policy2-vm 으로 ping 시도 (실패해야 함)
+virtctl ssh cloud-user@network-policy1-vm -n poc-network-policy1
+# (VM 내부에서)
+ping -c 3 $NS2_VM_IP    # ← timeout, 실패 확인
+```
+
+---
+
+## Step 4: network-policy1-vm IP 기반 단방향 허용 적용
+
+```bash
+# network-policy1-vm IP 확인
+NS1_VM_IP=$(oc get vmi network-policy1-vm -n poc-network-policy1 \
+  -o jsonpath='{.status.interfaces[0].ipAddress}')
+echo "network-policy1-vm IP: $NS1_VM_IP"
+
+# poc-network-policy2 에서 ns1 VM IP 허용 정책 적용
+NETWORK_POLICY1_VM_IP=${NS1_VM_IP} \
+  envsubst < networkpolicy-allow-from-ns1.yaml | oc apply -f -
+
+# 적용 확인
+oc get networkpolicy -n poc-network-policy2
+oc describe networkpolicy allow-from-ns1-vm -n poc-network-policy2
+```
+
+---
+
+## Step 5: 단방향 ping 동작 확인
+
+```bash
+# [policy1-vm → policy2-vm] 성공해야 함 ✔
+virtctl ssh cloud-user@network-policy1-vm -n poc-network-policy1
+# (VM 내부에서)
+ping -c 3 ${NS2_VM_IP}    # ← 성공
+
+# [policy2-vm → policy1-vm] 실패해야 함 ✘
+NS1_VM_IP=$(oc get vmi network-policy1-vm -n poc-network-policy1 \
+  -o jsonpath='{.status.interfaces[0].ipAddress}')
+
+virtctl ssh cloud-user@network-policy2-vm -n poc-network-policy2
+# (VM 내부에서)
+ping -c 3 ${NS1_VM_IP}    # ← timeout, 실패
+```
+
+---
+
+## 정리
+
+```bash
+# VM 삭제
+oc delete vm network-policy1-vm -n poc-network-policy1
+oc delete vm network-policy2-vm -n poc-network-policy2
+
+# PVC 삭제
+oc delete pvc -n poc-network-policy1 --all
+oc delete pvc -n poc-network-policy2 --all
+
+# 네임스페이스 삭제
+oc delete namespace poc-network-policy1 poc-network-policy2
 ```
 
 ---
@@ -73,14 +151,15 @@ oc exec client -n poc-netpol -- wget -qO- --timeout=3 http://${SERVER_IP}
 ## 트러블슈팅
 
 ```bash
-# NetworkPolicy 적용 상태 확인
-oc describe networkpolicy -n poc-netpol
+# NetworkPolicy 상세 확인
+oc describe networkpolicy -n poc-network-policy1
+oc describe networkpolicy -n poc-network-policy2
 
-# OVN/OVS 규칙 확인
+# VMI 상태 및 IP 확인
+oc get vmi -A -o wide
+
+# OVN-K 흐름 규칙 확인
 oc exec -n openshift-ovn-kubernetes \
   $(oc get pod -n openshift-ovn-kubernetes -l app=ovnkube-node -o name | head -1) \
-  -- ovs-ofctl dump-flows br-int | grep -i "nw_dst=<pod-ip>"
-
-# 네트워크 정책 적용 여부 확인
-oc get pod -n poc-netpol -o wide
+  -- ovs-ofctl dump-flows br-int 2>/dev/null | grep -i "nw_dst=<vm-ip>"
 ```

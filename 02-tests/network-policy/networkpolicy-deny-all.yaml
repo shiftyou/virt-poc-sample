@@ -1,34 +1,58 @@
 # =============================================================================
 # NetworkPolicy - Deny All (기본 차단 정책)
-# 네임스페이스 내 모든 인바운드/아웃바운드 트래픽을 차단합니다.
-# 이 정책 적용 후 필요한 Allow 정책을 추가합니다.
+#
+# 두 네임스페이스 모두에 Deny-All Ingress/Egress 정책을 적용합니다.
+# 이 정책 적용 후 네임스페이스 간 모든 트래픽이 차단됩니다.
 #
 # 적용: oc apply -f networkpolicy-deny-all.yaml
 # =============================================================================
 
-# 모든 인바운드 트래픽 차단
+# poc-network-policy1 - 모든 인바운드 차단
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: deny-all-ingress
-  namespace: poc-netpol
+  namespace: poc-network-policy1
 spec:
-  # 모든 Pod에 적용
   podSelector: {}
   policyTypes:
     - Ingress
-  # ingress 규칙 없음 = 모든 인바운드 차단
 
 ---
 
-# 모든 아웃바운드 트래픽 차단
+# poc-network-policy1 - 모든 아웃바운드 차단
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: deny-all-egress
-  namespace: poc-netpol
+  namespace: poc-network-policy1
 spec:
   podSelector: {}
   policyTypes:
     - Egress
-  # egress 규칙 없음 = 모든 아웃바운드 차단
+
+---
+
+# poc-network-policy2 - 모든 인바운드 차단
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: poc-network-policy2
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+
+# poc-network-policy2 - 모든 아웃바운드 차단
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-egress
+  namespace: poc-network-policy2
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
