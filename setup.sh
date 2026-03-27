@@ -129,9 +129,9 @@ check_operators() {
         echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-init/05-descheduler-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
-        echo -e "  $ok Fence Agents Remediation           → FAR 구성 가능"
+        echo -e "  $ok Fence Agents Remediation Operator  → FAR 구성 가능"
     else
-        echo -e "  $ng Fence Agents Remediation           → FAR 구성 건너뜀  (00-init/03-far-operator.md)"
+        echo -e "  $ng Fence Agents Remediation Operator  → FAR 구성 건너뜀  (00-init/03-far-operator.md)"
     fi
     if [ "$NMO_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Maintenance Operator          → 노드 유지보수 가능"
@@ -467,7 +467,7 @@ fi
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation 미설치 (건너뜀)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator 미설치  (00-init/03-far-operator.md)"
 fi
 if [ "${NMO_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 02-tests/node-maintenance/      — 노드 유지보수 테스트 가능"
