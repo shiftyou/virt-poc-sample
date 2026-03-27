@@ -95,6 +95,7 @@ check_operators() {
     NHC_INSTALLED=false
     SNR_INSTALLED=false
     NMSTATE_INSTALLED=false
+    OADP_INSTALLED=false
     GRAFANA_INSTALLED=false
 
     if check_oc 2>/dev/null; then
@@ -108,6 +109,7 @@ check_operators() {
         grep -qi "node-healthcheck"          /tmp/_poc_csv.txt 2>/dev/null && NHC_INSTALLED=true
         grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
+        grep -qi "oadp-operator"             /tmp/_poc_csv.txt 2>/dev/null && OADP_INSTALLED=true
         grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
         # NMState CR 인스턴스 존재 여부 별도 확인
@@ -150,6 +152,11 @@ check_operators() {
         echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
     else
         echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-init/05-descheduler-operator.md)"
+    fi
+    if [ "$OADP_INSTALLED" = "true" ]; then
+        echo -e "  $ok OADP Operator                      → 백업/복원 구성 가능"
+    else
+        echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-init/02-oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
         echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
@@ -425,6 +432,7 @@ GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
+OADP_INSTALLED=${OADP_INSTALLED:-false}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
 FAR_INSTALLED=${FAR_INSTALLED:-false}
