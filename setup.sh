@@ -459,9 +459,7 @@ RENDERED_COUNT=0
 # Only variables defined in env.conf are substituted; ${NAME}, ${NAMESPACE} etc. are left as-is
 ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
-# Render targets:
-#   1. yaml files containing env var placeholders (${...})
-#   2. all consoleYamlSample.yaml files (copied to rendered/ even without env vars)
+# Render targets: yaml files containing env var placeholders (${...})
 while IFS= read -r yaml_file; do
     rel_path="${yaml_file#./}"
     out_file="${RENDERED_DIR}/${rel_path}"
@@ -480,9 +478,7 @@ while IFS= read -r yaml_file; do
     }' "$yaml_file" > "$out_file"
     print_ok "  created: $out_file"
     RENDERED_COUNT=$((RENDERED_COUNT + 1))
-done < <({ grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null; \
-           find . -name "consoleYamlSample.yaml" -not -path "*/rendered/*" 2>/dev/null; \
-         } | sort -u)
+done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
 
 print_ok "Total ${RENDERED_COUNT} YAML files generated in rendered/"
 

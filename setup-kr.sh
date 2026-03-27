@@ -459,9 +459,7 @@ RENDERED_COUNT=0
 # ${NAME}, ${NAMESPACE} 등 OpenShift Template 파라미터를 치환하지 않음
 ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
-# 렌더링 대상:
-#   1. 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
-#   2. 모든 consoleYamlSample.yaml 파일 (env vars 없어도 rendered/ 에 복사)
+# 렌더링 대상: 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
 while IFS= read -r yaml_file; do
     # 상대 경로 계산
     rel_path="${yaml_file#./}"
@@ -481,9 +479,7 @@ while IFS= read -r yaml_file; do
     }' "$yaml_file" > "$out_file"
     print_ok "  생성: $out_file"
     RENDERED_COUNT=$((RENDERED_COUNT + 1))
-done < <({ grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null; \
-           find . -name "consoleYamlSample.yaml" -not -path "*/rendered/*" 2>/dev/null; \
-         } | sort -u)
+done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
 
 print_ok "총 ${RENDERED_COUNT}개 YAML 파일이 rendered/ 에 생성되었습니다."
 
