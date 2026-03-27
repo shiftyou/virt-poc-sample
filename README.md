@@ -10,7 +10,7 @@ airgap 환경에서 GitHub으로부터 다운로드 후 바로 사용할 수 있
 
 ### 사전 준비
 - [00-init/README.md](00-init/README.md) — Operator 설치 순서 및 개요
-- [00-init/custom-vm-image.md](00-init/custom-vm-image.md) — POC용 커스텀 VM 이미지 생성
+- [00-init/01-make-template.md](00-init/01-make-template.md) — POC용 커스텀 VM 이미지 생성
 - [00-init/pvc-to-qcow2.md](00-init/pvc-to-qcow2.md) — qcow2 ↔ openshift-virtualization-os-images 변환 가이드
 
 ### 환경 구성

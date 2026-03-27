@@ -86,7 +86,7 @@ oc process -n openshift poc-rhel9-vm-template \
 
 ### 사전 조건
 
-`00-init/custom-vm-image.md` 6단계 절차에 따라 `poc` DataSource가 등록되어 있어야 합니다.
+`00-init/01-make-template.md` 6단계 절차에 따라 `poc` DataSource가 등록되어 있어야 합니다.
 
 ```bash
 # DataSource 등록 여부 확인

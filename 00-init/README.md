@@ -37,7 +37,7 @@ POC 테스트에서 사용할 VM 이미지(rhel9-poc-golden)를 준비합니다.
 
 | 가이드 | 설명 |
 |--------|------|
-| [custom-vm-image.md](custom-vm-image.md) | RHEL9 VM 생성 → 구독 등록 → httpd 설치 → qcow2 추출 |
+| [01-make-template.md](01-make-template.md) | RHEL9 VM 생성 → 구독 등록 → httpd 설치 → qcow2 추출 |
 | [pvc-to-qcow2.md](pvc-to-qcow2.md) | qcow2 ↔ openshift-virtualization-os-images 변환 및 업로드 |
 
 ### 커스텀 이미지 관련 파일

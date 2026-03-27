@@ -4,7 +4,7 @@
 #
 # 사전 조건:
 #   - openshift-virtualization-os-images 에 poc DataSource 등록 완료
-#   - 00-init/custom-vm-image.md 6단계 참고
+#   - 00-init/01-make-template.md 6단계 참고
 #
 # 적용: oc apply -f poc-template.yaml
 # =============================================================================
