@@ -10,7 +10,7 @@ airgap 환경에서 GitHub으로부터 다운로드 후 바로 사용할 수 있
 
 ## 문서 목록
 
-### Operator 설치 및 초기화
+### 설치 및 초기화
 - [00-init/README.md](00-init/README.md) — Operator 설치 순서 및 개요
 - [00-init/pvc-to-qcow2.md](00-init/pvc-to-qcow2.md) — qcow2 ↔ openshift-virtualization-os-images 변환 가이드
 
