@@ -173,10 +173,36 @@ auto_detect_cluster() {
         if [ -n "$ALL_SC" ]; then
             print_info "사용 가능한 스토리지클래스: $ALL_SC"
         fi
+
+        # 노드 네트워크 인터페이스 자동 감지
+        # 방법 1: NodeNetworkState (NMState operator, 빠름)
+        FIRST_WORKER_FOR_NNS=$(oc get nodes -l node-role.kubernetes.io/worker \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        DETECTED_IFACES=""
+        if [ -n "$FIRST_WORKER_FOR_NNS" ]; then
+            DETECTED_IFACES=$(oc get nns "$FIRST_WORKER_FOR_NNS" \
+                -o jsonpath='{range .status.currentState.interfaces[?(@.type=="ethernet")]}{.name}{"\n"}{end}' \
+                2>/dev/null | grep -vE '^(br-ex|ovs-system)' | tr '\n' ' ' | xargs || true)
+        fi
+        # 방법 2: oc debug node (폴백, 느림 ~30초)
+        if [ -z "$DETECTED_IFACES" ] && [ -n "$FIRST_WORKER_FOR_NNS" ]; then
+            print_info "NodeNetworkState 없음 → oc debug node 로 인터페이스 감지 중 (약 30초)..."
+            DETECTED_IFACES=$(oc debug node/"$FIRST_WORKER_FOR_NNS" -- \
+                chroot /host ip -o link show 2>/dev/null | \
+                awk -F': ' '{print $2}' | \
+                grep -vE '^(lo|ovs-system|br-ex|br-int|genev_sys|veth|tun|docker|ovn)' | \
+                grep -E '^(ens|eth|eno|enp|em|bond)' | tr '\n' ' ' | xargs || true)
+        fi
+        DETECTED_IFACE=$(echo "$DETECTED_IFACES" | awk '{print $1}')
+        if [ -n "$DETECTED_IFACES" ]; then
+            print_info "감지된 네트워크 인터페이스 (노드: $FIRST_WORKER_FOR_NNS): $DETECTED_IFACES"
+        fi
     else
         DETECTED_API=""
         DETECTED_DOMAIN=""
         DETECTED_SC=""
+        DETECTED_IFACE=""
+        DETECTED_IFACES=""
     fi
 }
 
@@ -221,8 +247,12 @@ ask "API 서버 URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUST
 # =============================================================================
 print_header "2. 네트워크 설정 (NNCP / NAD)"
 
-print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
-ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "ens4" BRIDGE_INTERFACE
+if [ -n "${DETECTED_IFACES:-}" ]; then
+    print_info "감지된 인터페이스 목록: $DETECTED_IFACES"
+else
+    print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
+fi
+ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
 ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
 ask "NAD 네임스페이스" "poc-nad" NAD_NAMESPACE
 
