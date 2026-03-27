@@ -1,0 +1,121 @@
+# =============================================================================
+# VM Template - rhel9-poc-golden 이미지 기반 POC 전용 템플릿
+# rhel9-poc-golden DataSource (커스텀 골든 이미지)를 부팅 소스로 사용합니다.
+# openshift 네임스페이스에 생성하면 모든 네임스페이스에서 사용 가능합니다.
+#
+# 사전 조건:
+#   - openshift-virtualization-os-images 에 rhel9-poc-golden DataSource 등록 완료
+#   - 00-init/pvc-to-qcow2.md 의 Part 2 절차 참고
+#
+# 적용: oc apply -f rhel9-poc-golden-template.yaml -n openshift
+# =============================================================================
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: rhel9-poc-golden-template
+  namespace: openshift
+  labels:
+    template.kubevirt.io/type: vm
+    os.template.kubevirt.io/rhel9.0: "true"
+    workload.template.kubevirt.io/server: "true"
+    flavor.template.kubevirt.io/small: "true"
+  annotations:
+    description: "rhel9-poc-golden 커스텀 골든 이미지 기반 POC VM 템플릿"
+    iconClass: icon-rhel
+    openshift.io/display-name: "POC RHEL9 Golden VM Template"
+    template.kubevirt.io/version: "0.1"
+    defaults.template.kubevirt.io/disk: rootdisk
+    template.openshift.io/bindable: "false"
+parameters:
+  - name: NAME
+    description: "VM 이름"
+    required: true
+  - name: NAMESPACE
+    description: "VM이 생성될 네임스페이스 (poc- 로 시작 권장)"
+    required: true
+  - name: CPU_CORES
+    description: "CPU 코어 수"
+    value: "2"
+  - name: MEMORY
+    description: "메모리 용량"
+    value: "4Gi"
+  - name: DISK_SIZE
+    description: "루트 디스크 크기"
+    value: "30Gi"
+  - name: STORAGE_CLASS
+    description: "스토리지 클래스"
+    value: "ocs-storagecluster-ceph-rbd-virtualization"
+objects:
+  - apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: "${NAME}"
+      namespace: "${NAMESPACE}"
+      labels:
+        app: "${NAME}"
+        kubevirt.io/os: rhel9
+        # 이 VM이 poc-golden 이미지 기반임을 표시
+        vm.template: rhel9-poc-golden-template
+    spec:
+      running: false
+      template:
+        metadata:
+          labels:
+            kubevirt.io/domain: "${NAME}"
+        spec:
+          domain:
+            cpu:
+              cores: ${{CPU_CORES}}
+              sockets: 1
+              threads: 1
+            devices:
+              disks:
+                - name: rootdisk
+                  disk:
+                    bus: virtio
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              interfaces:
+                - name: default
+                  masquerade: {}
+              rng: {}
+            machine:
+              type: pc-q35-rhel9.2.0
+            resources:
+              requests:
+                memory: "${MEMORY}"
+          networks:
+            - name: default
+              pod: {}
+          volumes:
+            - name: rootdisk
+              dataVolume:
+                name: "${NAME}-rootdisk"
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  user: cloud-user
+                  password: redhat123
+                  chpasswd: { expire: False }
+                  ssh_pwauth: True
+      dataVolumeTemplates:
+        - apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "${NAME}-rootdisk"
+          spec:
+            # rhel9-poc-golden 커스텀 골든 이미지 참조
+            # 이 DataSource가 없으면 00-init/pvc-to-qcow2.md Part 2 절차를 먼저 수행하세요
+            sourceRef:
+              kind: DataSource
+              name: rhel9-poc-golden
+              namespace: openshift-virtualization-os-images
+            storage:
+              resources:
+                requests:
+                  storage: "${DISK_SIZE}"
+              storageClassName: "${STORAGE_CLASS}"
+              accessModes:
+                - ReadWriteMany

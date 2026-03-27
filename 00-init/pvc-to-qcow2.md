@@ -21,7 +21,7 @@ oc get pvc -n <NAMESPACE>
 #### 2. VMExport 생성
 
 ```bash
-virtctl vmexport create rhel9-export \
+virtctl vmexport create rhel9-poc-export \
   --pvc=<PVC_NAME> \
   -n <NAMESPACE>
 ```
@@ -31,13 +31,13 @@ virtctl vmexport create rhel9-export \
 `Ready` 상태가 된 것을 확인한 후 다운로드합니다.
 
 ```bash
-oc get vmexport rhel9-export -n <NAMESPACE>
+oc get vmexport rhel9-poc-export -n <NAMESPACE>
 ```
 
 출력 예시:
 ```
 NAME            SOURCEKIND               SOURCENAME   PHASE   READY
-rhel9-export    PersistentVolumeClaim    <PVC_NAME>   Ready   true
+rhel9-poc-export    PersistentVolumeClaim    <PVC_NAME>   Ready   true
 ```
 
 `READY`가 `true` 가 아니면 VM이 실행 중인지 확인하고 중지합니다 (아래 트러블슈팅 참고).
@@ -45,8 +45,8 @@ rhel9-export    PersistentVolumeClaim    <PVC_NAME>   Ready   true
 #### 4. 이미지 다운로드
 
 ```bash
-virtctl vmexport download rhel9-export \
-  --output=./rhel9-extracted.qcow2 \
+virtctl vmexport download rhel9-poc-export \
+  --output=./rhel9-poc-export.qcow2 \
   -n <NAMESPACE>
 ```
 
@@ -60,7 +60,7 @@ virtctl vmexport download rhel9-export \
 #### 5. VMExport 삭제 (정리)
 
 ```bash
-virtctl vmexport delete rhel9-export -n <NAMESPACE>
+virtctl vmexport delete rhel9-poc-export -n <NAMESPACE>
 ```
 
 #### ⚠️ 트러블슈팅: `waiting for VM Export ... status to be ready` 무한 반복
@@ -86,9 +86,9 @@ oc wait vm/<VM_NAME> -n <NAMESPACE> \
   --for=jsonpath='{.status.printableStatus}'=Stopped --timeout=120s
 
 # VMExport 재생성 후 다운로드
-virtctl vmexport delete rhel9-export -n <NAMESPACE>
-virtctl vmexport create rhel9-export --pvc=<PVC_NAME> -n <NAMESPACE>
-virtctl vmexport download rhel9-export --output=./rhel9-extracted.qcow2 -n <NAMESPACE>
+virtctl vmexport delete rhel9-poc-export -n <NAMESPACE>
+virtctl vmexport create rhel9-poc-export --pvc=<PVC_NAME> -n <NAMESPACE>
+virtctl vmexport download rhel9-poc-export --output=./rhel9-poc-export.qcow2 -n <NAMESPACE>
 ```
 
 **해결 방법 2: export 상태 직접 확인**
@@ -96,7 +96,7 @@ virtctl vmexport download rhel9-export --output=./rhel9-extracted.qcow2 -n <NAME
 ```bash
 # VMExport 상태 확인
 oc get virtualmachineexport -n <NAMESPACE>
-oc describe virtualmachineexport rhel9-export -n <NAMESPACE>
+oc describe virtualmachineexport rhel9-poc-export -n <NAMESPACE>
 
 # export Pod 확인 (export Pod가 생성됐는지)
 oc get pods -n <NAMESPACE> | grep virt-export
@@ -126,7 +126,7 @@ cat <<EOF | oc apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: rhel9-export-pvc
+  name: rhel9-poc-export-pvc
   namespace: openshift-virtualization-os-images
 spec:
   accessModes:
@@ -141,9 +141,9 @@ spec:
 EOF
 
 # 3. 복원된 PVC를 virtctl vmexport로 다운로드
-virtctl vmexport create rhel9-export --pvc=rhel9-export-pvc -n openshift-virtualization-os-images
-virtctl vmexport download rhel9-export --output=./rhel9-extracted.qcow2 -n openshift-virtualization-os-images
-virtctl vmexport delete rhel9-export -n openshift-virtualization-os-images
+virtctl vmexport create rhel9-poc-export --pvc=rhel9-poc-export-pvc -n openshift-virtualization-os-images
+virtctl vmexport download rhel9-poc-export --output=./rhel9-poc-export.qcow2 -n openshift-virtualization-os-images
+virtctl vmexport delete rhel9-poc-export -n openshift-virtualization-os-images
 ```
 
 ---
@@ -155,13 +155,13 @@ DataSource를 이 네임스페이스에 두면 **CDI가 VM 생성 시 자동으�
 어떤 네임스페이스에서도 동일한 이미지로 VM을 생성할 수 있습니다.
 
 ```
-rhel9-poc-vm.qcow2 (로컬)
+rhel9-poc-export.qcow2 (로컬)
         │  virtctl image-upload
         ▼
-PVC: rhel9-golden-poc  (openshift-virtualization-os-images)
+PVC: rhel9-poc-golden  (openshift-virtualization-os-images)
         │  DataSource 생성
         ▼
-DataSource: rhel9-golden-poc  (openshift-virtualization-os-images)
+DataSource: rhel9-poc-golden  (openshift-virtualization-os-images)
         │  VM 생성 시 CDI 자동 클론
         ▼
 PVC: <vm-name>-rootdisk  (어느 네임스페이스든)
@@ -173,8 +173,8 @@ PVC: <vm-name>-rootdisk  (어느 네임스페이스든)
 
 ```bash
 virtctl image-upload \
-  --image-path=rhel9-poc-vm.qcow2 \
-  --pvc-name=rhel9-golden-poc \
+  --image-path=rhel9-poc-export.qcow2 \
+  --pvc-name=rhel9-poc-golden \
   --pvc-size=30Gi \
   --storage-class=ocs-storagecluster-ceph-rbd-virtualization \
   --access-mode=ReadWriteMany \
@@ -195,7 +195,7 @@ virtctl image-upload \
 업로드 완료 후 PVC 상태를 확인합니다.
 
 ```bash
-oc get pvc rhel9-golden-poc -n openshift-virtualization-os-images
+oc get pvc rhel9-poc-golden -n openshift-virtualization-os-images
 ```
 
 ---
@@ -211,12 +211,12 @@ cat <<'EOF' | oc apply -f -
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataSource
 metadata:
-  name: rhel9-golden-poc
+  name: rhel9-poc-golden
   namespace: openshift-virtualization-os-images
 spec:
   source:
     pvc:
-      name: rhel9-golden-poc
+      name: rhel9-poc-golden
       namespace: openshift-virtualization-os-images
 EOF
 ```
@@ -224,13 +224,13 @@ EOF
 DataSource 상태를 확인합니다. `READY=true` 여야 합니다.
 
 ```bash
-oc get datasource rhel9-golden-poc -n openshift-virtualization-os-images
+oc get datasource rhel9-poc-golden -n openshift-virtualization-os-images
 ```
 
 출력 예시:
 ```
 NAME                READY
-rhel9-golden-poc    true
+rhel9-poc-golden    true
 ```
 
 ---
@@ -273,7 +273,7 @@ spec:
       spec:
         sourceRef:
           kind: DataSource
-          name: rhel9-golden-poc                      # DataSource 이름
+          name: rhel9-poc-golden                      # DataSource 이름
           namespace: openshift-virtualization-os-images
         storage:
           resources:
