@@ -36,6 +36,7 @@ cd virt-poc-sample
 | 순서 | 디렉토리 | 설명 |
 |------|----------|------|
 | 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
+| 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -54,6 +55,12 @@ virt-poc-sample/
 ├── 01-template/                # RHEL9 황금 이미지 → Template 등록
 │   ├── 01-template.md          # 가이드 문서
 │   └── 01-template.sh          # 자동화 스크립트
+│
+├── 02-network/                 # NNCP Linux Bridge + NAD
+│   ├── 02-network.md           # 가이드 문서
+│   ├── 02-network.sh           # 자동화 스크립트
+│   ├── nncp-bridge.yaml        # NNCP 리소스
+│   └── nad-bridge.yaml         # NAD 리소스
 │
 └── disabled/                   # 비활성 항목 (참고용)
 ```

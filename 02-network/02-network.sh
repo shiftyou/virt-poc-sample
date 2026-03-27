@@ -1,0 +1,204 @@
+#!/bin/bash
+# =============================================================================
+# 02-network.sh
+#
+# NNCP(NodeNetworkConfigurationPolicy) + NAD(NetworkAttachmentDefinition) 구성
+# 워커 노드에 Linux Bridge를 생성하고 VM용 보조 네트워크를 등록합니다.
+#
+# 사용법: ./02-network/02-network.sh
+# =============================================================================
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../env.conf"
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+print_info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_ok()    { echo -e "${GREEN}[ OK ]${NC} $1"; }
+print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
+print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
+print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
+
+# =============================================================================
+# 사전 확인
+# =============================================================================
+preflight() {
+    print_step "사전 확인"
+
+    if [ ! -f "$ENV_FILE" ]; then
+        print_error "env.conf 를 찾을 수 없습니다. setup.sh 를 먼저 실행하세요."
+        exit 1
+    fi
+    source "$ENV_FILE"
+    print_ok "env.conf 로드"
+    print_info "  BRIDGE_INTERFACE : ${BRIDGE_INTERFACE}"
+    print_info "  BRIDGE_NAME      : ${BRIDGE_NAME}"
+    print_info "  NAD_NAMESPACE    : ${NAD_NAMESPACE}"
+
+    if ! oc whoami &>/dev/null; then
+        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        exit 1
+    fi
+    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+
+    # NMState Operator 확인
+    if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
+        print_error "NMState Operator 가 설치되어 있지 않습니다."
+        echo "  설치 방법: 00-operator/08-nmstate-operator.md 참조"
+        exit 1
+    fi
+
+    # NMState CR 확인
+    if ! oc get nmstate 2>/dev/null | grep -q "."; then
+        print_warn "NMState CR 이 없습니다. NMState 인스턴스를 생성합니다..."
+        oc apply -f - <<'EOF'
+apiVersion: nmstate.io/v1
+kind: NMState
+metadata:
+  name: nmstate
+EOF
+        print_info "NMState 핸들러 준비 대기 중 (최대 60초)..."
+        oc rollout status daemonset/nmstate-handler -n openshift-nmstate --timeout=60s 2>/dev/null || true
+        print_ok "NMState CR 생성 완료"
+    else
+        print_ok "NMState CR 확인"
+    fi
+}
+
+# =============================================================================
+# 1단계: NNCP — Linux Bridge 생성
+# =============================================================================
+step_nncp() {
+    print_step "1/2  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
+
+    oc apply -f - <<EOF
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: poc-bridge-nncp
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+  desiredState:
+    interfaces:
+      - name: ${BRIDGE_NAME}
+        description: "POC VM용 Linux Bridge (${BRIDGE_INTERFACE} 기반)"
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: ${BRIDGE_INTERFACE}
+EOF
+
+    print_info "NNCP 적용 완료 — 노드 설정 전파 대기 중..."
+
+    # Available 상태까지 대기 (최대 120초)
+    local retries=24
+    local i=0
+    while [ $i -lt $retries ]; do
+        local status
+        status=$(oc get nncp poc-bridge-nncp \
+            -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
+        if [ "$status" = "True" ]; then
+            print_ok "NNCP poc-bridge-nncp Available"
+            break
+        fi
+        local reason
+        reason=$(oc get nncp poc-bridge-nncp \
+            -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null || echo "")
+        printf "  [%d/%d] 상태 대기 중... (%s)\r" "$((i+1))" "$retries" "${reason:-Pending}"
+        sleep 5
+        i=$((i+1))
+    done
+    echo ""
+
+    if [ $i -eq $retries ]; then
+        print_warn "NNCP 적용 시간 초과. 상태를 직접 확인하세요:"
+        echo "  oc get nncp"
+        echo "  oc get nnce"
+    fi
+
+    # 노드별 NNCE 상태 출력
+    echo ""
+    print_info "노드별 적용 상태 (NNCE):"
+    oc get nnce 2>/dev/null | grep "poc-bridge-nncp" | \
+        awk '{printf "    %-40s %s\n", $1, $2}' || true
+}
+
+# =============================================================================
+# 2단계: NAD — NetworkAttachmentDefinition 등록
+# =============================================================================
+step_nad() {
+    print_step "2/2  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
+
+    # 네임스페이스 생성
+    oc new-project "${NAD_NAMESPACE}" 2>/dev/null || \
+        oc project "${NAD_NAMESPACE}" 2>/dev/null || true
+    print_ok "네임스페이스: ${NAD_NAMESPACE}"
+
+    oc apply -f - <<EOF
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: poc-bridge-nad
+  namespace: ${NAD_NAMESPACE}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
+spec:
+  config: '{"cniVersion":"0.3.1","name":"poc-bridge-nad","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
+EOF
+
+    print_ok "NAD poc-bridge-nad 등록 완료"
+}
+
+# =============================================================================
+# 완료 요약
+# =============================================================================
+print_summary() {
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}  완료! NNCP + NAD 구성이 적용되었습니다.${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  NNCP 상태 : ${CYAN}oc get nncp${NC}"
+    echo -e "  NNCE 상태 : ${CYAN}oc get nnce${NC}"
+    echo -e "  NAD 확인  : ${CYAN}oc get net-attach-def -n ${NAD_NAMESPACE}${NC}"
+    echo ""
+    echo -e "  VM에서 보조 네트워크 사용:"
+    echo -e "  ${CYAN}networks:${NC}"
+    echo -e "  ${CYAN}  - name: bridge-net${NC}"
+    echo -e "  ${CYAN}    multus:${NC}"
+    echo -e "  ${CYAN}      networkName: poc-bridge-nad${NC}"
+    echo ""
+}
+
+# =============================================================================
+# 메인
+# =============================================================================
+main() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  네트워크 구성: NNCP + NAD${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+    preflight
+    step_nncp
+    step_nad
+    print_summary
+}
+
+main
