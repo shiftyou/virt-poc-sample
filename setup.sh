@@ -129,7 +129,7 @@ check_operators() {
     if [ "$NMO_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Maintenance Operator          → 노드 유지보수 가능"
     else
-        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀"
+        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-init/07-node-maintenance-operator.md)"
     fi
     if [ "$NHC_INSTALLED" = "true" ] && [ "$SNR_INSTALLED" = "true" ]; then
         echo -e "  $ok NHC + Self Node Remediation        → SNR 구성 가능"
@@ -433,7 +433,7 @@ fi
 if [ "${NMO_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 02-tests/node-maintenance/      — 노드 유지보수 테스트 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 02-tests/node-maintenance/      — Node Maintenance Operator 미설치 (건너뜀)"
+    echo -e "  ${RED}[✘]${NC} 02-tests/node-maintenance/      — Node Maintenance Operator 미설치  (00-init/07-node-maintenance-operator.md)"
 fi
 if [ "${NHC_INSTALLED:-false}" = "true" ] && [ "${SNR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR 구성 가능"
