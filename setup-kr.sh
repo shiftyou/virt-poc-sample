@@ -469,7 +469,10 @@ ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
 # 렌더링 대상 수집: 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
 print_info "YAML 파일 스캔 중..."
-mapfile -t YAML_FILES < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
+YAML_FILES=()
+while IFS= read -r line; do
+    YAML_FILES+=("$line")
+done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
 TOTAL_FILES=${#YAML_FILES[@]}
 print_info "렌더링 대상: ${TOTAL_FILES}개 파일"
 echo ""

@@ -469,7 +469,10 @@ ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
 # Collect render targets: yaml files containing env var placeholders (${...})
 print_info "Scanning YAML files..."
-mapfile -t YAML_FILES < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
+YAML_FILES=()
+while IFS= read -r line; do
+    YAML_FILES+=("$line")
+done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
 TOTAL_FILES=${#YAML_FILES[@]}
 print_info "Found ${TOTAL_FILES} YAML files to render."
 echo ""
