@@ -38,63 +38,9 @@ virtctl image-upload pvc <PVC_NAME> \
 
 ---
 
-### 방법 2: Pod를 통한 수동 복사
+### 방법 2: VolumeSnapshot + DataVolume export (스냅샷 기반)
 
-virtctl을 사용할 수 없는 경우, PVC를 마운트한 임시 Pod를 생성하여 `oc cp`로 파일을 추출합니다.
-
-#### 1. PVC를 마운트한 임시 Pod 생성
-
-```bash
-cat <<EOF | oc apply -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: pvc-export
-  namespace: openshift-virtualization-os-images
-spec:
-  restartPolicy: Never
-  containers:
-    - name: exporter
-      image: registry.access.redhat.com/ubi9/ubi:latest
-      command: ["sleep", "3600"]
-      volumeMounts:
-        - name: pvc-data
-          mountPath: /data
-  volumes:
-    - name: pvc-data
-      persistentVolumeClaim:
-        claimName: <PVC_NAME>
-EOF
-```
-
-#### 2. Pod가 Running 상태가 될 때까지 대기
-
-```bash
-oc wait pod/pvc-export -n openshift-virtualization-os-images \
-  --for=condition=Ready --timeout=60s
-```
-
-#### 3. 파일 목록 확인 후 복사
-
-```bash
-# 파일 목록 확인
-oc exec -n openshift-virtualization-os-images pvc-export -- ls -lh /data/
-
-# qcow2 파일 로컬로 복사
-oc cp openshift-virtualization-os-images/pvc-export:/data/disk.img ./rhel9-extracted.qcow2
-```
-
-#### 4. 임시 Pod 삭제
-
-```bash
-oc delete pod pvc-export -n openshift-virtualization-os-images
-```
-
----
-
-### 방법 3: VolumeSnapshot + DataVolume export (스냅샷 기반)
-
-CSI 스냅샷을 지원하는 스토리지 환경에서, 스냅샷으로부터 새 PVC를 생성하고 해당 PVC를 방법 1 또는 방법 2로 내보냅니다.
+CSI 스냅샷을 지원하는 스토리지 환경에서, 스냅샷으로부터 새 PVC를 생성하고 해당 PVC를 방법 1로 내보냅니다.
 
 ```bash
 # 1. 스냅샷 생성
