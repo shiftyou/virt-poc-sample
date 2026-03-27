@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: poc-vm-snapshot
+  labels:
+    app: poc-vm-snapshot

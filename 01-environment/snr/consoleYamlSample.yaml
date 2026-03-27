@@ -1,0 +1,13 @@
+# =============================================================================
+# [Console YAML Sample] SelfNodeRemediationTemplate
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+# =============================================================================
+apiVersion: self-node-remediation.medik8s.io/v1alpha1
+kind: SelfNodeRemediationTemplate
+metadata:
+  name: self-node-remediation-template
+  namespace: openshift-workload-availability
+spec:
+  template:
+    spec:
+      remediationStrategy: Automatic

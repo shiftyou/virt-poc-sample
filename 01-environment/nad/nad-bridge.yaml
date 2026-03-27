@@ -1,0 +1,39 @@
+# =============================================================================
+# NetworkAttachmentDefinition - Linux Bridge 기반 보조 네트워크
+# NNCP로 생성된 Linux Bridge를 VM이 사용할 수 있도록 정의합니다.
+#
+# 참조 변수: BRIDGE_NAME, NAD_NAMESPACE (env.conf)
+# 적용: envsubst < nad-bridge.yaml | oc apply -f -
+# =============================================================================
+
+# NAD가 위치할 네임스페이스 생성
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAD_NAMESPACE}
+  labels:
+    # VM이 배포되는 네임스페이스임을 표시
+    app: poc-nad
+
+---
+
+# NetworkAttachmentDefinition 정의
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: poc-bridge-nad
+  # NAD는 VM이 사용하는 네임스페이스 또는 공유 네임스페이스에 생성
+  namespace: ${NAD_NAMESPACE}
+  annotations:
+    # Console UI에 표시되는 설명
+    k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
+spec:
+  # CNI 플러그인 설정 (JSON 형식)
+  config: '{
+    "cniVersion": "0.3.1",
+    "name": "poc-bridge-nad",
+    "type": "cnv-bridge",
+    "bridge": "${BRIDGE_NAME}",
+    "macspoofchk": true,
+    "ipam": {}
+  }'

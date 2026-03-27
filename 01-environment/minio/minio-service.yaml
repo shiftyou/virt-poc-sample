@@ -1,0 +1,44 @@
+# =============================================================================
+# MinIO Service
+# S3 API (9000)와 MinIO Console (9001)에 대한 서비스를 정의합니다.
+#
+# 적용: oc apply -f minio-service.yaml
+# =============================================================================
+
+# S3 API 서비스
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: poc-minio
+  labels:
+    app: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    # S3 API 포트 (OADP BackupStorageLocation에서 사용)
+    - name: s3
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+
+---
+
+# MinIO Console 서비스
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-console
+  namespace: poc-minio
+  labels:
+    app: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    # MinIO 웹 콘솔 포트
+    - name: console
+      port: 9001
+      targetPort: 9001
+      protocol: TCP

@@ -1,0 +1,33 @@
+# =============================================================================
+# KubeDescheduler CR - Descheduler 설정
+# 클러스터의 Pod 분배를 자동으로 최적화합니다.
+#
+# 적용: oc apply -f kubedescheduler.yaml
+# =============================================================================
+apiVersion: operator.openshift.io/v1
+kind: KubeDescheduler
+metadata:
+  name: cluster
+  # Descheduler Operator가 설치된 네임스페이스
+  namespace: openshift-kube-descheduler-operator
+spec:
+  # Descheduler 실행 간격 (deschedulingIntervalSeconds 대신 schedule 사용 가능)
+  deschedulingIntervalSeconds: 3600  # 1시간마다 실행
+  # 프로파일: 사전 정의된 전략 세트
+  # AffinityAndTaints: Affinity/Taint 위반 Pod 재스케줄링
+  # TopologyAndDuplicates: 토폴로지 위반 및 중복 Pod 처리
+  # SoftTopologyAndDuplicates: 소프트 제약 위반 Pod 처리
+  # LifecycleAndUtilization: 수명주기 및 자원 활용 최적화 (권장)
+  # LongLifecycle: 오래 실행된 Pod 재스케줄링 (VM에 적합)
+  profiles:
+    - AffinityAndTaints
+    - TopologyAndDuplicates
+    - LifecycleAndUtilization
+  # 프로파일 사용자 정의
+  profileCustomizations:
+    # LowNodeUtilization 전략의 임계값
+    # 노드 CPU/Memory 사용률이 20% 미만이면 "저부하"
+    # 노드 CPU/Memory 사용률이 50% 초과면 "고부하" → Pod 이동
+    thresholdPriorityClassName: "system-cluster-critical"
+    # Pod 재시작 횟수 임계값 (100회 이상 재시작 시 재스케줄)
+    podLifetime: 24h

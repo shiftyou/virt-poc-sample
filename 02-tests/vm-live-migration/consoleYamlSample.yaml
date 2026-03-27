@@ -1,0 +1,13 @@
+# =============================================================================
+# [Console YAML Sample] VirtualMachineInstanceMigration
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+# VM이 실행 중인 상태에서 적용하면 라이브 마이그레이션이 시작됩니다.
+# =============================================================================
+apiVersion: kubevirt.io/v1
+kind: VirtualMachineInstanceMigration
+metadata:
+  name: test-migration
+  namespace: poc-live-migration
+spec:
+  # 마이그레이션할 VMI 이름
+  vmiName: test-migration-vm

@@ -1,0 +1,66 @@
+# =============================================================================
+# Node Exporter ServiceMonitor - 커스텀 메트릭 수집 설정
+# User workload monitoring이 활성화된 경우 사용자 네임스페이스에서
+# 커스텀 메트릭을 수집할 수 있습니다.
+#
+# 사전 조건:
+#   oc apply -f - <<EOF
+#   apiVersion: v1
+#   kind: ConfigMap
+#   metadata:
+#     name: cluster-monitoring-config
+#     namespace: openshift-monitoring
+#   data:
+#     config.yaml: |
+#       enableUserWorkload: true
+#   EOF
+#
+# 적용: oc apply -f node-exporter-servicemonitor.yaml
+# =============================================================================
+
+# User Workload Monitoring 활성화 (최초 1회)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    # User workload monitoring 활성화
+    # 사용자 네임스페이스의 ServiceMonitor를 수집합니다
+    enableUserWorkload: true
+
+---
+
+# 노드 메트릭 확인용 PrometheusRule (사용자 네임스페이스)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: node-recording-rules
+  namespace: poc-alerts
+  labels:
+    role: alert-rules
+spec:
+  groups:
+    - name: node-recording-rules
+      interval: 30s
+      rules:
+        # 노드 CPU 사용률 recording rule
+        - record: node:cpu_utilisation:avg1m
+          expr: |
+            1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[1m]))
+
+        # 노드 메모리 사용률 recording rule
+        - record: node:memory_utilisation
+          expr: |
+            1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+        # 노드 네트워크 수신률 (bps)
+        - record: node:network_receive_bps
+          expr: |
+            rate(node_network_receive_bytes_total[5m]) * 8
+
+        # 노드 네트워크 송신률 (bps)
+        - record: node:network_transmit_bps
+          expr: |
+            rate(node_network_transmit_bytes_total[5m]) * 8

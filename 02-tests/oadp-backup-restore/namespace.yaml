@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: poc-oadp-test
+  labels:
+    app: poc-oadp-test

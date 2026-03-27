@@ -1,0 +1,129 @@
+# =============================================================================
+# VM Template - RHEL 9 기반 커스텀 템플릿
+# openshift 네임스페이스에 생성하면 모든 네임스페이스에서 사용 가능합니다.
+#
+# 적용: oc apply -f vm-template.yaml -n openshift
+# =============================================================================
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: poc-rhel9-vm-template
+  # openshift 네임스페이스에 생성하면 전체 클러스터에서 접근 가능
+  namespace: openshift
+  labels:
+    # VM 카테고리 레이블 (Console UI에서 필터링에 사용)
+    template.kubevirt.io/type: vm
+    os.template.kubevirt.io/rhel9.0: "true"
+    workload.template.kubevirt.io/server: "true"
+    flavor.template.kubevirt.io/small: "true"
+  annotations:
+    # Console UI에 표시되는 설명
+    description: "Red Hat Enterprise Linux 9 기반 POC 테스트용 VM 템플릿"
+    iconClass: icon-rhel
+    openshift.io/display-name: "POC RHEL9 VM Template"
+    template.kubevirt.io/version: "0.1"
+    defaults.template.kubevirt.io/disk: rootdisk
+    # 템플릿에서 제공하는 파라미터 설명
+    template.openshift.io/bindable: "false"
+# 템플릿 파라미터 정의 (oc process -p NAME=xxx 로 지정 가능)
+parameters:
+  - name: NAME
+    description: "VM 이름"
+    required: true
+  - name: NAMESPACE
+    description: "VM이 생성될 네임스페이스"
+    required: true
+  - name: CPU_CORES
+    description: "CPU 코어 수"
+    value: "2"
+  - name: MEMORY
+    description: "메모리 용량"
+    value: "4Gi"
+  - name: DISK_SIZE
+    description: "루트 디스크 크기"
+    value: "30Gi"
+  - name: STORAGE_CLASS
+    description: "스토리지 클래스"
+    value: "ocs-storagecluster-ceph-rbd-virtualization"
+objects:
+  # VM 정의
+  - apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: "${NAME}"
+      namespace: "${NAMESPACE}"
+      labels:
+        app: "${NAME}"
+        # kubevirt.io/os 레이블은 VM OS 인식에 사용됨
+        kubevirt.io/os: rhel9
+    spec:
+      # VM 생성 후 자동 시작 여부
+      running: false
+      template:
+        metadata:
+          labels:
+            kubevirt.io/domain: "${NAME}"
+        spec:
+          # VM 도메인 정의
+          domain:
+            cpu:
+              # CPU 코어 수
+              cores: ${{CPU_CORES}}
+              sockets: 1
+              threads: 1
+            devices:
+              disks:
+                # 루트 디스크
+                - name: rootdisk
+                  disk:
+                    bus: virtio
+                # cloud-init 드라이브
+                - name: cloudinitdisk
+                  disk:
+                    bus: virtio
+              interfaces:
+                # Pod 네트워크 인터페이스
+                - name: default
+                  masquerade: {}
+              rng: {}
+            machine:
+              type: pc-q35-rhel9.2.0
+            resources:
+              requests:
+                memory: "${MEMORY}"
+          # 네트워크 설정
+          networks:
+            - name: default
+              pod: {}
+          # 볼륨 정의
+          volumes:
+            # DataVolume 참조
+            - name: rootdisk
+              dataVolume:
+                name: "${NAME}-rootdisk"
+            # cloud-init 설정 (초기 패스워드 설정)
+            - name: cloudinitdisk
+              cloudInitNoCloud:
+                userData: |
+                  #cloud-config
+                  user: cloud-user
+                  password: redhat123
+                  chpasswd: { expire: False }
+                  ssh_pwauth: True
+      # DataVolumeTemplate: VM과 함께 DataVolume 자동 생성
+      dataVolumeTemplates:
+        - apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: "${NAME}-rootdisk"
+          spec:
+            # RHEL 9 기본 이미지 소스 참조
+            sourceRef:
+              kind: DataSource
+              name: rhel9
+              namespace: openshift-virtualization-os-images
+            storage:
+              resources:
+                requests:
+                  storage: "${DISK_SIZE}"
+              storageClassName: "${STORAGE_CLASS}"

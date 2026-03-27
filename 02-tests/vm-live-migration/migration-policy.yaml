@@ -1,0 +1,28 @@
+# =============================================================================
+# MigrationPolicy - 마이그레이션 정책 설정
+# 마이그레이션 대역폭, 타임아웃, 병렬 마이그레이션 수를 제어합니다.
+#
+# 적용: oc apply -f migration-policy.yaml
+# =============================================================================
+apiVersion: migrations.kubevirt.io/v1alpha1
+kind: MigrationPolicy
+metadata:
+  name: poc-migration-policy
+  namespace: poc-live-migration
+spec:
+  # 마이그레이션 대역폭 제한 (0 = 무제한)
+  bandwidthPerMigration: "0Mi"
+  # 마이그레이션 완료 타임아웃 (초)
+  completionTimeoutPerGiB: 800
+  # 병렬 마이그레이션 허용 여부
+  allowAutoConverge: true
+  # 사후 복사(post-copy) 마이그레이션 허용
+  allowPostCopy: false
+  # 셀렉터 (어떤 VMI에 이 정책을 적용할지)
+  selectors:
+    namespaceSelector:
+      matchLabels:
+        app: poc-live-migration
+    virtualMachineInstanceSelector:
+      matchLabels:
+        app: test-migration-vm

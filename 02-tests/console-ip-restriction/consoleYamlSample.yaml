@@ -1,0 +1,16 @@
+# =============================================================================
+# [Console YAML Sample] Console Route IP 제한
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+#
+# 주의: 허용 IP를 실제 환경에 맞게 수정하세요.
+# 잘못된 설정 시 Console 접근이 차단됩니다!
+# =============================================================================
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: console
+  namespace: openshift-console
+  annotations:
+    # 허용할 IP 목록 (공백으로 구분)
+    # 예: "10.0.0.0/8 192.168.1.0/24"
+    haproxy.router.openshift.io/ip_whitelist: "10.0.0.0/8"

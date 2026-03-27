@@ -1,0 +1,30 @@
+# =============================================================================
+# [Console YAML Sample] NodeNetworkConfigurationPolicy - Linux Bridge
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+#
+# 주의: br1과 ens4를 실제 환경에 맞게 수정하세요.
+# =============================================================================
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: poc-bridge-nncp
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ""
+  desiredState:
+    interfaces:
+      - name: br1
+        description: "POC VM용 Linux Bridge"
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            # 실제 네트워크 인터페이스 이름으로 변경 (예: ens4, eth1)
+            - name: ens4

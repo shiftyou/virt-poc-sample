@@ -1,0 +1,33 @@
+# =============================================================================
+# ResourceQuota - 네임스페이스 총 리소스 제한
+# 네임스페이스 내 모든 리소스의 총량을 제한합니다.
+#
+# 적용: oc apply -f resourcequota.yaml -n poc-resource-limits
+# =============================================================================
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: poc-quota
+  namespace: poc-resource-limits
+spec:
+  hard:
+    # CPU 총 requests 제한
+    requests.cpu: "8"
+    # CPU 총 limits 제한
+    limits.cpu: "16"
+    # Memory 총 requests 제한
+    requests.memory: "8Gi"
+    # Memory 총 limits 제한
+    limits.memory: "16Gi"
+    # Pod 총 개수 제한
+    pods: "20"
+    # PVC 총 개수 제한
+    persistentvolumeclaims: "10"
+    # PVC 총 스토리지 제한
+    requests.storage: "100Gi"
+    # Service 총 개수 제한
+    services: "10"
+    # ConfigMap 총 개수 제한
+    configmaps: "20"
+    # Secret 총 개수 제한
+    secrets: "20"

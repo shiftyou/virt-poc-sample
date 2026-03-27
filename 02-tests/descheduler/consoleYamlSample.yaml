@@ -1,0 +1,15 @@
+# =============================================================================
+# [Console YAML Sample] KubeDescheduler
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+# =============================================================================
+apiVersion: operator.openshift.io/v1
+kind: KubeDescheduler
+metadata:
+  name: cluster
+  namespace: openshift-kube-descheduler-operator
+spec:
+  deschedulingIntervalSeconds: 3600
+  profiles:
+    - AffinityAndTaints
+    - TopologyAndDuplicates
+    - LifecycleAndUtilization

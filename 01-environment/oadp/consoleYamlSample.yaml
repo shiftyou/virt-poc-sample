@@ -1,0 +1,40 @@
+# =============================================================================
+# [Console YAML Sample] DataProtectionApplication (OADP)
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+#
+# 주의: MinIO 정보를 실제 환경에 맞게 수정하세요.
+# Secret(cloud-credentials)을 먼저 생성해야 합니다.
+# =============================================================================
+apiVersion: oadp.openshift.io/v1alpha1
+kind: DataProtectionApplication
+metadata:
+  name: velero-sample
+  namespace: openshift-adp
+spec:
+  backupLocations:
+    - name: velero-sample-1
+      velero:
+        provider: aws
+        default: true
+        objectStorage:
+          bucket: velero
+          prefix: velero
+        config:
+          s3Url: http://minio.poc-minio.svc.cluster.local:9000
+          region: us-east-1
+          insecureSkipTLSVerify: "true"
+          s3ForcePathStyle: "true"
+        credential:
+          name: cloud-credentials
+          key: cloud
+  configuration:
+    velero:
+      defaultPlugins:
+        - aws
+        - openshift
+        - csi
+      featureFlags:
+        - EnableCSIVolumeSnapshots
+    nodeAgent:
+      enable: false
+      uploaderType: kopia

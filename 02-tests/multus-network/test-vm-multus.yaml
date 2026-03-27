@@ -1,0 +1,81 @@
+# =============================================================================
+# Multus 멀티 네트워크 테스트 VM
+# Pod 네트워크 + Bridge 네트워크(NAD) 2개의 인터페이스를 가진 VM
+#
+# 참조 변수: NAD_NAMESPACE (env.conf)
+# 적용: envsubst < test-vm-multus.yaml | oc apply -f -
+# =============================================================================
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: test-multus-vm
+  namespace: poc-multus
+  labels:
+    app: test-multus-vm
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: test-multus-vm
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            # 기본 인터페이스 (Pod 네트워크, masquerade NAT)
+            - name: default
+              masquerade: {}
+            # 보조 인터페이스 (Bridge 네트워크, L2)
+            - name: secondary
+              bridge: {}
+        resources:
+          requests:
+            memory: 1Gi
+      # 네트워크 정의
+      networks:
+        # Pod 네트워크 (기본)
+        - name: default
+          pod: {}
+        # NAD 참조 (Bridge 네트워크)
+        # 형식: <namespace>/<nad-name>
+        - name: secondary
+          multus:
+            networkName: ${NAD_NAMESPACE}/poc-bridge-nad
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: test-multus-vm-rootdisk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              user: fedora
+              password: fedora123
+              chpasswd: { expire: False }
+              # 보조 인터페이스 설정
+              runcmd:
+                - ip addr
+                - ip link show
+  dataVolumeTemplates:
+    - apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        name: test-multus-vm-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 20Gi

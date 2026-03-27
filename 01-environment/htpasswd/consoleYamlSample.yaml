@@ -1,0 +1,21 @@
+# =============================================================================
+# [Console YAML Sample] htpasswd OAuth 설정
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+#
+# 주의: htpasswd Secret은 CLI로 생성해야 합니다.
+#   oc create secret generic htpasswd-secret \
+#     --from-file=htpasswd=./users.htpasswd \
+#     -n openshift-config
+# =============================================================================
+apiVersion: config.openshift.io/v1
+kind: OAuth
+metadata:
+  name: cluster
+spec:
+  identityProviders:
+    - name: htpasswd_provider
+      mappingMethod: claim
+      type: HTPasswd
+      htpasswd:
+        fileData:
+          name: htpasswd-secret

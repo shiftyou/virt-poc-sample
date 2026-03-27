@@ -1,0 +1,7 @@
+# Resource Limits 테스트 네임스페이스
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: poc-resource-limits
+  labels:
+    app: poc-resource-limits

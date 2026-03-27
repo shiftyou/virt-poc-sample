@@ -1,0 +1,32 @@
+# =============================================================================
+# Velero Restore - VM 복원
+# test-vm-backup 백업에서 VM을 복원합니다.
+#
+# 사전 조건: 백업 완료 상태 (oc get backup test-vm-backup -n openshift-adp)
+# 적용: oc apply -f restore.yaml
+# =============================================================================
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: test-vm-restore
+  namespace: openshift-adp
+spec:
+  # 복원할 백업 이름
+  backupName: test-vm-backup
+  # 복원 대상 네임스페이스 (원래 네임스페이스로 복원)
+  includedNamespaces:
+    - poc-oadp-test
+  # 네임스페이스 매핑 (선택사항: 다른 네임스페이스로 복원)
+  # namespaceMapping:
+  #   poc-oadp-test: poc-oadp-restore
+  # 복원할 리소스 목록
+  includedResources:
+    - virtualmachines
+    - datavolumes
+    - persistentvolumeclaims
+  # 이미 존재하는 리소스 처리 방식
+  # none: 기존 리소스 건너뜀 (기본값)
+  # update: 기존 리소스 업데이트
+  existingResourcePolicy: none
+  # 볼륨 복원 여부
+  restorePVs: true

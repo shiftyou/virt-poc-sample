@@ -1,0 +1,42 @@
+# =============================================================================
+# LimitRange - Pod/Container 리소스 제한
+# 네임스페이스 내 개별 Container의 CPU/Memory 기본값과 최대값을 설정합니다.
+#
+# 적용: oc apply -f limitrange.yaml -n poc-resource-limits
+# =============================================================================
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: poc-limitrange
+  namespace: poc-resource-limits
+spec:
+  limits:
+    # Container 레벨 제한
+    - type: Container
+      # 기본값: requests/limits 미지정 시 자동 설정
+      default:
+        cpu: "500m"
+        memory: "256Mi"
+      # 기본 requests 값
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      # 최대값: 이 값 초과 시 Pod 생성 거부
+      max:
+        cpu: "4"
+        memory: "4Gi"
+      # 최소값: 이 값 미만 시 Pod 생성 거부
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+    # Pod 레벨 제한 (모든 Container 합산)
+    - type: Pod
+      max:
+        cpu: "8"
+        memory: "8Gi"
+    # PersistentVolumeClaim 크기 제한
+    - type: PersistentVolumeClaim
+      max:
+        storage: "50Gi"
+      min:
+        storage: "1Gi"

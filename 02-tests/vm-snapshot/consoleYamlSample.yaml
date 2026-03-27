@@ -1,0 +1,14 @@
+# =============================================================================
+# [Console YAML Sample] VirtualMachineSnapshot
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+# =============================================================================
+apiVersion: snapshot.kubevirt.io/v1beta1
+kind: VirtualMachineSnapshot
+metadata:
+  name: test-vm-snapshot
+  namespace: poc-vm-snapshot
+spec:
+  source:
+    apiGroup: kubevirt.io
+    kind: VirtualMachine
+    name: test-snapshot-vm

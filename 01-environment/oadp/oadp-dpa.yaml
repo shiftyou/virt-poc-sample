@@ -1,0 +1,83 @@
+# =============================================================================
+# OADP DataProtectionApplication (DPA) 설정
+# MinIO를 S3 백엔드로 사용하여 VM 백업/복원을 구성합니다.
+#
+# 참조 변수: MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_ENDPOINT (env.conf)
+# 적용: envsubst < oadp-dpa.yaml | oc apply -f -
+# =============================================================================
+
+# MinIO S3 인증 정보 Secret
+# OADP가 MinIO에 접근하기 위한 AWS 형식의 인증 파일
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-credentials
+  namespace: openshift-adp
+type: Opaque
+stringData:
+  # AWS credentials 형식으로 저장
+  cloud: |
+    [default]
+    aws_access_key_id=${MINIO_ACCESS_KEY}
+    aws_secret_access_key=${MINIO_SECRET_KEY}
+
+---
+
+# DataProtectionApplication - OADP 핵심 설정
+apiVersion: oadp.openshift.io/v1alpha1
+kind: DataProtectionApplication
+metadata:
+  name: velero-sample
+  namespace: openshift-adp
+spec:
+  # 백업 위치 설정
+  backupLocations:
+    - name: velero-sample-1
+      velero:
+        # S3 호환 스토리지 사용
+        provider: aws
+        default: true
+        objectStorage:
+          # MinIO 버킷 이름
+          bucket: ${MINIO_BUCKET}
+          # 버킷 내 경로 접두사 (선택사항)
+          prefix: velero
+        config:
+          # MinIO 엔드포인트 주소 (내부 서비스 URL)
+          s3Url: ${MINIO_ENDPOINT}
+          # AWS 리전 (MinIO에서는 임의 값 사용 가능)
+          region: us-east-1
+          # HTTPS 인증서 검증 비활성화 (자체 서명 인증서)
+          insecureSkipTLSVerify: "true"
+          # 가상 호스팅 방식 비활성화 (MinIO는 path-style 필요)
+          s3ForcePathStyle: "true"
+        credential:
+          name: cloud-credentials
+          key: cloud
+  # 볼륨 스냅샷 위치 (CSI 사용)
+  snapshotLocations:
+    - name: velero-sample-1
+      velero:
+        provider: aws
+        config:
+          region: us-east-1
+  # Velero 설정
+  configuration:
+    velero:
+      defaultPlugins:
+        # AWS S3 플러그인
+        - aws
+        # OpenShift 리소스 플러그인
+        - openshift
+        # CSI 볼륨 스냅샷 플러그인
+        - csi
+      # VM 백업을 위한 추가 설정
+      featureFlags:
+        - EnableCSIVolumeSnapshots
+    # Restic/Kopia를 사용한 파일 시스템 백업 비활성화 (CSI 사용)
+    nodeAgent:
+      enable: false
+      uploaderType: kopia
+  # Velero Pod 리소스 설정
+  podAnnotations:
+    oadp.openshift.io/bgsl-storage-provider: s3

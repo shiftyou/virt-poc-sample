@@ -1,0 +1,36 @@
+# =============================================================================
+# [Console YAML Sample] NetworkPolicy
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+# =============================================================================
+
+# Deny All 정책
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: poc-netpol
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# 동일 네임스페이스 허용 정책
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: poc-netpol
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+    - ports:
+        - port: 53
+          protocol: UDP

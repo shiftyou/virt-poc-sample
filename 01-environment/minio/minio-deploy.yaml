@@ -1,0 +1,122 @@
+# =============================================================================
+# MinIO Deployment + PVC
+# airgap 환경에서 OADP의 S3 백엔드로 사용합니다.
+#
+# 참조 변수: MINIO_ACCESS_KEY, MINIO_SECRET_KEY (env.conf)
+# 적용: envsubst < minio-deploy.yaml | oc apply -f -
+# =============================================================================
+
+# MinIO 네임스페이스
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: poc-minio
+  labels:
+    app: minio
+
+---
+
+# MinIO 데이터 저장용 PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: poc-minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # 백업 데이터 크기에 따라 조정
+      storage: 100Gi
+
+---
+
+# MinIO 인증 정보 Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: poc-minio
+type: Opaque
+stringData:
+  # MinIO Root 사용자 (Access Key)
+  MINIO_ROOT_USER: "${MINIO_ACCESS_KEY}"
+  # MinIO Root 비밀번호 (Secret Key)
+  MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
+
+---
+
+# MinIO Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: poc-minio
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          # airgap 환경에서는 미러 레지스트리 경로로 변경
+          image: quay.io/minio/minio:latest
+          args:
+            - server
+            - /data
+            # MinIO Console 포트
+            - --console-address
+            - ":9001"
+          ports:
+            # S3 API 포트
+            - containerPort: 9000
+              name: s3
+            # MinIO Console 포트
+            - containerPort: 9001
+              name: console
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: MINIO_ROOT_PASSWORD
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # MinIO 헬스체크
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data

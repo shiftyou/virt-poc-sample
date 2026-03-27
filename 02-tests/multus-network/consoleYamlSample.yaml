@@ -1,0 +1,55 @@
+# =============================================================================
+# [Console YAML Sample] VM with Multus Network
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+#
+# 주의: poc-nad/poc-bridge-nad를 실제 NAD 경로로 변경하세요.
+# =============================================================================
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: test-multus-vm
+  namespace: poc-multus
+spec:
+  running: false
+  template:
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+            - name: secondary
+              bridge: {}
+        resources:
+          requests:
+            memory: 1Gi
+      networks:
+        - name: default
+          pod: {}
+        - name: secondary
+          multus:
+            networkName: poc-nad/poc-bridge-nad
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: test-multus-vm-rootdisk
+  dataVolumeTemplates:
+    - apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        name: test-multus-vm-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 20Gi

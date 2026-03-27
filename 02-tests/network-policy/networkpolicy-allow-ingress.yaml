@@ -1,0 +1,75 @@
+# =============================================================================
+# NetworkPolicy - 외부 인그레스 트래픽 허용
+# 특정 레이블을 가진 Pod로의 인바운드 HTTP/HTTPS 트래픽을 허용합니다.
+#
+# 적용: oc apply -f networkpolicy-allow-ingress.yaml
+# =============================================================================
+
+# 웹 서버 Pod로의 HTTP 트래픽 허용
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-ingress
+  namespace: poc-netpol
+spec:
+  # role=web 레이블을 가진 Pod에만 적용
+  podSelector:
+    matchLabels:
+      role: web
+  policyTypes:
+    - Ingress
+  ingress:
+    # 모든 소스에서 HTTP(80), HTTPS(443) 허용
+    - ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+
+---
+
+# 특정 네임스페이스에서만 접근 허용 예제
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-specific-namespace
+  namespace: poc-netpol
+spec:
+  podSelector:
+    matchLabels:
+      role: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    # poc-netpol 네임스페이스에서만 접근 허용
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: poc-netpol
+      ports:
+        - port: 8080
+          protocol: TCP
+
+---
+
+# 특정 Pod에서만 접근 허용 예제
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-specific-pod
+  namespace: poc-netpol
+spec:
+  podSelector:
+    matchLabels:
+      role: database
+  policyTypes:
+    - Ingress
+  ingress:
+    # role=backend 레이블을 가진 Pod에서만 DB 포트 접근 허용
+    - from:
+        - podSelector:
+            matchLabels:
+              role: backend
+      ports:
+        - port: 5432
+          protocol: TCP

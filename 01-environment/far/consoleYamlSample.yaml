@@ -1,0 +1,28 @@
+# =============================================================================
+# [Console YAML Sample] FenceAgentsRemediationTemplate
+# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+#
+# 주의: IP, 사용자, 비밀번호, 노드 이름을 실제 환경에 맞게 수정하세요.
+# =============================================================================
+apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
+kind: FenceAgentsRemediationTemplate
+metadata:
+  name: fence-agents-remediation-template
+  namespace: openshift-workload-availability
+spec:
+  template:
+    spec:
+      agent: fence_ipmilan
+      sharedparameters:
+        --ip: "192.168.1.100"
+        --username: "admin"
+        --password: "password"
+        --lanplus: ""
+        --action: "reboot"
+      nodeparameters:
+        worker-0:
+          --ipport: "623"
+        worker-1:
+          --ipport: "623"
+        worker-2:
+          --ipport: "623"

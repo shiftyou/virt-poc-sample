@@ -1,0 +1,41 @@
+# =============================================================================
+# Velero Backup - VM 백업
+# poc-oadp-test 네임스페이스의 모든 리소스(VM, PVC 포함)를 백업합니다.
+#
+# 적용: oc apply -f backup.yaml
+# =============================================================================
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  name: test-vm-backup
+  namespace: openshift-adp
+  labels:
+    backup-test: "true"
+spec:
+  # 백업 대상 네임스페이스
+  includedNamespaces:
+    - poc-oadp-test
+  # 백업 저장 위치 (DPA에서 설정한 이름)
+  storageLocation: velero-sample-1
+  # 백업 보존 기간 (72시간)
+  ttl: 72h0m0s
+  # CSI 볼륨 스냅샷 포함
+  snapshotVolumes: true
+  # VM 관련 리소스 포함 설정
+  includedResources:
+    - virtualmachines
+    - virtualmachineinstances
+    - datavolumes
+    - persistentvolumeclaims
+    - persistentvolumes
+    - pods
+    - services
+    - configmaps
+    - secrets
+  # 레이블 선택기 (선택사항: 특정 레이블의 리소스만 백업)
+  # labelSelector:
+  #   matchLabels:
+  #     backup-test: "true"
+  hooks:
+    # 백업 전/후 훅 (선택사항)
+    resources: []

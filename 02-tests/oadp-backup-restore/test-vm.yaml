@@ -1,0 +1,75 @@
+# =============================================================================
+# OADP 백업/복원 테스트용 VM
+# Fedora 기반 경량 VM으로 빠른 백업/복원 테스트에 적합합니다.
+#
+# 적용: oc apply -f test-vm.yaml
+# =============================================================================
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: test-backup-vm
+  namespace: poc-oadp-test
+  labels:
+    app: test-backup-vm
+    # OADP 백업 시 이 레이블로 필터링 가능
+    backup-test: "true"
+spec:
+  # 적용 시 자동 시작하지 않음 (수동으로 시작)
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: test-backup-vm
+    spec:
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+        resources:
+          requests:
+            memory: 1Gi
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: test-backup-vm-rootdisk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              user: fedora
+              password: fedora123
+              chpasswd: { expire: False }
+              ssh_pwauth: True
+              # 백업 테스트용 파일 생성
+              runcmd:
+                - echo "OADP Backup Test - $(date)" > /home/fedora/backup-test.txt
+  dataVolumeTemplates:
+    - apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        name: test-backup-vm-rootdisk
+      spec:
+        # Fedora 기본 이미지 사용
+        sourceRef:
+          kind: DataSource
+          name: fedora
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 20Gi

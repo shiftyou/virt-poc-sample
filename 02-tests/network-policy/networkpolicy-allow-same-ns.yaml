@@ -1,0 +1,31 @@
+# =============================================================================
+# NetworkPolicy - 동일 네임스페이스 내 통신 허용
+# 같은 네임스페이스(poc-netpol)의 Pod들 간에 모든 트래픽을 허용합니다.
+#
+# 적용: oc apply -f networkpolicy-allow-same-ns.yaml
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: poc-netpol
+spec:
+  # 모든 Pod에 적용
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 동일 네임스페이스의 Pod에서 오는 트래픽 허용
+    - from:
+        - podSelector: {}
+  egress:
+    # 동일 네임스페이스의 Pod로 나가는 트래픽 허용
+    - to:
+        - podSelector: {}
+    # DNS 쿼리 허용 (UDP/TCP 53)
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
