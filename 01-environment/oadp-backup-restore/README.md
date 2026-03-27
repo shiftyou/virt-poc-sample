@@ -19,7 +19,7 @@ Velero를 통해 VM의 정의(YAML)와 데이터 볼륨(PVC)을 모두 백업합
 
 ```bash
 source ../../env.conf
-cd 02-tests/oadp-backup-restore
+cd 01-environment/oadp-backup-restore
 ./apply.sh
 ```
 

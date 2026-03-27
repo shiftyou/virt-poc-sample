@@ -18,7 +18,7 @@ NNCP로 생성한 Bridge와 NAD를 사용하여 VM에 추가 네트워크를 연
 
 ```bash
 source ../../env.conf
-cd 02-tests/multus-network
+cd 01-environment/multus-network
 envsubst < test-vm-multus.yaml | oc apply -f -
 ```
 

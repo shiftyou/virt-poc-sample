@@ -26,7 +26,7 @@ curl ifconfig.me
 # 프로젝트 루트에서
 source env.conf
 
-cd 02-tests/console-ip-restriction
+cd 01-environment/console-ip-restriction
 
 # 현재 설정 확인
 oc get apiserver cluster -o yaml

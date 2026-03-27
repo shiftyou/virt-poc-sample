@@ -19,7 +19,7 @@ OpenShift Virtualization VM(VMI)도 Pod로 동작하므로, VM의 노드 분배 
 
 ```bash
 source ../../env.conf
-cd 02-tests/descheduler
+cd 01-environment/descheduler
 ./apply.sh
 ```
 

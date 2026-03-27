@@ -37,7 +37,7 @@ oc exec -n openshift-monitoring \
 
 ```bash
 source ../../env.conf
-cd 02-tests/node-exporter
+cd 01-environment/node-exporter
 oc apply -f node-exporter-servicemonitor.yaml
 ```
 

@@ -512,9 +512,9 @@ echo -e "  2. 00-init/custom-vm-image.md     — Custom VM image creation guide"
 echo -e "  3. 00-init/pvc-to-qcow2.md        — Upload qcow2 to openshift-virtualization-os-images"
 echo -e ""
 echo -e "  ${CYAN}[Environment Setup]${NC}"
-echo -e "  4. 01-environment/README.md       — Base environment configuration"
+echo -e "  4. 01-environment/README.md       — Environment configuration"
 echo -e ""
-echo -e "  ${CYAN}[Feature Tests]${NC} (requires operator installation)"
+echo -e "  ${CYAN}[Environment Setup — Operator dependent]${NC}"
 
 if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/grafana/         — Grafana dashboard ready"
@@ -522,9 +522,9 @@ else
     echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator not installed  (00-init/09-grafana-operator.md)"
 fi
 if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 02-tests/descheduler/           — Descheduler test ready"
+    echo -e "  ${GREEN}[✔]${NC} 01-environment/descheduler/           — Descheduler test ready"
 else
-    echo -e "  ${RED}[✘]${NC} 02-tests/descheduler/           — Kube Descheduler Operator not installed"
+    echo -e "  ${RED}[✘]${NC} 01-environment/descheduler/           — Kube Descheduler Operator not installed"
 fi
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR ready"
@@ -532,9 +532,9 @@ else
     echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator not installed  (00-init/03-far-operator.md)"
 fi
 if [ "${NMO_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 02-tests/node-maintenance/      — Node maintenance test ready"
+    echo -e "  ${GREEN}[✔]${NC} 01-environment/node-maintenance/      — Node maintenance test ready"
 else
-    echo -e "  ${RED}[✘]${NC} 02-tests/node-maintenance/      — Node Maintenance Operator not installed  (00-init/07-node-maintenance-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator not installed  (00-init/07-node-maintenance-operator.md)"
 fi
 if [ "${NHC_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/nhc/             — NHC ready"

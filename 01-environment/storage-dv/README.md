@@ -21,7 +21,7 @@ VM 디스크를 생성하고 관리하는 방법을 테스트합니다.
 
 ```bash
 source ../../env.conf
-cd 02-tests/storage-dv
+cd 01-environment/storage-dv
 ./apply.sh
 ```
 

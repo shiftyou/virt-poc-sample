@@ -15,7 +15,7 @@
 ```bash
 source ../../env.conf
 
-cd 02-tests/resource-limits
+cd 01-environment/resource-limits
 ./apply.sh
 ```
 

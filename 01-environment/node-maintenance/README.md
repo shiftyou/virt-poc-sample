@@ -82,7 +82,7 @@ oc get node ${TEST_NODE}
 
 ```bash
 source ../../env.conf
-cd 02-tests/node-maintenance
+cd 01-environment/node-maintenance
 
 # 노드 유지보수 시작 (drain + stop)
 ./node-maintenance.sh start ${TEST_NODE}

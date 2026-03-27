@@ -18,7 +18,7 @@ VirtualMachineRestore로 해당 시점으로 복원하는 기능을 테스트합
 
 ```bash
 source ../../env.conf
-cd 02-tests/vm-snapshot
+cd 01-environment/vm-snapshot
 ./apply.sh
 ```
 

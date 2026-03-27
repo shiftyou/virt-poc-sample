@@ -19,7 +19,7 @@ CPU Overcommit을 사용하면 물리 CPU 코어보다 더 많은 가상 CPU를 
 
 ```bash
 source ../../env.conf
-cd 02-tests/cpu-overcommit
+cd 01-environment/cpu-overcommit
 ./apply.sh
 ```
 

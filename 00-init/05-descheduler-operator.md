@@ -85,10 +85,10 @@ oc get pods -n openshift-kube-descheduler-operator
 
 ## Descheduler 구성
 
-설치 후 `02-tests/descheduler/` 디렉토리의 가이드를 참조합니다.
+설치 후 `01-environment/descheduler/` 디렉토리의 가이드를 참조합니다.
 
 ```bash
-cd 02-tests/descheduler
+cd 01-environment/descheduler
 ./apply.sh
 ```
 
