@@ -63,7 +63,7 @@ preflight() {
         echo "          -o jsonpath='{.spec.links[0].href}'"
         exit 1
     fi
-    print_ok "virtctl: $(virtctl version --client 2>/dev/null | grep -oP 'GitVersion:"v\K[^"]+' || echo 'found')"
+    print_ok "virtctl: $(virtctl version --client 2>/dev/null | sed -n 's/.*GitVersion:"v\([^"]*\)".*/\1/p' | head -1 || echo 'found')"
 
     # qcow2 파일
     if [ -n "${1:-}" ]; then
