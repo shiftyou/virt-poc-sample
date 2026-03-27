@@ -93,6 +93,7 @@ check_operators() {
     NHC_INSTALLED=false
     SNR_INSTALLED=false
     NMSTATE_INSTALLED=false
+    GRAFANA_INSTALLED=false
 
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
@@ -103,6 +104,7 @@ check_operators() {
         grep -qi "node-healthcheck"          /tmp/_poc_csv.txt 2>/dev/null && NHC_INSTALLED=true
         grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
+        grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
         # NMState CR 인스턴스 존재 여부 별도 확인
         NMSTATE_CR_EXISTS=false
@@ -134,6 +136,11 @@ check_operators() {
         echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
     else
         echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-init/05-descheduler-operator.md)"
+    fi
+    if [ "$GRAFANA_INSTALLED" = "true" ]; then
+        echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
+    else
+        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-init/09-grafana-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR 구성 가능"
@@ -402,6 +409,7 @@ GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
 # 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
+GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
 FAR_INSTALLED=${FAR_INSTALLED:-false}
 NMO_INSTALLED=${NMO_INSTALLED:-false}
@@ -475,6 +483,11 @@ echo -e "  4. 01-environment/README.md       — 기본 환경 구성"
 echo -e ""
 echo -e "  ${CYAN}[기능 테스트]${NC} (오퍼레이터 설치 필요 항목)"
 
+if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
+    echo -e "  ${GREEN}[✔]${NC} 01-environment/grafana/         — Grafana 대시보드 구성 가능"
+else
+    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator 미설치  (00-init/09-grafana-operator.md)"
+fi
 if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 02-tests/descheduler/           — Descheduler 테스트 가능"
 else
