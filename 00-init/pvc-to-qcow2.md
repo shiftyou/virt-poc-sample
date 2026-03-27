@@ -26,7 +26,23 @@ virtctl vmexport create rhel9-export \
   -n <NAMESPACE>
 ```
 
-#### 3. 이미지 다운로드
+#### 3. VMExport 상태 확인
+
+`Ready` 상태가 된 것을 확인한 후 다운로드합니다.
+
+```bash
+oc get vmexport rhel9-export -n <NAMESPACE>
+```
+
+출력 예시:
+```
+NAME            SOURCEKIND               SOURCENAME   PHASE   READY
+rhel9-export    PersistentVolumeClaim    <PVC_NAME>   Ready   true
+```
+
+`READY`가 `true` 가 아니면 VM이 실행 중인지 확인하고 중지합니다 (아래 트러블슈팅 참고).
+
+#### 4. 이미지 다운로드
 
 ```bash
 virtctl vmexport download rhel9-export \
@@ -41,7 +57,7 @@ virtctl vmexport download rhel9-export \
 | `--output` | 저장할 로컬 파일 경로 |
 | `-n` | PVC가 위치한 네임스페이스 |
 
-#### 4. VMExport 삭제 (정리)
+#### 5. VMExport 삭제 (정리)
 
 ```bash
 virtctl vmexport delete rhel9-export -n <NAMESPACE>
