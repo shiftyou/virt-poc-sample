@@ -467,13 +467,20 @@ RENDERED_COUNT=0
 # ${NAME}, ${NAMESPACE} 등 OpenShift Template 파라미터를 치환하지 않음
 ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
-# 렌더링 대상: 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
-while IFS= read -r yaml_file; do
-    # 상대 경로 계산
+# 렌더링 대상 수집: 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
+print_info "YAML 파일 스캔 중..."
+mapfile -t YAML_FILES < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
+TOTAL_FILES=${#YAML_FILES[@]}
+print_info "렌더링 대상: ${TOTAL_FILES}개 파일"
+echo ""
+
+for yaml_file in "${YAML_FILES[@]}"; do
+    RENDERED_COUNT=$((RENDERED_COUNT + 1))
     rel_path="${yaml_file#./}"
     out_file="${RENDERED_DIR}/${rel_path}"
     out_dir="$(dirname "$out_file")"
 
+    printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
     mkdir -p "$out_dir"
     awk -v allowed="$ALLOWED_VARS" '
     BEGIN { n = split(allowed, vars, " "); for (i=1;i<=n;i++) ok[vars[i]]=1 }
@@ -485,9 +492,7 @@ while IFS= read -r yaml_file; do
         }
         print
     }' "$yaml_file" > "$out_file"
-    print_ok "  생성: $out_file"
-    RENDERED_COUNT=$((RENDERED_COUNT + 1))
-done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
+done
 
 print_ok "총 ${RENDERED_COUNT}개 YAML 파일이 rendered/ 에 생성되었습니다."
 
