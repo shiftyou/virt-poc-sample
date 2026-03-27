@@ -482,7 +482,7 @@ fi
 if [ "${SNR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation 미설치  (00-init/04-snr-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator 미설치  (00-init/04-snr-operator.md)"
 fi
 echo ""
 echo -e "  환경변수가 적용된 최종 YAML:"
