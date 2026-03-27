@@ -138,14 +138,15 @@ check_operators() {
     else
         echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-init/07-node-maintenance-operator.md)"
     fi
-    if [ "$NHC_INSTALLED" = "true" ] && [ "$SNR_INSTALLED" = "true" ]; then
-        echo -e "  $ok NHC + Self Node Remediation        → SNR 구성 가능"
-    elif [ "$NHC_INSTALLED" = "true" ]; then
-        echo -e "  $wa NHC (설치됨) / SNR (없음)           → SNR 구성 불완전  (00-init/04-snr-operator.md)"
-    elif [ "$SNR_INSTALLED" = "true" ]; then
-        echo -e "  $wa SNR (설치됨) / NHC (없음)           → SNR 구성 불완전  (00-init/06-nhc-operator.md)"
+    if [ "$NHC_INSTALLED" = "true" ]; then
+        echo -e "  $ok Node Health Check Operator         → NHC 구성 가능"
     else
-        echo -e "  $ng NHC + Self Node Remediation        → SNR 구성 건너뜀  (00-init/04-snr-operator.md)"
+        echo -e "  $ng Node Health Check Operator         → NHC 구성 건너뜀  (00-init/06-nhc-operator.md)"
+    fi
+    if [ "$SNR_INSTALLED" = "true" ]; then
+        echo -e "  $ok Self Node Remediation Operator     → SNR 구성 가능"
+    else
+        echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-init/04-snr-operator.md)"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""
@@ -473,10 +474,15 @@ if [ "${NMO_INSTALLED:-false}" = "true" ]; then
 else
     echo -e "  ${RED}[✘]${NC} 02-tests/node-maintenance/      — Node Maintenance Operator 미설치  (00-init/07-node-maintenance-operator.md)"
 fi
-if [ "${NHC_INSTALLED:-false}" = "true" ] && [ "${SNR_INSTALLED:-false}" = "true" ]; then
+if [ "${NHC_INSTALLED:-false}" = "true" ]; then
+    echo -e "  ${GREEN}[✔]${NC} 01-environment/nhc/             — NHC 구성 가능"
+else
+    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator 미설치  (00-init/06-nhc-operator.md)"
+fi
+if [ "${SNR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — NHC + SNR Operator 미설치 (건너뜀)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation 미설치  (00-init/04-snr-operator.md)"
 fi
 echo ""
 echo -e "  환경변수가 적용된 최종 YAML:"
