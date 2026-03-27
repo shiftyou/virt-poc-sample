@@ -92,6 +92,7 @@ check_operators() {
     NMO_INSTALLED=false
     NHC_INSTALLED=false
     SNR_INSTALLED=false
+    NMSTATE_INSTALLED=false
 
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
@@ -101,6 +102,7 @@ check_operators() {
         grep -qi "node-maintenance"          /tmp/_poc_csv.txt 2>/dev/null && NMO_INSTALLED=true
         grep -qi "node-healthcheck"          /tmp/_poc_csv.txt 2>/dev/null && NHC_INSTALLED=true
         grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
+        grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
     else
         print_warn "클러스터에 연결되지 않아 오퍼레이터 상태를 확인할 수 없습니다."
@@ -116,6 +118,11 @@ check_operators() {
     echo ""
     printf "  %-45s %s\n" "오퍼레이터" "상태"
     echo "  ──────────────────────────────────────────────────────────"
+    if [ "$NMSTATE_INSTALLED" = "true" ]; then
+        echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState 조회 가능"
+    else
+        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-init/08-nmstate-operator.md)"
+    fi
     if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
         echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
     else
@@ -377,6 +384,7 @@ TEST_NODE=${TEST_NODE}
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
 # 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
+NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
 FAR_INSTALLED=${FAR_INSTALLED:-false}
 NMO_INSTALLED=${NMO_INSTALLED:-false}
