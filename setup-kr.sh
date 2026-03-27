@@ -119,7 +119,7 @@ check_operators() {
         fi
     else
         print_warn "클러스터에 연결되지 않아 오퍼레이터 상태를 확인할 수 없습니다."
-        print_info "오퍼레이터 설치 방법: 00-init/README.md 참조"
+        print_info "오퍼레이터 설치 방법: 00-operator/README.md 참조"
         echo ""
         return
     fi
@@ -134,7 +134,7 @@ check_operators() {
     if [ "$VIRT_INSTALLED" = "true" ]; then
         echo -e "  $ok OpenShift Virtualization Operator  → Virtualization 사용 가능"
     else
-        echo -e "  $ng OpenShift Virtualization Operator  → 미설치  (00-init/01-openshift-virtualization.md)"
+        echo -e "  $ng OpenShift Virtualization Operator  → 미설치  (00-operator/01-openshift-virtualization.md)"
     fi
     if [ "$MTV_INSTALLED" = "true" ]; then
         echo -e "  $ok Migration Toolkit for Virt Operator → MTV 사용 가능"
@@ -144,44 +144,44 @@ check_operators() {
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState 조회 가능"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
-        echo -e "  $wa Kubernetes NMState Operator        → NMState CR 없음 (oc apply -f nmstate-cr.yaml 필요)  (00-init/08-nmstate-operator.md)"
+        echo -e "  $wa Kubernetes NMState Operator        → NMState CR 없음 (oc apply -f nmstate-cr.yaml 필요)  (00-operator/08-nmstate-operator.md)"
     else
-        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-init/08-nmstate-operator.md)"
+        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-operator/08-nmstate-operator.md)"
     fi
     if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
         echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
     else
-        echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-init/05-descheduler-operator.md)"
+        echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-operator/05-descheduler-operator.md)"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
         echo -e "  $ok OADP Operator                      → 백업/복원 구성 가능"
     else
-        echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-init/02-oadp-operator.md)"
+        echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-operator/02-oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
         echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
     else
-        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-init/09-grafana-operator.md)"
+        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-operator/09-grafana-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR 구성 가능"
     else
-        echo -e "  $ng Fence Agents Remediation Operator  → FAR 구성 건너뜀  (00-init/03-far-operator.md)"
+        echo -e "  $ng Fence Agents Remediation Operator  → FAR 구성 건너뜀  (00-operator/03-far-operator.md)"
     fi
     if [ "$NMO_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Maintenance Operator          → 노드 유지보수 가능"
     else
-        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-init/07-node-maintenance-operator.md)"
+        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-operator/07-node-maintenance-operator.md)"
     fi
     if [ "$NHC_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Health Check Operator         → NHC 구성 가능"
     else
-        echo -e "  $ng Node Health Check Operator         → NHC 구성 건너뜀  (00-init/06-nhc-operator.md)"
+        echo -e "  $ng Node Health Check Operator         → NHC 구성 건너뜀  (00-operator/06-nhc-operator.md)"
     fi
     if [ "$SNR_INSTALLED" = "true" ]; then
         echo -e "  $ok Self Node Remediation Operator     → SNR 구성 가능"
     else
-        echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-init/04-snr-operator.md)"
+        echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-operator/04-snr-operator.md)"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""
@@ -510,9 +510,9 @@ echo ""
 echo -e "  다음 단계:"
 echo -e ""
 echo -e "  ${CYAN}[사전 준비]${NC}"
-echo -e "  1. 00-init/README.md              — 오퍼레이터 설치 확인 및 설치 가이드"
-echo -e "  2. 00-init/01-make-template.md     — POC용 커스텀 VM 이미지 생성 가이드"
-echo -e "  3. 00-init/pvc-to-qcow2.md        — qcow2 업로드 및 openshift-virtualization-os-images 등록"
+echo -e "  1. 00-operator/README.md              — 오퍼레이터 설치 확인 및 설치 가이드"
+echo -e "  2. 01-make-template/01-make-template.md     — POC용 커스텀 VM 이미지 생성 가이드"
+echo -e "  3. disabled/pvc-to-qcow2.md        — qcow2 업로드 및 openshift-virtualization-os-images 등록"
 echo -e ""
 echo -e "  ${CYAN}[환경 구성]${NC}"
 echo -e "  4. 01-environment/README.md       — 환경 구성"
@@ -522,7 +522,7 @@ echo -e "  ${CYAN}[환경 구성 — Operator 필요 항목]${NC}"
 if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/grafana/         — Grafana 대시보드 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator 미설치  (00-init/09-grafana-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator 미설치  (00-operator/09-grafana-operator.md)"
 fi
 if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/descheduler/           — Descheduler 테스트 가능"
@@ -532,22 +532,22 @@ fi
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator 미설치  (00-init/03-far-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator 미설치  (00-operator/03-far-operator.md)"
 fi
 if [ "${NMO_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/node-maintenance/      — 노드 유지보수 테스트 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator 미설치  (00-init/07-node-maintenance-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator 미설치  (00-operator/07-node-maintenance-operator.md)"
 fi
 if [ "${NHC_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/nhc/             — NHC 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator 미설치  (00-init/06-nhc-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator 미설치  (00-operator/06-nhc-operator.md)"
 fi
 if [ "${SNR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR 구성 가능"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator 미설치  (00-init/04-snr-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator 미설치  (00-operator/04-snr-operator.md)"
 fi
 echo ""
 echo -e "  환경변수가 적용된 최종 YAML:"

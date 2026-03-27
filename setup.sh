@@ -119,7 +119,7 @@ check_operators() {
         fi
     else
         print_warn "Cannot check operator status: not connected to cluster."
-        print_info "Operator installation guide: 00-init/README.md"
+        print_info "Operator installation guide: 00-operator/README.md"
         echo ""
         return
     fi
@@ -134,7 +134,7 @@ check_operators() {
     if [ "$VIRT_INSTALLED" = "true" ]; then
         echo -e "  $ok OpenShift Virtualization Operator  → Virtualization ready"
     else
-        echo -e "  $ng OpenShift Virtualization Operator  → Not installed  (00-init/01-openshift-virtualization.md)"
+        echo -e "  $ng OpenShift Virtualization Operator  → Not installed  (00-operator/01-openshift-virtualization.md)"
     fi
     if [ "$MTV_INSTALLED" = "true" ]; then
         echo -e "  $ok Migration Toolkit for Virt Operator → MTV ready"
@@ -144,44 +144,44 @@ check_operators() {
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState available"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
-        echo -e "  $wa Kubernetes NMState Operator        → NMState CR missing (apply nmstate-cr.yaml)  (00-init/08-nmstate-operator.md)"
+        echo -e "  $wa Kubernetes NMState Operator        → NMState CR missing (apply nmstate-cr.yaml)  (00-operator/08-nmstate-operator.md)"
     else
-        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS unavailable  (00-init/08-nmstate-operator.md)"
+        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS unavailable  (00-operator/08-nmstate-operator.md)"
     fi
     if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
         echo -e "  $ok Kube Descheduler Operator          → Descheduler ready"
     else
-        echo -e "  $ng Kube Descheduler Operator          → Skipped  (00-init/05-descheduler-operator.md)"
+        echo -e "  $ng Kube Descheduler Operator          → Skipped  (00-operator/05-descheduler-operator.md)"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
         echo -e "  $ok OADP Operator                      → Backup/Restore ready"
     else
-        echo -e "  $ng OADP Operator                      → Skipped  (00-init/02-oadp-operator.md)"
+        echo -e "  $ng OADP Operator                      → Skipped  (00-operator/02-oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
         echo -e "  $ok Grafana Operator                   → Grafana dashboard ready"
     else
-        echo -e "  $ng Grafana Operator                   → Skipped  (00-init/09-grafana-operator.md)"
+        echo -e "  $ng Grafana Operator                   → Skipped  (00-operator/09-grafana-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR ready"
     else
-        echo -e "  $ng Fence Agents Remediation Operator  → Skipped  (00-init/03-far-operator.md)"
+        echo -e "  $ng Fence Agents Remediation Operator  → Skipped  (00-operator/03-far-operator.md)"
     fi
     if [ "$NMO_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Maintenance Operator          → Node maintenance ready"
     else
-        echo -e "  $ng Node Maintenance Operator          → Skipped  (00-init/07-node-maintenance-operator.md)"
+        echo -e "  $ng Node Maintenance Operator          → Skipped  (00-operator/07-node-maintenance-operator.md)"
     fi
     if [ "$NHC_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Health Check Operator         → NHC ready"
     else
-        echo -e "  $ng Node Health Check Operator         → Skipped  (00-init/06-nhc-operator.md)"
+        echo -e "  $ng Node Health Check Operator         → Skipped  (00-operator/06-nhc-operator.md)"
     fi
     if [ "$SNR_INSTALLED" = "true" ]; then
         echo -e "  $ok Self Node Remediation Operator     → SNR ready"
     else
-        echo -e "  $ng Self Node Remediation Operator     → Skipped  (00-init/04-snr-operator.md)"
+        echo -e "  $ng Self Node Remediation Operator     → Skipped  (00-operator/04-snr-operator.md)"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""
@@ -510,9 +510,9 @@ echo ""
 echo -e "  Next steps:"
 echo -e ""
 echo -e "  ${CYAN}[Pre-requisites]${NC}"
-echo -e "  1. 00-init/README.md              — Operator installation guide"
-echo -e "  2. 00-init/01-make-template.md     — Custom VM image creation guide"
-echo -e "  3. 00-init/pvc-to-qcow2.md        — Upload qcow2 to openshift-virtualization-os-images"
+echo -e "  1. 00-operator/README.md              — Operator installation guide"
+echo -e "  2. 01-make-template/01-make-template.md     — Custom VM image creation guide"
+echo -e "  3. disabled/pvc-to-qcow2.md        — Upload qcow2 to openshift-virtualization-os-images"
 echo -e ""
 echo -e "  ${CYAN}[Environment Setup]${NC}"
 echo -e "  4. 01-environment/README.md       — Environment configuration"
@@ -522,7 +522,7 @@ echo -e "  ${CYAN}[Environment Setup — Operator dependent]${NC}"
 if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/grafana/         — Grafana dashboard ready"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator not installed  (00-init/09-grafana-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator not installed  (00-operator/09-grafana-operator.md)"
 fi
 if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/descheduler/           — Descheduler test ready"
@@ -532,22 +532,22 @@ fi
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR ready"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator not installed  (00-init/03-far-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator not installed  (00-operator/03-far-operator.md)"
 fi
 if [ "${NMO_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/node-maintenance/      — Node maintenance test ready"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator not installed  (00-init/07-node-maintenance-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator not installed  (00-operator/07-node-maintenance-operator.md)"
 fi
 if [ "${NHC_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/nhc/             — NHC ready"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator not installed  (00-init/06-nhc-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator not installed  (00-operator/06-nhc-operator.md)"
 fi
 if [ "${SNR_INSTALLED:-false}" = "true" ]; then
     echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR ready"
 else
-    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator not installed  (00-init/04-snr-operator.md)"
+    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator not installed  (00-operator/04-snr-operator.md)"
 fi
 echo ""
 echo -e "  Rendered YAMLs with env vars applied:"
