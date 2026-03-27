@@ -467,24 +467,10 @@ RENDERED_COUNT=0
 # ${NAME}, ${NAMESPACE} 등 OpenShift Template 파라미터를 치환하지 않음
 ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
-# 렌더링 대상 수집: 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
-print_info "YAML 파일 스캔 중..."
-YAML_FILES=()
-while IFS= read -r line; do
-    YAML_FILES+=("$line")
-done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
-TOTAL_FILES=${#YAML_FILES[@]}
-print_info "렌더링 대상: ${TOTAL_FILES}개 파일"
-echo ""
-
-for yaml_file in "${YAML_FILES[@]}"; do
-    RENDERED_COUNT=$((RENDERED_COUNT + 1))
-    rel_path="${yaml_file#./}"
-    out_file="${RENDERED_DIR}/${rel_path}"
-    out_dir="$(dirname "$out_file")"
-
-    printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
-    mkdir -p "$out_dir"
+# awk 렌더러: env.conf에 정의된 변수만 치환
+render_file() {
+    local src="$1" dst="$2"
+    mkdir -p "$(dirname "$dst")"
     awk -v allowed="$ALLOWED_VARS" '
     BEGIN { n = split(allowed, vars, " "); for (i=1;i<=n;i++) ok[vars[i]]=1 }
     {
@@ -494,10 +480,48 @@ for yaml_file in "${YAML_FILES[@]}"; do
             $0 = substr($0, 1, RSTART-1) val substr($0, RSTART+RLENGTH)
         }
         print
-    }' "$yaml_file" > "$out_file"
+    }' "$src" > "$dst"
+}
+
+# 렌더링 대상 수집:
+#   1) 번호 디렉토리의 .sh.example → rendered/XX-name/XX-name.sh
+#   2) 번호 디렉토리의 yaml (${...} 포함) → rendered/XX-name/*.yaml
+print_info "렌더링 대상 파일 스캔 중..."
+
+RENDER_SRCS=()
+while IFS= read -r f; do
+    RENDER_SRCS+=("$f")
+done < <(find . -maxdepth 2 -path './[0-9][0-9]-*/*.sh.example' 2>/dev/null | sort)
+while IFS= read -r f; do
+    RENDER_SRCS+=("$f")
+done < <(grep -rl '\${' . --include="*.yaml" \
+    --exclude-dir=rendered --exclude-dir=disabled 2>/dev/null | \
+    grep '\./[0-9][0-9]-' | sort -u)
+
+TOTAL_FILES=${#RENDER_SRCS[@]}
+print_info "렌더링 대상: ${TOTAL_FILES}개 파일"
+echo ""
+
+for src_file in "${RENDER_SRCS[@]}"; do
+    RENDERED_COUNT=$((RENDERED_COUNT + 1))
+    rel_path="${src_file#./}"
+
+    # .sh.example → rendered/XX-name/XX-name.sh (.example 제거)
+    if [[ "$rel_path" == *.sh.example ]]; then
+        out_file="${RENDERED_DIR}/${rel_path%.example}"
+    else
+        out_file="${RENDERED_DIR}/${rel_path}"
+    fi
+
+    printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
+    render_file "$src_file" "$out_file"
+
+    if [[ "$out_file" == *.sh ]]; then
+        chmod +x "$out_file"
+    fi
 done
 
-print_ok "총 ${RENDERED_COUNT}개 YAML 파일이 rendered/ 에 생성되었습니다."
+print_ok "총 ${RENDERED_COUNT}개 파일이 rendered/ 에 생성되었습니다."
 
 # =============================================================================
 # 완료 메시지

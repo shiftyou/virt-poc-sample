@@ -467,24 +467,10 @@ RENDERED_COUNT=0
 # Only variables defined in env.conf are substituted; ${NAME}, ${NAMESPACE} etc. are left as-is
 ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
-# Collect render targets: yaml files containing env var placeholders (${...})
-print_info "Scanning YAML files..."
-YAML_FILES=()
-while IFS= read -r line; do
-    YAML_FILES+=("$line")
-done < <(grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null | sort -u)
-TOTAL_FILES=${#YAML_FILES[@]}
-print_info "Found ${TOTAL_FILES} YAML files to render."
-echo ""
-
-for yaml_file in "${YAML_FILES[@]}"; do
-    RENDERED_COUNT=$((RENDERED_COUNT + 1))
-    rel_path="${yaml_file#./}"
-    out_file="${RENDERED_DIR}/${rel_path}"
-    out_dir="$(dirname "$out_file")"
-
-    printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
-    mkdir -p "$out_dir"
+# awk renderer: substitutes only allowed vars from env.conf
+render_file() {
+    local src="$1" dst="$2"
+    mkdir -p "$(dirname "$dst")"
     awk -v allowed="$ALLOWED_VARS" '
     BEGIN { n = split(allowed, vars, " "); for (i=1;i<=n;i++) ok[vars[i]]=1 }
     {
@@ -494,10 +480,48 @@ for yaml_file in "${YAML_FILES[@]}"; do
             $0 = substr($0, 1, RSTART-1) val substr($0, RSTART+RLENGTH)
         }
         print
-    }' "$yaml_file" > "$out_file"
+    }' "$src" > "$dst"
+}
+
+# Collect render targets:
+#   1) .sh.example in numbered dirs  → rendered/XX-name/XX-name.sh
+#   2) yaml files with ${...} in numbered dirs → rendered/XX-name/*.yaml
+print_info "Scanning files to render..."
+
+RENDER_SRCS=()
+while IFS= read -r f; do
+    RENDER_SRCS+=("$f")
+done < <(find . -maxdepth 2 -path './[0-9][0-9]-*/*.sh.example' 2>/dev/null | sort)
+while IFS= read -r f; do
+    RENDER_SRCS+=("$f")
+done < <(grep -rl '\${' . --include="*.yaml" \
+    --exclude-dir=rendered --exclude-dir=disabled 2>/dev/null | \
+    grep '\./[0-9][0-9]-' | sort -u)
+
+TOTAL_FILES=${#RENDER_SRCS[@]}
+print_info "Found ${TOTAL_FILES} files to render."
+echo ""
+
+for src_file in "${RENDER_SRCS[@]}"; do
+    RENDERED_COUNT=$((RENDERED_COUNT + 1))
+    rel_path="${src_file#./}"
+
+    # .sh.example → rendered/XX-name/XX-name.sh  (drop .example suffix)
+    if [[ "$rel_path" == *.sh.example ]]; then
+        out_file="${RENDERED_DIR}/${rel_path%.example}"
+    else
+        out_file="${RENDERED_DIR}/${rel_path}"
+    fi
+
+    printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
+    render_file "$src_file" "$out_file"
+
+    if [[ "$out_file" == *.sh ]]; then
+        chmod +x "$out_file"
+    fi
 done
 
-print_ok "Total ${RENDERED_COUNT} YAML files generated in rendered/"
+print_ok "Total ${RENDERED_COUNT} files generated in rendered/"
 
 # =============================================================================
 # Done
