@@ -24,6 +24,18 @@ cd 02-tests/vm-snapshot
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-vm-snapshot 네임스페이스 |
+| [`test-vm.yaml`](test-vm.yaml) | 스냅샷 테스트용 Fedora VM |
+| [`vm-snapshot.yaml`](vm-snapshot.yaml) | VirtualMachineSnapshot CR (온라인 스냅샷 가능) |
+| [`vm-restore.yaml`](vm-restore.yaml) | VirtualMachineRestore CR (스냅샷에서 복원) |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## 테스트 절차
 
 ### 1. VM 생성 및 시작

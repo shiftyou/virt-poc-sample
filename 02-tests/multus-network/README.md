@@ -24,6 +24,16 @@ envsubst < test-vm-multus.yaml | oc apply -f -
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-multus 네임스페이스 |
+| [`test-vm-multus.yaml`](test-vm-multus.yaml) | Pod + Bridge 2개 인터페이스 VM (envsubst 필요) |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## 테스트 절차
 
 ```bash

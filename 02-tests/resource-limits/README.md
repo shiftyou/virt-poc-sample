@@ -21,6 +21,17 @@ cd 02-tests/resource-limits
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-resource-limits 네임스페이스 |
+| [`limitrange.yaml`](limitrange.yaml) | Container/Pod/PVC 개별 리소스 제한 |
+| [`resourcequota.yaml`](resourcequota.yaml) | 네임스페이스 전체 리소스 총량 제한 |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## 상태 확인
 
 ```bash

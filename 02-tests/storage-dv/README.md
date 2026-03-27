@@ -27,6 +27,17 @@ cd 02-tests/storage-dv
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-storage-dv 네임스페이스 |
+| [`storageprofile-patch.yaml`](storageprofile-patch.yaml) | StorageProfile RWX+Block / RWO+Filesystem 설정 |
+| [`datavolume.yaml`](datavolume.yaml) | Fedora + RHEL9 DataVolume 예시 |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## StorageProfile 확인
 
 ```bash

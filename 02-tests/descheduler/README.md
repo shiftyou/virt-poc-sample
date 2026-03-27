@@ -25,6 +25,16 @@ cd 02-tests/descheduler
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-descheduler 네임스페이스 |
+| [`kubedescheduler.yaml`](kubedescheduler.yaml) | KubeDescheduler CR (AffinityAndTaints·TopologyAndDuplicates·LifecycleAndUtilization) |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## Descheduler 전략
 
 | 전략 | 설명 |

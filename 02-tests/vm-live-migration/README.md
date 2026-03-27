@@ -25,6 +25,17 @@ cd 02-tests/vm-live-migration
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-live-migration 네임스페이스 |
+| [`test-vm.yaml`](test-vm.yaml) | 라이브 마이그레이션 테스트용 Fedora VM (RWX 스토리지, evictionStrategy: LiveMigrate) |
+| [`migration-policy.yaml`](migration-policy.yaml) | MigrationPolicy (대역폭·타임아웃·병렬 설정) |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## 테스트 절차
 
 ### 1. 테스트 VM 생성 및 시작

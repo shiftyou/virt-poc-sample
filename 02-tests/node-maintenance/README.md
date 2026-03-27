@@ -10,6 +10,14 @@
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`node-maintenance.sh`](node-maintenance.sh) | 노드 drain/cordon/uncordon 자동화 스크립트 |
+
+---
+
 ## 노드 유지보수 절차
 
 ### 1. 노드 Cordon (스케줄링 차단)

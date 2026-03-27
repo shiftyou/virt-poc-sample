@@ -25,6 +25,16 @@ cd 02-tests/cpu-overcommit
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-cpu-overcommit 네임스페이스 |
+| [`kubevirt-config.yaml`](kubevirt-config.yaml) | KubeVirt cpuOvercommit 4배 + host-passthrough 설정 |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## KubeVirt 설정으로 CPU Overcommit 변경
 
 ```bash

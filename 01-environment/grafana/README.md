@@ -32,6 +32,17 @@ oc apply -f grafana-dashboard-cm.yaml
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`grafana-deploy.yaml`](grafana-deploy.yaml) | Grafana Deployment + Service + Route |
+| [`grafana-datasource.yaml`](grafana-datasource.yaml) | Prometheus 데이터 소스 ConfigMap |
+| [`grafana-dashboard-cm.yaml`](grafana-dashboard-cm.yaml) | VM 모니터링 대시보드 ConfigMap |
+| [`apply.sh`](apply.sh) | 전체 배포 스크립트 |
+
+---
+
 ## Prometheus 데이터 소스 연결
 
 OpenShift의 내장 Prometheus에 접근하려면 ServiceAccount 토큰이 필요합니다:

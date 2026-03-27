@@ -24,6 +24,16 @@ cd 02-tests/alerts
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-alerts 네임스페이스 (cluster-monitoring 레이블 포함) |
+| [`prometheusrule.yaml`](prometheusrule.yaml) | VM/노드 CPU·Memory·Disk Alert 규칙 |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## 상태 확인
 
 ```bash

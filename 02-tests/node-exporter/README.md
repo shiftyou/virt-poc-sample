@@ -7,6 +7,14 @@ Node Exporter를 통해 노드의 CPU, Memory, Network, Disk 메트릭을 수집
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`node-exporter-servicemonitor.yaml`](node-exporter-servicemonitor.yaml) | User Workload Monitoring 활성화 + 노드 메트릭 Recording Rule |
+
+---
+
 ## 기본 Node Exporter 확인
 
 ```bash

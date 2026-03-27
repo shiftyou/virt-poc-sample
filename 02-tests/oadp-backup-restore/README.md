@@ -25,6 +25,18 @@ cd 02-tests/oadp-backup-restore
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`namespace.yaml`](namespace.yaml) | poc-oadp-test 네임스페이스 |
+| [`test-vm.yaml`](test-vm.yaml) | 백업 테스트용 Fedora VM |
+| [`backup.yaml`](backup.yaml) | Velero Backup CR (poc-oadp-test 전체, CSI 스냅샷 포함) |
+| [`restore.yaml`](restore.yaml) | Velero Restore CR (test-vm-backup에서 복원) |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
+
+---
+
 ## 테스트 절차
 
 ### 1. 테스트 VM 생성

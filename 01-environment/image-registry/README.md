@@ -7,6 +7,15 @@ VMware VM 마이그레이션에 필요한 VDDK(VMware Virtual Disk Development K
 
 ---
 
+## 파일 설명
+
+| 파일 | 설명 |
+|------|------|
+| [`enable-registry.sh`](enable-registry.sh) | 내부 이미지 레지스트리 활성화 스크립트 |
+| [`push-vddk.sh`](push-vddk.sh) | VDDK 이미지 내부 레지스트리에 push 스크립트 |
+
+---
+
 ## 내부 이미지 레지스트리 활성화
 
 기본적으로 OpenShift 내부 레지스트리는 `Removed` 상태입니다.
