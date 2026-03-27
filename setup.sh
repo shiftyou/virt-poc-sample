@@ -217,19 +217,9 @@ ask "클러스터 base domain (예: example.com)" "${DETECTED_DOMAIN:-example.co
 ask "API 서버 URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUSTER_API
 
 # =============================================================================
-# 2. htpasswd 사용자 계정
+# 2. 네트워크 설정 (NNCP / NAD)
 # =============================================================================
-print_header "2. htpasswd 사용자 계정"
-
-ask "관리자 계정 이름" "ocpadmin" HTPASSWD_ADMIN_USER
-ask "관리자 계정 비밀번호" "Admin1234!" HTPASSWD_ADMIN_PASS "true"
-ask "일반 사용자 계정 이름" "ocpuser" HTPASSWD_USER
-ask "일반 사용자 비밀번호" "User1234!" HTPASSWD_USER_PASS "true"
-
-# =============================================================================
-# 3. 네트워크 설정 (NNCP / NAD)
-# =============================================================================
-print_header "3. 네트워크 설정 (NNCP / NAD)"
+print_header "2. 네트워크 설정 (NNCP / NAD)"
 
 print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
 ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "ens4" BRIDGE_INTERFACE
@@ -237,9 +227,9 @@ ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
 ask "NAD 네임스페이스" "poc-nad" NAD_NAMESPACE
 
 # =============================================================================
-# 4. MinIO 설정
+# 3. MinIO 설정
 # =============================================================================
-print_header "4. MinIO 설정 (OADP S3 backend)"
+print_header "3. MinIO 설정 (OADP S3 backend)"
 
 ask "MinIO Access Key" "minio" MINIO_ACCESS_KEY
 ask "MinIO Secret Key" "minio123" MINIO_SECRET_KEY "true"
@@ -247,41 +237,41 @@ ask "OADP 백업 버킷 이름" "velero" MINIO_BUCKET
 ask "MinIO 서비스 엔드포인트" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
 
 # =============================================================================
-# 5. 스토리지클래스
+# 4. 스토리지클래스
 # =============================================================================
-print_header "5. 스토리지클래스 설정"
+print_header "4. 스토리지클래스 설정"
 
 ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
 
 # =============================================================================
-# 6. VDDK 이미지
+# 5. VDDK 이미지
 # =============================================================================
-print_header "6. VDDK 이미지 설정"
+print_header "5. VDDK 이미지 설정"
 
 print_info "VDDK 이미지를 내부 레지스트리에 push하는 방법: 01-environment/image-registry/README.md 참조"
 ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 
 # =============================================================================
-# 7. Console / API 접근 IP 제한
+# 6. Console / API 접근 IP 제한
 # =============================================================================
-print_header "7. Console / API 접근 IP 제한"
+print_header "6. Console / API 접근 IP 제한"
 
 ask "Console 접근 허용 CIDR (쉼표로 구분, 예: 10.0.0.0/8,192.168.1.0/24)" "0.0.0.0/0" CONSOLE_ALLOWED_CIDRS
 ask "API 서버 접근 허용 CIDR (쉼표로 구분)" "0.0.0.0/0" API_ALLOWED_CIDRS
 
 # =============================================================================
-# 8. Fence Agents Remediation
+# 7. Fence Agents Remediation
 # =============================================================================
-print_header "8. Fence Agents Remediation (FAR)"
+print_header "7. Fence Agents Remediation (FAR)"
 
 ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
 ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
 ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
 
 # =============================================================================
-# 9. 노드 정보
+# 8. 노드 정보
 # =============================================================================
-print_header "9. 노드 정보"
+print_header "8. 노드 정보"
 
 # 노드 자동 감지
 if check_oc 2>/dev/null; then
@@ -301,9 +291,9 @@ ask "워커 노드 이름 목록 (공백으로 구분)" "${DETECTED_WORKERS:-wor
 ask "테스트용 단일 노드 이름" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 10. Grafana
+# 9. Grafana
 # =============================================================================
-print_header "10. Grafana 설정"
+print_header "9. Grafana 설정"
 
 ask "Grafana admin 비밀번호" "grafana123" GRAFANA_ADMIN_PASS "true"
 
@@ -322,12 +312,6 @@ cat > "$ENV_FILE" << EOF
 # 클러스터 기본 정보
 CLUSTER_DOMAIN=${CLUSTER_DOMAIN}
 CLUSTER_API=${CLUSTER_API}
-
-# htpasswd 사용자 계정
-HTPASSWD_ADMIN_USER=${HTPASSWD_ADMIN_USER}
-HTPASSWD_ADMIN_PASS=${HTPASSWD_ADMIN_PASS}
-HTPASSWD_USER=${HTPASSWD_USER}
-HTPASSWD_USER_PASS=${HTPASSWD_USER_PASS}
 
 # 네트워크 설정
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
