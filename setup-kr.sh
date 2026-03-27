@@ -87,6 +87,8 @@ check_oc() {
 check_operators() {
     print_header "사전 준비: 오퍼레이터 설치 확인"
 
+    VIRT_INSTALLED=false
+    MTV_INSTALLED=false
     DESCHEDULER_INSTALLED=false
     FAR_INSTALLED=false
     NMO_INSTALLED=false
@@ -98,6 +100,8 @@ check_operators() {
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
 
+        grep -qi "kubevirt-hyperconverged"   /tmp/_poc_csv.txt 2>/dev/null && VIRT_INSTALLED=true
+        grep -qi "mtv-operator"              /tmp/_poc_csv.txt 2>/dev/null && MTV_INSTALLED=true
         grep -qi "kube-descheduler"          /tmp/_poc_csv.txt 2>/dev/null && DESCHEDULER_INSTALLED=true
         grep -qi "fence-agents-remediation"  /tmp/_poc_csv.txt 2>/dev/null && FAR_INSTALLED=true
         grep -qi "node-maintenance"          /tmp/_poc_csv.txt 2>/dev/null && NMO_INSTALLED=true
@@ -125,6 +129,16 @@ check_operators() {
     echo ""
     printf "  %-45s %s\n" "오퍼레이터" "상태"
     echo "  ──────────────────────────────────────────────────────────"
+    if [ "$VIRT_INSTALLED" = "true" ]; then
+        echo -e "  $ok OpenShift Virtualization Operator  → Virtualization 사용 가능"
+    else
+        echo -e "  $ng OpenShift Virtualization Operator  → 미설치  (00-init/01-openshift-virtualization.md)"
+    fi
+    if [ "$MTV_INSTALLED" = "true" ]; then
+        echo -e "  $ok Migration Toolkit for Virt Operator → MTV 사용 가능"
+    else
+        echo -e "  $ng Migration Toolkit for Virt Operator → 미설치"
+    fi
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState 조회 가능"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
@@ -408,6 +422,8 @@ TEST_NODE=${TEST_NODE}
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
 # 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
+VIRT_INSTALLED=${VIRT_INSTALLED:-false}
+MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}

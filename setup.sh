@@ -87,6 +87,8 @@ check_oc() {
 check_operators() {
     print_header "Pre-check: Operator Installation Status"
 
+    VIRT_INSTALLED=false
+    MTV_INSTALLED=false
     DESCHEDULER_INSTALLED=false
     FAR_INSTALLED=false
     NMO_INSTALLED=false
@@ -98,6 +100,8 @@ check_operators() {
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
 
+        grep -qi "kubevirt-hyperconverged"   /tmp/_poc_csv.txt 2>/dev/null && VIRT_INSTALLED=true
+        grep -qi "mtv-operator"              /tmp/_poc_csv.txt 2>/dev/null && MTV_INSTALLED=true
         grep -qi "kube-descheduler"          /tmp/_poc_csv.txt 2>/dev/null && DESCHEDULER_INSTALLED=true
         grep -qi "fence-agents-remediation"  /tmp/_poc_csv.txt 2>/dev/null && FAR_INSTALLED=true
         grep -qi "node-maintenance"          /tmp/_poc_csv.txt 2>/dev/null && NMO_INSTALLED=true
@@ -125,6 +129,16 @@ check_operators() {
     echo ""
     printf "  %-45s %s\n" "Operator" "Status"
     echo "  ──────────────────────────────────────────────────────────"
+    if [ "$VIRT_INSTALLED" = "true" ]; then
+        echo -e "  $ok OpenShift Virtualization Operator  → Virtualization ready"
+    else
+        echo -e "  $ng OpenShift Virtualization Operator  → Not installed  (00-init/01-openshift-virtualization.md)"
+    fi
+    if [ "$MTV_INSTALLED" = "true" ]; then
+        echo -e "  $ok Migration Toolkit for Virt Operator → MTV ready"
+    else
+        echo -e "  $ng Migration Toolkit for Virt Operator → Not installed"
+    fi
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState available"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
@@ -408,6 +422,8 @@ TEST_NODE=${TEST_NODE}
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
 # Operator installation status (auto-detected by setup.sh)
+VIRT_INSTALLED=${VIRT_INSTALLED:-false}
+MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
