@@ -194,13 +194,12 @@ virtctl vmexport delete rhel9-poc-export -n poc-vm-build
 
 ```bash
 # qcow2 업로드
-virtctl image-upload \
+virtctl image-upload dv rhel9-poc-golden \
   --image-path=rhel9-poc-export.qcow2 \
-  --pvc-name=rhel9-poc-golden \
-  --pvc-size=30Gi \
+  --size=30Gi \
   --storage-class=ocs-storagecluster-ceph-rbd-virtualization \
   --access-mode=ReadWriteMany \
-  --block-volume \
+  --volume-mode=Block \
   -n openshift-virtualization-os-images \
   --insecure
 
