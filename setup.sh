@@ -155,9 +155,28 @@ auto_detect_cluster() {
         if [ -n "$DETECTED_DOMAIN" ]; then
             print_info "감지된 클러스터 도메인: $DETECTED_DOMAIN"
         fi
+
+        # 스토리지클래스 자동 감지: virtualization 전용 → ceph-rbd 계열 → 기본값 순
+        DETECTED_SC=$(oc get sc -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | \
+            grep -i "virtualization" | head -1 || true)
+        if [ -z "$DETECTED_SC" ]; then
+            DETECTED_SC=$(oc get sc -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | \
+                grep -i "ceph-rbd" | head -1 || true)
+        fi
+        if [ -z "$DETECTED_SC" ]; then
+            DETECTED_SC=$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null || echo "")
+        fi
+        if [ -n "$DETECTED_SC" ]; then
+            print_info "감지된 스토리지클래스: $DETECTED_SC"
+        fi
+        ALL_SC=$(oc get sc -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | tr '\n' ' ' || echo "")
+        if [ -n "$ALL_SC" ]; then
+            print_info "사용 가능한 스토리지클래스: $ALL_SC"
+        fi
     else
         DETECTED_API=""
         DETECTED_DOMAIN=""
+        DETECTED_SC=""
     fi
 }
 
@@ -228,34 +247,41 @@ ask "OADP 백업 버킷 이름" "velero" MINIO_BUCKET
 ask "MinIO 서비스 엔드포인트" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
 
 # =============================================================================
-# 5. VDDK 이미지
+# 5. 스토리지클래스
 # =============================================================================
-print_header "5. VDDK 이미지 설정"
+print_header "5. 스토리지클래스 설정"
+
+ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
+
+# =============================================================================
+# 6. VDDK 이미지
+# =============================================================================
+print_header "6. VDDK 이미지 설정"
 
 print_info "VDDK 이미지를 내부 레지스트리에 push하는 방법: 01-environment/image-registry/README.md 참조"
 ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 
 # =============================================================================
-# 6. Console / API 접근 IP 제한
+# 7. Console / API 접근 IP 제한
 # =============================================================================
-print_header "6. Console / API 접근 IP 제한"
+print_header "7. Console / API 접근 IP 제한"
 
 ask "Console 접근 허용 CIDR (쉼표로 구분, 예: 10.0.0.0/8,192.168.1.0/24)" "0.0.0.0/0" CONSOLE_ALLOWED_CIDRS
 ask "API 서버 접근 허용 CIDR (쉼표로 구분)" "0.0.0.0/0" API_ALLOWED_CIDRS
 
 # =============================================================================
-# 7. Fence Agents Remediation
+# 8. Fence Agents Remediation
 # =============================================================================
-print_header "7. Fence Agents Remediation (FAR)"
+print_header "8. Fence Agents Remediation (FAR)"
 
 ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
 ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
 ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
 
 # =============================================================================
-# 8. 노드 정보
+# 9. 노드 정보
 # =============================================================================
-print_header "8. 노드 정보"
+print_header "9. 노드 정보"
 
 # 노드 자동 감지
 if check_oc 2>/dev/null; then
@@ -275,9 +301,9 @@ ask "워커 노드 이름 목록 (공백으로 구분)" "${DETECTED_WORKERS:-wor
 ask "테스트용 단일 노드 이름" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 9. Grafana
+# 10. Grafana
 # =============================================================================
-print_header "9. Grafana 설정"
+print_header "10. Grafana 설정"
 
 ask "Grafana admin 비밀번호" "grafana123" GRAFANA_ADMIN_PASS "true"
 
@@ -313,6 +339,9 @@ MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
 MINIO_BUCKET=${MINIO_BUCKET}
 MINIO_ENDPOINT=${MINIO_ENDPOINT}
+
+# 스토리지클래스
+STORAGE_CLASS=${STORAGE_CLASS}
 
 # VDDK 이미지
 VDDK_IMAGE=${VDDK_IMAGE}
