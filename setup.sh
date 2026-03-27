@@ -104,6 +104,11 @@ check_operators() {
         grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
+        # NMState CR 인스턴스 존재 여부 별도 확인
+        NMSTATE_CR_EXISTS=false
+        if [ "$NMSTATE_INSTALLED" = "true" ]; then
+            oc get nmstate 2>/dev/null | grep -q "." && NMSTATE_CR_EXISTS=true || true
+        fi
     else
         print_warn "클러스터에 연결되지 않아 오퍼레이터 상태를 확인할 수 없습니다."
         print_info "오퍼레이터 설치 방법: 00-init/README.md 참조"
@@ -118,8 +123,10 @@ check_operators() {
     echo ""
     printf "  %-45s %s\n" "오퍼레이터" "상태"
     echo "  ──────────────────────────────────────────────────────────"
-    if [ "$NMSTATE_INSTALLED" = "true" ]; then
+    if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState 조회 가능"
+    elif [ "$NMSTATE_INSTALLED" = "true" ]; then
+        echo -e "  $wa Kubernetes NMState Operator        → NMState CR 없음 (oc apply -f nmstate-cr.yaml 필요)  (00-init/08-nmstate-operator.md)"
     else
         echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-init/08-nmstate-operator.md)"
     fi
@@ -194,6 +201,15 @@ auto_detect_cluster() {
         fi
         # 방법 2: oc debug node (폴백, 느림 ~30초)
         if [ -z "$DETECTED_IFACES" ] && [ -n "$FIRST_WORKER_FOR_NNS" ]; then
+            if [ "${NMSTATE_INSTALLED:-false}" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" != "true" ]; then
+                print_warn "NMState Operator가 설치되어 있지만 NMState CR이 없습니다."
+                print_info "NodeNetworkState를 사용하려면: oc apply -f - <<'EOF'
+apiVersion: nmstate.io/v1
+kind: NMState
+metadata:
+  name: nmstate
+EOF"
+            fi
             print_info "NodeNetworkState 없음 → oc debug node 로 인터페이스 감지 중 (약 30초)..."
             DETECTED_IFACES=$(oc debug node/"$FIRST_WORKER_FOR_NNS" -- \
                 chroot /host ip -o link show 2>/dev/null | \
