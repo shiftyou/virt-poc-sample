@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# make-template.sh
+# 01-template.sh
 #
 # rhel9-poc-golden.qcow2 → DataVolume → DataSource → Template 등록
 # 실행하면 openshift 네임스페이스에 poc Template이 생성됩니다.
 #
-# 사용법: ./make-template.sh [qcow2-파일-경로]
-#   예) ./make-template.sh
-#   예) ./make-template.sh /path/to/rhel9-poc-golden.qcow2
+# 사용법: ./01-template.sh [qcow2-파일-경로]
+#   예) ./01-template.sh
+#   예) ./01-template.sh /path/to/rhel9-poc-golden.qcow2
 # =============================================================================
 
 set -euo pipefail
@@ -69,7 +69,7 @@ preflight() {
     if [ -n "${1:-}" ]; then
         IMAGE_PATH="$1"
     else
-        IMAGE_PATH="${SCRIPT_DIR}/rhel9-poc-golden.qcow2"
+        IMAGE_PATH="${SCRIPT_DIR}/../rhel9-poc-golden.qcow2"
     fi
 
     if [ ! -f "$IMAGE_PATH" ]; then
@@ -150,12 +150,7 @@ EOF
 step_template() {
     print_step "3/3  Template 등록 (poc @ openshift)"
 
-    local template_file="${SCRIPT_DIR}/../01-environment/vm-template/poc-template.yaml"
-    if [ -f "$template_file" ]; then
-        oc apply -f "$template_file"
-    else
-        # 파일이 없는 경우 인라인으로 적용
-        oc apply -f - <<'EOF'
+    oc apply -f - <<'EOF'
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
@@ -299,7 +294,6 @@ parameters:
     generate: expression
     from: '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}'
 EOF
-    fi
 
     print_ok "Template $TEMPLATE_NAME 등록 완료 (namespace: $TEMPLATE_NS)"
 }

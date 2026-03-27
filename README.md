@@ -35,7 +35,7 @@ cd virt-poc-sample
 
 | 순서 | 디렉토리 | 설명 |
 |------|----------|------|
-| 01 | [01-make-template](01-make-template/01-make-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
+| 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -51,9 +51,9 @@ virt-poc-sample/
 ├── setup-kr.sh                 # 환경 변수 수집 및 env.conf 생성 (한글)
 ├── env.conf.example
 │
-├── 01-make-template/           # RHEL9 황금 이미지 → Template 등록
-│   ├── 01-make-template.md     # 가이드 문서
-│   └── 01-make-template.sh     # 자동화 스크립트
+├── 01-template/                # RHEL9 황금 이미지 → Template 등록
+│   ├── 01-template.md          # 가이드 문서
+│   └── 01-template.sh          # 자동화 스크립트
 │
 └── disabled/                   # 비활성 항목 (참고용)
 ```
