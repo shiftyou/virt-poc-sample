@@ -190,39 +190,243 @@ virtctl vmexport delete rhel9-poc-export -n poc-vm-build
 
 ## 6단계: 황금 이미지로 등록
 
-추출한 qcow2를 `openshift-virtualization-os-images` 네임스페이스에 업로드하고 DataSource로 등록합니다.
+추출한 qcow2를 `openshift-virtualization-os-images` 네임스페이스에 업로드하고 DataSource 및 Template을 등록합니다.
 
 ```bash
-# qcow2 업로드
-virtctl image-upload dv rhel9-poc-golden \
+# env.conf 로드 (스토리지클래스 등 변수 사용)
+source env.conf
+```
+
+### 6-1. DataVolume 업로드
+
+```bash
+virtctl image-upload dv poc-golden \
   --image-path=rhel9-poc-golden.qcow2 \
   --size=30Gi \
-  --storage-class=ocs-external-storagecluster-ceph-rbd \
+  --storage-class=${STORAGE_CLASS} \
   --access-mode=ReadWriteMany \
   --volume-mode=block \
   -n openshift-virtualization-os-images \
   --insecure \
   --force-bind
+```
 
-# DataSource 등록
+> `ReadWriteMany`가 지원되지 않는 스토리지클래스라면 `--access-mode=ReadWriteOnce` 로 변경
+
+업로드 완료 확인:
+
+```bash
+oc get dv poc-golden -n openshift-virtualization-os-images
+oc get pvc poc-golden -n openshift-virtualization-os-images
+```
+
+### 6-2. DataSource 등록
+
+```bash
 cat <<'EOF' | oc apply -f -
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataSource
 metadata:
-  name: rhel9-poc-golden
+  name: poc
   namespace: openshift-virtualization-os-images
 spec:
   source:
     pvc:
-      name: rhel9-poc-golden
+      name: poc-golden
       namespace: openshift-virtualization-os-images
 EOF
 
 # 등록 확인
-oc get datasource rhel9-poc-golden -n openshift-virtualization-os-images
+oc get datasource poc -n openshift-virtualization-os-images
 ```
 
-> **상세 가이드**: [pvc-to-qcow2.md](pvc-to-qcow2.md) Part 2 참조
+### 6-3. VM Template 등록
+
+> **중요:** Template을 모든 네임스페이스에서 사용하려면 반드시 **`openshift` 프로젝트**에 생성해야 합니다.
+> 다른 네임스페이스에 생성하면 해당 네임스페이스에서만 사용 가능합니다.
+
+```bash
+oc apply -f 01-environment/vm-template/poc-template.yaml
+```
+
+또는 직접 적용:
+
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: poc
+  namespace: openshift
+  labels:
+    app.kubernetes.io/part-of: hyperconverged-cluster
+    flavor.template.kubevirt.io/small: 'true'
+    template.kubevirt.io/version: v0.31.1
+    template.kubevirt.io/type: vm
+    vm.kubevirt.io/template: rhel9-server-small
+    app.kubernetes.io/component: templating
+    app.kubernetes.io/managed-by: ssp-operator
+    os.template.kubevirt.io/rhel9.0: 'true'
+    os.template.kubevirt.io/rhel9.1: 'true'
+    os.template.kubevirt.io/rhel9.2: 'true'
+    os.template.kubevirt.io/rhel9.3: 'true'
+    os.template.kubevirt.io/rhel9.4: 'true'
+    os.template.kubevirt.io/rhel9.5: 'true'
+    vm.kubevirt.io/template.namespace: openshift
+    app.kubernetes.io/name: custom-templates
+    workload.template.kubevirt.io/server: 'true'
+  annotations:
+    openshift.io/display-name: POC VM
+    description: Template for Red Hat Enterprise Linux 9 VM or newer. A PVC with the RHEL disk image must be available.
+    tags: 'hidden,kubevirt,virtualmachine,linux,rhel'
+    iconClass: icon-rhel
+    template.kubevirt.io/version: v1alpha1
+    defaults.template.kubevirt.io/disk: rootdisk
+    template.openshift.io/bindable: 'false'
+    openshift.kubevirt.io/pronounceable-suffix-for-name-expression: 'true'
+    name.os.template.kubevirt.io/rhel9.0: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.1: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.2: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.3: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.4: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.5: Red Hat Enterprise Linux 9.0 or higher
+objects:
+  - apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      annotations:
+        vm.kubevirt.io/validations: |
+          [
+            {
+              "name": "minimal-required-memory",
+              "path": "jsonpath::.spec.domain.memory.guest",
+              "rule": "integer",
+              "message": "This VM requires more memory.",
+              "min": 1610612736
+            }
+          ]
+      labels:
+        app: '${NAME}'
+        kubevirt.io/dynamic-credentials-support: 'true'
+        vm.kubevirt.io/template: poc
+        vm.kubevirt.io/template.revision: '1'
+        vm.kubevirt.io/template.namespace: openshift
+      name: '${NAME}'
+    spec:
+      dataVolumeTemplates:
+        - apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
+            name: '${NAME}'
+          spec:
+            sourceRef:
+              kind: DataSource
+              name: '${DATA_SOURCE_NAME}'
+              namespace: '${DATA_SOURCE_NAMESPACE}'
+            storage:
+              resources:
+                requests:
+                  storage: 30Gi
+      running: false
+      template:
+        metadata:
+          annotations:
+            vm.kubevirt.io/flavor: small
+            vm.kubevirt.io/os: rhel9
+            vm.kubevirt.io/workload: server
+          labels:
+            kubevirt.io/domain: '${NAME}'
+            kubevirt.io/size: small
+        spec:
+          architecture: amd64
+          domain:
+            cpu:
+              cores: 1
+              sockets: 1
+              threads: 1
+            devices:
+              disks:
+                - disk:
+                    bus: virtio
+                  name: rootdisk
+                - disk:
+                    bus: virtio
+                  name: cloudinitdisk
+              interfaces:
+                - masquerade: {}
+                  model: virtio
+                  name: default
+              rng: {}
+            features:
+              smm:
+                enabled: true
+            firmware:
+              bootloader:
+                efi: {}
+            memory:
+              guest: 2Gi
+          networks:
+            - name: default
+              pod: {}
+          terminationGracePeriodSeconds: 180
+          volumes:
+            - dataVolume:
+                name: '${NAME}'
+              name: rootdisk
+            - cloudInitNoCloud:
+                userData: |-
+                  #cloud-config
+                  user: cloud-user
+                  password: ${CLOUD_USER_PASSWORD}
+                  chpasswd: { expire: False }
+              name: cloudinitdisk
+parameters:
+  - name: NAME
+    description: VM name
+    generate: expression
+    from: 'poc-[a-z0-9]{16}'
+  - name: DATA_SOURCE_NAME
+    description: Name of the DataSource to clone
+    value: poc
+  - name: DATA_SOURCE_NAMESPACE
+    description: Namespace of the DataSource
+    value: openshift-virtualization-os-images
+  - name: CLOUD_USER_PASSWORD
+    description: Randomized password for the cloud-init user cloud-user
+    generate: expression
+    from: '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}'
+EOF
+
+# 등록 확인
+oc get template poc -n openshift
+```
+
+### 6-4. Template에서 VM 생성 확인
+
+```bash
+# Template 파라미터 확인
+oc process --parameters -n openshift poc
+
+# VM 생성 테스트
+oc process -n openshift poc | oc apply -n poc-test -f -
+```
+
+---
+
+## Console에서 기존 VM 이미지로 새 Template 만들기
+
+Console UI에서 기존 VM을 기반으로 커스텀 Template을 만드는 가장 쉬운 방법은 **기존 Template을 클론한 뒤 수정**하는 것입니다.
+
+1. **Virtualization → Templates** 이동
+2. 기반으로 할 Template(예: `rhel9-server-small`) 우측 메뉴 **Clone** 클릭
+3. 클론 이름 입력 후 네임스페이스를 **`openshift`** 로 설정 → **Clone** 실행
+4. 클론된 Template 편집:
+   - **Boot source** → DataSource를 `poc` (`openshift-virtualization-os-images`)로 변경
+   - CPU/Memory 기본값 조정
+   - Display name, 설명 수정
+5. **Save** 저장
+
+> Console에서 클론한 Template은 즉시 모든 프로젝트의 **Virtualization → Catalog**에 표시됩니다.
 
 ---
 
@@ -231,3 +435,4 @@ oc get datasource rhel9-poc-golden -n openshift-virtualization-os-images
 - `virtctl` 설치: OpenShift Console > `?` 메뉴 > **Command line tools** 에서 다운로드
 - 대화형 업로드 스크립트: [`upload-image.sh`](upload-image.sh)
 - StorageClass 확인: `oc get storageclass`
+- Template 파일: [`01-environment/vm-template/poc-template.yaml`](../01-environment/vm-template/poc-template.yaml)

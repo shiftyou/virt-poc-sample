@@ -3,3 +3,6 @@ env.conf
 
 # 환경변수 적용된 렌더링 결과물 (setup.sh 에 의해 생성)
 rendered/
+
+# VM 이미지 파일 (용량이 크므로 git 관리 제외)
+*.qcow2
