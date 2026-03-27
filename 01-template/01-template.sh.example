@@ -7,7 +7,7 @@
 #
 # 사용법: ./01-template.sh [qcow2-파일-경로]
 #   예) ./01-template.sh
-#   예) ./01-template.sh /path/to/rhel9-poc-golden.qcow2
+#   예) ./01-template.sh /path/to/vm-images/rhel9-poc-golden.qcow2
 # =============================================================================
 
 set -euo pipefail
@@ -63,7 +63,7 @@ preflight() {
     if [ -n "${1:-}" ]; then
         IMAGE_PATH="$1"
     else
-        IMAGE_PATH="${SCRIPT_DIR}/../../rhel9-poc-golden.qcow2"
+        IMAGE_PATH="${SCRIPT_DIR}/../../vm-images/rhel9-poc-golden.qcow2"
     fi
 
     if [ ! -f "$IMAGE_PATH" ]; then

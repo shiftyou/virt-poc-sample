@@ -6,3 +6,4 @@ rendered/
 
 # VM 이미지 파일 (용량이 크므로 git 관리 제외)
 *.qcow2
+vm-images/

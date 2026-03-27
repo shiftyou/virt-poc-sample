@@ -177,7 +177,7 @@ oc get vmexport rhel9-poc-export -n poc-vm-build
 
 # qcow2 다운로드
 virtctl vmexport download rhel9-poc-export \
-  --output=./rhel9-poc-export.qcow2 \
+  --output=./vm-images/rhel9-poc-export.qcow2 \
   -n poc-vm-build
 
 # VMExport 정리
@@ -201,7 +201,7 @@ source env.conf
 
 ```bash
 virtctl image-upload dv poc-golden \
-  --image-path=rhel9-poc-golden.qcow2 \
+  --image-path=vm-images/rhel9-poc-golden.qcow2 \
   --size=30Gi \
   --storage-class=${STORAGE_CLASS} \
   --access-mode=ReadWriteMany \
