@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: poc-live-migration
-  labels:
-    app: poc-live-migration

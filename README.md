@@ -38,7 +38,6 @@ airgap 환경에서 GitHub으로부터 다운로드 후 바로 사용할 수 있
 - [02-tests/cpu-overcommit/README.md](02-tests/cpu-overcommit/README.md) — CPU Overcommit
 - [02-tests/node-maintenance/README.md](02-tests/node-maintenance/README.md) — 노드 유지보수
 - [02-tests/node-exporter/README.md](02-tests/node-exporter/README.md) — Node Exporter
-- [02-tests/vm-live-migration/README.md](02-tests/vm-live-migration/README.md) — VM 라이브 마이그레이션
 - [02-tests/vm-snapshot/README.md](02-tests/vm-snapshot/README.md) — VM 스냅샷/복원
 - [02-tests/multus-network/README.md](02-tests/multus-network/README.md) — Multus 멀티 네트워크
 - [02-tests/storage-dv/README.md](02-tests/storage-dv/README.md) — DataVolume + StorageProfile
@@ -132,7 +131,6 @@ virt-poc-sample/
     ├── cpu-overcommit/         # CPU Overcommit 설정
     ├── node-maintenance/       # 노드 유지보수
     ├── node-exporter/          # Node Exporter
-    ├── vm-live-migration/      # VM 라이브 마이그레이션
     ├── vm-snapshot/            # VM 스냅샷/복원
     ├── multus-network/         # Multus 멀티 네트워크
     └── storage-dv/             # DataVolume + StorageProfile
@@ -160,7 +158,6 @@ virt-poc-sample/
 | OADP 백업/복원 테스트 | poc-oadp-test |
 | CPU Overcommit | (클러스터 수준) |
 | Node Exporter | (기존 openshift-monitoring) |
-| VM Live Migration | poc-live-migration |
 | VM Snapshot | poc-vm-snapshot |
 | Multus Network | poc-multus |
 | Storage DV | poc-storage-dv |

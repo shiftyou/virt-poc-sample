@@ -16,10 +16,9 @@ OpenShift Virtualization 기능 테스트 모음입니다.
 | 07 | [cpu-overcommit](./cpu-overcommit/README.md) | 클러스터 수준 | OpenShift Virtualization |
 | 08 | [node-maintenance](./node-maintenance/README.md) | - | - |
 | 09 | [node-exporter](./node-exporter/README.md) | openshift-monitoring | - |
-| 10 | [vm-live-migration](./vm-live-migration/README.md) | poc-live-migration | OpenShift Virtualization |
-| 11 | [vm-snapshot](./vm-snapshot/README.md) | poc-vm-snapshot | OpenShift Virtualization |
-| 12 | [multus-network](./multus-network/README.md) | poc-multus | NNCP + NAD 구성 완료 |
-| 13 | [storage-dv](./storage-dv/README.md) | poc-storage-dv | OpenShift Virtualization |
+| 10 | [vm-snapshot](./vm-snapshot/README.md) | poc-vm-snapshot | OpenShift Virtualization |
+| 11 | [multus-network](./multus-network/README.md) | poc-multus | NNCP + NAD 구성 완료 |
+| 12 | [storage-dv](./storage-dv/README.md) | poc-storage-dv | OpenShift Virtualization |
 
 ## 공통 적용 방법
 
