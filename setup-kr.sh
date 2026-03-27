@@ -330,7 +330,7 @@ ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-
 # =============================================================================
 print_header "5. VDDK 이미지 설정"
 
-print_info "VDDK 이미지를 내부 레지스트리에 push하는 방법: 01-environment/image-registry/README.md 참조"
+print_info "VDDK 이미지 경로 (내부 레지스트리에 직접 push 후 입력)"
 ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 
 # =============================================================================
@@ -509,52 +509,10 @@ echo -e "${GREEN}============================================================${N
 echo ""
 echo -e "  다음 단계:"
 echo -e ""
-echo -e "  ${CYAN}[사전 준비]${NC}"
-echo -e "  1. 00-operator/README.md              — 오퍼레이터 설치 확인 및 설치 가이드"
-echo -e "  2. 01-make-template/01-make-template.md     — POC용 커스텀 VM 이미지 생성 가이드"
-echo -e "  3. disabled/pvc-to-qcow2.md        — qcow2 업로드 및 openshift-virtualization-os-images 등록"
+echo -e "  ${CYAN}[1] 오퍼레이터 설치${NC}"
+echo -e "      00-operator/README.md"
 echo -e ""
-echo -e "  ${CYAN}[환경 구성]${NC}"
-echo -e "  4. 01-environment/README.md       — 환경 구성"
-echo -e ""
-echo -e "  ${CYAN}[환경 구성 — Operator 필요 항목]${NC}"
-
-if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/grafana/         — Grafana 대시보드 구성 가능"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator 미설치  (00-operator/09-grafana-operator.md)"
-fi
-if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/descheduler/           — Descheduler 테스트 가능"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/descheduler/           — Kube Descheduler Operator 미설치 (건너뜀)"
-fi
-if [ "${FAR_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR 구성 가능"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator 미설치  (00-operator/03-far-operator.md)"
-fi
-if [ "${NMO_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/node-maintenance/      — 노드 유지보수 테스트 가능"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator 미설치  (00-operator/07-node-maintenance-operator.md)"
-fi
-if [ "${NHC_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/nhc/             — NHC 구성 가능"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator 미설치  (00-operator/06-nhc-operator.md)"
-fi
-if [ "${SNR_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR 구성 가능"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator 미설치  (00-operator/04-snr-operator.md)"
-fi
-echo ""
-echo -e "  환경변수가 적용된 최종 YAML:"
-echo -e "  ${CYAN}rendered/${NC} 디렉토리에서 각 YAML을 바로 적용할 수 있습니다."
-echo ""
-echo -e "  YAML 적용 예시:"
-echo -e "  ${YELLOW}oc apply -f rendered/01-environment/nncp/nncp-bridge.yaml${NC}"
-echo ""
-echo -e "  또는 각 디렉토리의 ${CYAN}apply.sh${NC} 를 실행하세요."
+echo -e "  ${CYAN}[2] make.sh 실행${NC}"
+echo -e "      ./make.sh"
+echo -e "          01-make-template  — qcow2 업로드 → DataSource → Template 등록"
 echo ""

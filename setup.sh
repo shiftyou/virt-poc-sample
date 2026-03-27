@@ -330,7 +330,7 @@ ask "Storage class for VM image upload" "${DETECTED_SC:-ocs-external-storageclus
 # =============================================================================
 print_header "5. VDDK Image"
 
-print_info "How to push VDDK image to internal registry: 01-environment/image-registry/README.md"
+print_info "VDDK image path in internal registry (push manually before use)"
 ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 
 # =============================================================================
@@ -509,52 +509,10 @@ echo -e "${GREEN}============================================================${N
 echo ""
 echo -e "  Next steps:"
 echo -e ""
-echo -e "  ${CYAN}[Pre-requisites]${NC}"
-echo -e "  1. 00-operator/README.md              — Operator installation guide"
-echo -e "  2. 01-make-template/01-make-template.md     — Custom VM image creation guide"
-echo -e "  3. disabled/pvc-to-qcow2.md        — Upload qcow2 to openshift-virtualization-os-images"
+echo -e "  ${CYAN}[1] Install Operators${NC}"
+echo -e "      00-operator/README.md"
 echo -e ""
-echo -e "  ${CYAN}[Environment Setup]${NC}"
-echo -e "  4. 01-environment/README.md       — Environment configuration"
-echo -e ""
-echo -e "  ${CYAN}[Environment Setup — Operator dependent]${NC}"
-
-if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/grafana/         — Grafana dashboard ready"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/grafana/         — Grafana Operator not installed  (00-operator/09-grafana-operator.md)"
-fi
-if [ "${DESCHEDULER_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/descheduler/           — Descheduler test ready"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/descheduler/           — Kube Descheduler Operator not installed"
-fi
-if [ "${FAR_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/far/             — FAR ready"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/far/             — Fence Agents Remediation Operator not installed  (00-operator/03-far-operator.md)"
-fi
-if [ "${NMO_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/node-maintenance/      — Node maintenance test ready"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/node-maintenance/      — Node Maintenance Operator not installed  (00-operator/07-node-maintenance-operator.md)"
-fi
-if [ "${NHC_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/nhc/             — NHC ready"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/nhc/             — Node Health Check Operator not installed  (00-operator/06-nhc-operator.md)"
-fi
-if [ "${SNR_INSTALLED:-false}" = "true" ]; then
-    echo -e "  ${GREEN}[✔]${NC} 01-environment/snr/             — SNR ready"
-else
-    echo -e "  ${RED}[✘]${NC} 01-environment/snr/             — Self Node Remediation Operator not installed  (00-operator/04-snr-operator.md)"
-fi
-echo ""
-echo -e "  Rendered YAMLs with env vars applied:"
-echo -e "  Apply files directly from the ${CYAN}rendered/${NC} directory."
-echo ""
-echo -e "  Example:"
-echo -e "  ${YELLOW}oc apply -f rendered/01-environment/nncp/nncp-bridge.yaml${NC}"
-echo ""
-echo -e "  Or run ${CYAN}apply.sh${NC} in each directory."
+echo -e "  ${CYAN}[2] Run make.sh${NC}"
+echo -e "      ./make.sh"
+echo -e "          01-make-template  — Upload qcow2 → DataSource → Template"
 echo ""
