@@ -38,9 +38,9 @@ envsubst < far-config.yaml | oc apply -f -
 
 | 파일 | 설명 |
 |------|------|
-| `far-config.yaml` | FenceAgentsRemediationTemplate 정의 |
-| `consoleYamlSample.yaml` | Console에서 직접 적용 가능한 샘플 |
-| `apply.sh` | envsubst 변수 치환 후 적용 |
+| [`far-config.yaml`](far-config.yaml) | FenceAgentsRemediationTemplate 정의 |
+| [`consoleYamlSample.yaml`](consoleYamlSample.yaml) | Console에서 직접 적용 가능한 샘플 |
+| [`apply.sh`](apply.sh) | envsubst 변수 치환 후 적용 |
 
 ---
 

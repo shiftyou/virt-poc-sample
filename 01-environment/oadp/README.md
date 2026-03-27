@@ -39,10 +39,10 @@ envsubst < oadp-dpa.yaml | oc apply -f -
 
 | 파일 | 설명 |
 |------|------|
-| `oadp-dpa.yaml` | DataProtectionApplication + Cloud Credentials |
-| `backupstoragelocation.yaml` | BackupStorageLocation (별도 설정 시) |
-| `consoleYamlSample.yaml` | Console에서 직접 적용 가능한 샘플 |
-| `apply.sh` | MinIO 엔드포인트 자동 설정 후 적용 |
+| [`oadp-dpa.yaml`](oadp-dpa.yaml) | DataProtectionApplication + Cloud Credentials |
+| [`backupstoragelocation.yaml`](backupstoragelocation.yaml) | BackupStorageLocation (별도 설정 시) |
+| [`consoleYamlSample.yaml`](consoleYamlSample.yaml) | Console에서 직접 적용 가능한 샘플 |
+| [`apply.sh`](apply.sh) | MinIO 엔드포인트 자동 설정 후 적용 |
 
 ---
 

@@ -21,10 +21,10 @@ cd 02-tests/network-policy
 
 | 파일 | 설명 |
 |------|------|
-| `namespace.yaml` | poc-netpol 네임스페이스 |
-| `networkpolicy-deny-all.yaml` | 모든 트래픽 차단 (기본 정책) |
-| `networkpolicy-allow-same-ns.yaml` | 동일 네임스페이스 내 통신 허용 |
-| `networkpolicy-allow-ingress.yaml` | 외부 인그레스 트래픽 허용 |
+| [`namespace.yaml`](namespace.yaml) | poc-netpol 네임스페이스 |
+| [`networkpolicy-deny-all.yaml`](networkpolicy-deny-all.yaml) | 모든 트래픽 차단 (기본 정책) |
+| [`networkpolicy-allow-same-ns.yaml`](networkpolicy-allow-same-ns.yaml) | 동일 네임스페이스 내 통신 허용 |
+| [`networkpolicy-allow-ingress.yaml`](networkpolicy-allow-ingress.yaml) | 외부 인그레스 트래픽 허용 |
 
 ---
 

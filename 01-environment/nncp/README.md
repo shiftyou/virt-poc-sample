@@ -50,9 +50,9 @@ envsubst < nncp-bridge.yaml | oc apply -f -
 
 | 파일 | 설명 |
 |------|------|
-| `nncp-bridge.yaml` | Linux Bridge 생성 NNCP |
-| `consoleYamlSample.yaml` | Console에서 직접 적용 가능한 샘플 |
-| `apply.sh` | envsubst 변수 치환 후 적용 |
+| [`nncp-bridge.yaml`](nncp-bridge.yaml) | Linux Bridge 생성 NNCP |
+| [`consoleYamlSample.yaml`](consoleYamlSample.yaml) | Console에서 직접 적용 가능한 샘플 |
+| [`apply.sh`](apply.sh) | envsubst 변수 치환 후 적용 |
 
 ---
 

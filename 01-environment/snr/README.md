@@ -36,9 +36,9 @@ oc apply -f snr-config.yaml
 
 | 파일 | 설명 |
 |------|------|
-| `snr-config.yaml` | SelfNodeRemediationConfig + Template |
-| `consoleYamlSample.yaml` | Console에서 직접 적용 가능한 샘플 |
-| `apply.sh` | 적용 스크립트 |
+| [`snr-config.yaml`](snr-config.yaml) | SelfNodeRemediationConfig + Template |
+| [`consoleYamlSample.yaml`](consoleYamlSample.yaml) | Console에서 직접 적용 가능한 샘플 |
+| [`apply.sh`](apply.sh) | 적용 스크립트 |
 
 ---
 

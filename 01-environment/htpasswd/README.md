@@ -40,10 +40,10 @@ envsubst < oauth-config.yaml | oc apply -f -
 
 | 파일 | 설명 |
 |------|------|
-| `htpasswd-create.sh` | htpasswd 파일 생성 + OpenShift Secret 생성/업데이트 |
-| `htpasswd-secret.yaml` | htpasswd Secret 템플릿 |
-| `oauth-config.yaml` | OAuth IdentityProvider 설정 |
-| `consoleYamlSample.yaml` | Console에서 직접 적용 가능한 샘플 |
+| [`htpasswd-create.sh`](htpasswd-create.sh) | htpasswd 파일 생성 + OpenShift Secret 생성/업데이트 |
+| [`htpasswd-secret.yaml`](htpasswd-secret.yaml) | htpasswd Secret 템플릿 |
+| [`oauth-config.yaml`](oauth-config.yaml) | OAuth IdentityProvider 설정 |
+| [`consoleYamlSample.yaml`](consoleYamlSample.yaml) | Console에서 직접 적용 가능한 샘플 |
 
 ---
 

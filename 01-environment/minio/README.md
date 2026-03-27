@@ -37,10 +37,10 @@ envsubst < minio-route.yaml | oc apply -f -
 
 | 파일 | 설명 |
 |------|------|
-| `minio-deploy.yaml` | MinIO Deployment + PVC |
-| `minio-service.yaml` | MinIO Service (9000, 9001 포트) |
-| `minio-route.yaml` | MinIO 외부 접근 Route |
-| `apply.sh` | 전체 배포 스크립트 |
+| [`minio-deploy.yaml`](minio-deploy.yaml) | MinIO Deployment + PVC |
+| [`minio-service.yaml`](minio-service.yaml) | MinIO Service (9000, 9001 포트) |
+| [`minio-route.yaml`](minio-route.yaml) | MinIO 외부 접근 Route |
+| [`apply.sh`](apply.sh) | 전체 배포 스크립트 |
 
 ---
 

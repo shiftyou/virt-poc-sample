@@ -35,9 +35,9 @@ envsubst < nad-bridge.yaml | oc apply -f -
 
 | 파일 | 설명 |
 |------|------|
-| `nad-bridge.yaml` | Bridge 기반 NAD (Namespace + NAD) |
-| `consoleYamlSample.yaml` | Console에서 직접 적용 가능한 샘플 |
-| `apply.sh` | envsubst 변수 치환 후 적용 |
+| [`nad-bridge.yaml`](nad-bridge.yaml) | Bridge 기반 NAD (Namespace + NAD) |
+| [`consoleYamlSample.yaml`](consoleYamlSample.yaml) | Console에서 직접 적용 가능한 샘플 |
+| [`apply.sh`](apply.sh) | envsubst 변수 치환 후 적용 |
 
 ---
 
