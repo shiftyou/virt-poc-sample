@@ -38,15 +38,15 @@ cd virt-poc-sample
 
 | 오퍼레이터 | 가이드 | 필수 여부 |
 |-----------|--------|----------|
-| OpenShift Virtualization | [01-openshift-virtualization.md](disabled/01-openshift-virtualization.md) | 필수 |
-| Kubernetes NMState | [08-nmstate-operator.md](00-operator/08-nmstate-operator.md) | NNCP/NAD 사용 시 필수 |
-| OADP | [02-oadp-operator.md](00-operator/02-oadp-operator.md) | 백업/복원 사용 시 |
-| Fence Agents Remediation | [03-far-operator.md](00-operator/03-far-operator.md) | 노드 장애 복구 사용 시 |
-| Self Node Remediation | [04-snr-operator.md](00-operator/04-snr-operator.md) | 노드 자동 복구 사용 시 |
-| Kube Descheduler | [05-descheduler-operator.md](00-operator/05-descheduler-operator.md) | VM 재배치 사용 시 |
-| Node Health Check | [06-nhc-operator.md](00-operator/06-nhc-operator.md) | 노드 헬스체크 사용 시 |
-| Node Maintenance | [07-node-maintenance-operator.md](00-operator/07-node-maintenance-operator.md) | 노드 유지보수 사용 시 |
-| Grafana | [09-grafana-operator.md](00-operator/09-grafana-operator.md) | 모니터링 대시보드 사용 시 |
+| OpenShift Virtualization | — | 필수 |
+| Kubernetes NMState | [nmstate-operator.md](00-operator/nmstate-operator.md) | NNCP/NAD 사용 시 필수 |
+| OADP | [oadp-operator.md](00-operator/oadp-operator.md) | 백업/복원 사용 시 |
+| Fence Agents Remediation | [far-operator.md](00-operator/far-operator.md) | 노드 장애 복구 사용 시 |
+| Self Node Remediation | [snr-operator.md](00-operator/snr-operator.md) | 노드 자동 복구 사용 시 |
+| Kube Descheduler | [descheduler-operator.md](00-operator/descheduler-operator.md) | VM 재배치 사용 시 |
+| Node Health Check | [nhc-operator.md](00-operator/nhc-operator.md) | 노드 헬스체크 사용 시 |
+| Node Maintenance | [node-maintenance-operator.md](00-operator/node-maintenance-operator.md) | 노드 유지보수 사용 시 |
+| Grafana | [grafana-operator.md](00-operator/grafana-operator.md) | 모니터링 대시보드 사용 시 |
 
 ---
 
@@ -72,14 +72,14 @@ virt-poc-sample/
 ├── env.conf.example
 │
 ├── 00-operator/                # 오퍼레이터 설치 가이드 (사전 준비)
-│   ├── 02-oadp-operator.md
-│   ├── 03-far-operator.md
-│   ├── 04-snr-operator.md
-│   ├── 05-descheduler-operator.md
-│   ├── 06-nhc-operator.md
-│   ├── 07-node-maintenance-operator.md
-│   ├── 08-nmstate-operator.md
-│   └── 09-grafana-operator.md
+│   ├── oadp-operator.md
+│   ├── far-operator.md
+│   ├── snr-operator.md
+│   ├── descheduler-operator.md
+│   ├── nhc-operator.md
+│   ├── node-maintenance-operator.md
+│   ├── nmstate-operator.md
+│   └── grafana-operator.md
 │
 ├── 01-template/                # RHEL9 황금 이미지 → Template 등록
 │   ├── 01-template.md          # 가이드 문서

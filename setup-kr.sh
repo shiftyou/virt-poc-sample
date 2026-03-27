@@ -134,7 +134,7 @@ check_operators() {
     if [ "$VIRT_INSTALLED" = "true" ]; then
         echo -e "  $ok OpenShift Virtualization Operator  → Virtualization 사용 가능"
     else
-        echo -e "  $ng OpenShift Virtualization Operator  → 미설치  (00-operator/01-openshift-virtualization.md)"
+        echo -e "  $ng OpenShift Virtualization Operator  → 미설치  (00-operator/)"
     fi
     if [ "$MTV_INSTALLED" = "true" ]; then
         echo -e "  $ok Migration Toolkit for Virt Operator → MTV 사용 가능"
@@ -144,44 +144,44 @@ check_operators() {
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState 조회 가능"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
-        echo -e "  $wa Kubernetes NMState Operator        → NMState CR 없음 (oc apply -f nmstate-cr.yaml 필요)  (00-operator/08-nmstate-operator.md)"
+        echo -e "  $wa Kubernetes NMState Operator        → NMState CR 없음 (oc apply -f nmstate-cr.yaml 필요)  (00-operator/nmstate-operator.md)"
     else
-        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-operator/08-nmstate-operator.md)"
+        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-operator/nmstate-operator.md)"
     fi
     if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
         echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
     else
-        echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-operator/05-descheduler-operator.md)"
+        echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-operator/descheduler-operator.md)"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
         echo -e "  $ok OADP Operator                      → 백업/복원 구성 가능"
     else
-        echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-operator/02-oadp-operator.md)"
+        echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-operator/oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
         echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
     else
-        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-operator/09-grafana-operator.md)"
+        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-operator/grafana-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR 구성 가능"
     else
-        echo -e "  $ng Fence Agents Remediation Operator  → FAR 구성 건너뜀  (00-operator/03-far-operator.md)"
+        echo -e "  $ng Fence Agents Remediation Operator  → FAR 구성 건너뜀  (00-operator/far-operator.md)"
     fi
     if [ "$NMO_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Maintenance Operator          → 노드 유지보수 가능"
     else
-        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-operator/07-node-maintenance-operator.md)"
+        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-operator/node-maintenance-operator.md)"
     fi
     if [ "$NHC_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Health Check Operator         → NHC 구성 가능"
     else
-        echo -e "  $ng Node Health Check Operator         → NHC 구성 건너뜀  (00-operator/06-nhc-operator.md)"
+        echo -e "  $ng Node Health Check Operator         → NHC 구성 건너뜀  (00-operator/nhc-operator.md)"
     fi
     if [ "$SNR_INSTALLED" = "true" ]; then
         echo -e "  $ok Self Node Remediation Operator     → SNR 구성 가능"
     else
-        echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-operator/04-snr-operator.md)"
+        echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-operator/snr-operator.md)"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""

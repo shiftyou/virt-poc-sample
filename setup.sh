@@ -134,7 +134,7 @@ check_operators() {
     if [ "$VIRT_INSTALLED" = "true" ]; then
         echo -e "  $ok OpenShift Virtualization Operator  → Virtualization ready"
     else
-        echo -e "  $ng OpenShift Virtualization Operator  → Not installed  (00-operator/01-openshift-virtualization.md)"
+        echo -e "  $ng OpenShift Virtualization Operator  → Not installed  (00-operator/)"
     fi
     if [ "$MTV_INSTALLED" = "true" ]; then
         echo -e "  $ok Migration Toolkit for Virt Operator → MTV ready"
@@ -144,44 +144,44 @@ check_operators() {
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
         echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState available"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
-        echo -e "  $wa Kubernetes NMState Operator        → NMState CR missing (apply nmstate-cr.yaml)  (00-operator/08-nmstate-operator.md)"
+        echo -e "  $wa Kubernetes NMState Operator        → NMState CR missing (apply nmstate-cr.yaml)  (00-operator/nmstate-operator.md)"
     else
-        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS unavailable  (00-operator/08-nmstate-operator.md)"
+        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS unavailable  (00-operator/nmstate-operator.md)"
     fi
     if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
         echo -e "  $ok Kube Descheduler Operator          → Descheduler ready"
     else
-        echo -e "  $ng Kube Descheduler Operator          → Skipped  (00-operator/05-descheduler-operator.md)"
+        echo -e "  $ng Kube Descheduler Operator          → Skipped  (00-operator/descheduler-operator.md)"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
         echo -e "  $ok OADP Operator                      → Backup/Restore ready"
     else
-        echo -e "  $ng OADP Operator                      → Skipped  (00-operator/02-oadp-operator.md)"
+        echo -e "  $ng OADP Operator                      → Skipped  (00-operator/oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
         echo -e "  $ok Grafana Operator                   → Grafana dashboard ready"
     else
-        echo -e "  $ng Grafana Operator                   → Skipped  (00-operator/09-grafana-operator.md)"
+        echo -e "  $ng Grafana Operator                   → Skipped  (00-operator/grafana-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR ready"
     else
-        echo -e "  $ng Fence Agents Remediation Operator  → Skipped  (00-operator/03-far-operator.md)"
+        echo -e "  $ng Fence Agents Remediation Operator  → Skipped  (00-operator/far-operator.md)"
     fi
     if [ "$NMO_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Maintenance Operator          → Node maintenance ready"
     else
-        echo -e "  $ng Node Maintenance Operator          → Skipped  (00-operator/07-node-maintenance-operator.md)"
+        echo -e "  $ng Node Maintenance Operator          → Skipped  (00-operator/node-maintenance-operator.md)"
     fi
     if [ "$NHC_INSTALLED" = "true" ]; then
         echo -e "  $ok Node Health Check Operator         → NHC ready"
     else
-        echo -e "  $ng Node Health Check Operator         → Skipped  (00-operator/06-nhc-operator.md)"
+        echo -e "  $ng Node Health Check Operator         → Skipped  (00-operator/nhc-operator.md)"
     fi
     if [ "$SNR_INSTALLED" = "true" ]; then
         echo -e "  $ok Self Node Remediation Operator     → SNR ready"
     else
-        echo -e "  $ng Self Node Remediation Operator     → Skipped  (00-operator/04-snr-operator.md)"
+        echo -e "  $ng Self Node Remediation Operator     → Skipped  (00-operator/snr-operator.md)"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""
