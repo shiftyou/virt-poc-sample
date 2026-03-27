@@ -176,8 +176,8 @@ ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/op
 # =============================================================================
 print_header "6. Console / API 접근 IP 제한"
 
-ask "Console 접근 허용 CIDR (쉼표로 구분, 예: 10.0.0.0/8,192.168.1.0/24)" "10.0.0.0/8" CONSOLE_ALLOWED_CIDRS
-ask "API 서버 접근 허용 CIDR (쉼표로 구분)" "10.0.0.0/8" API_ALLOWED_CIDRS
+ask "Console 접근 허용 CIDR (쉼표로 구분, 예: 10.0.0.0/8,192.168.1.0/24)" "0.0.0.0/0" CONSOLE_ALLOWED_CIDRS
+ask "API 서버 접근 허용 CIDR (쉼표로 구분)" "0.0.0.0/0" API_ALLOWED_CIDRS
 
 # =============================================================================
 # 7. Fence Agents Remediation
@@ -273,6 +273,50 @@ EOF
 print_ok "env.conf 파일이 생성되었습니다: $ENV_FILE"
 
 # =============================================================================
+# rendered yaml 생성
+# =============================================================================
+print_header "환경변수 적용된 YAML 생성 중..."
+
+RENDERED_DIR="./rendered"
+
+# 기존 rendered 디렉토리 정리
+if [ -d "$RENDERED_DIR" ]; then
+    rm -rf "$RENDERED_DIR"
+fi
+
+# env.conf 로드
+set -a
+# shellcheck source=./env.conf
+source "$ENV_FILE"
+set +a
+
+RENDERED_COUNT=0
+
+# env.conf 변수 목록만 envsubst에 전달 (OpenShift Template 파라미터 보호)
+# ${NAME}, ${NAMESPACE} 등 OpenShift Template 파라미터를 치환하지 않음
+ENVSUBST_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | \
+    awk '{printf "${%s} ", $1}')
+
+# 렌더링 대상:
+#   1. 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
+#   2. 모든 consoleYamlSample.yaml 파일 (env vars 없어도 rendered/ 에 복사)
+while IFS= read -r yaml_file; do
+    # 상대 경로 계산
+    rel_path="${yaml_file#./}"
+    out_file="${RENDERED_DIR}/${rel_path}"
+    out_dir="$(dirname "$out_file")"
+
+    mkdir -p "$out_dir"
+    envsubst "$ENVSUBST_VARS" < "$yaml_file" > "$out_file"
+    print_ok "  생성: $out_file"
+    RENDERED_COUNT=$((RENDERED_COUNT + 1))
+done < <({ grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null; \
+           find . -name "consoleYamlSample.yaml" -not -path "*/rendered/*" 2>/dev/null; \
+         } | sort -u)
+
+print_ok "총 ${RENDERED_COUNT}개 YAML 파일이 rendered/ 에 생성되었습니다."
+
+# =============================================================================
 # 완료 메시지
 # =============================================================================
 echo ""
@@ -281,12 +325,16 @@ echo -e "${GREEN}  설정 완료!${NC}"
 echo -e "${GREEN}============================================================${NC}"
 echo ""
 echo -e "  다음 단계:"
-echo -e "  1. ${CYAN}00-operators/${NC}   - Operator 설치 가이드를 참조하여 필요한 Operator를 설치하세요."
-echo -e "  2. ${CYAN}01-environment/${NC} - 기본 환경을 구성하세요. (README.md 참조)"
-echo -e "  3. ${CYAN}02-tests/${NC}       - 기능 테스트를 수행하세요. (README.md 참조)"
+echo -e "  1. ${CYAN}00-operators/${NC}                   - Operator 설치 가이드를 참조하여 필요한 Operator를 설치하세요."
+echo -e "  2. ${CYAN}01-environment/${NC}                 - 기본 환경을 구성하세요. (README.md 참조)"
+echo -e "     ${CYAN}01-environment/custom-image/${NC}    - 커스텀 이미지를 등록하려면 upload-image.sh 를 실행하세요."
+echo -e "  3. ${CYAN}02-tests/${NC}                       - 기능 테스트를 수행하세요. (README.md 참조)"
+echo ""
+echo -e "  환경변수가 적용된 최종 YAML:"
+echo -e "  ${CYAN}rendered/${NC} 디렉토리에서 각 YAML을 바로 적용할 수 있습니다."
 echo ""
 echo -e "  YAML 적용 예시:"
-echo -e "  ${YELLOW}source env.conf && envsubst < 01-environment/nncp/nncp-bridge.yaml | oc apply -f -${NC}"
+echo -e "  ${YELLOW}oc apply -f rendered/01-environment/nncp/nncp-bridge.yaml${NC}"
 echo ""
 echo -e "  또는 각 디렉토리의 ${CYAN}apply.sh${NC} 를 실행하세요."
 echo ""

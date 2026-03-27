@@ -1,20 +1,31 @@
-# =============================================================================
-# [Console YAML Sample] DataVolume
-# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
-# =============================================================================
-apiVersion: cdi.kubevirt.io/v1beta1
-kind: DataVolume
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
 metadata:
-  name: fedora-dv
-  namespace: poc-storage-dv
+  name: poc-datavolume-fedora
 spec:
-  sourceRef:
-    kind: DataSource
-    name: fedora
-    namespace: openshift-virtualization-os-images
-  storage:
-    resources:
-      requests:
-        storage: 20Gi
-    accessModes:
-      - ReadWriteOnce
+  title: "POC DataVolume (Fedora)"
+  description: "openshift-virtualization-os-images의 Fedora DataSource에서 DataVolume을 생성합니다. VM 디스크로 사용하거나 독립적인 스토리지 테스트에 사용할 수 있습니다."
+  targetResource:
+    apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] DataVolume
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    # =============================================================================
+    apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    metadata:
+      name: fedora-dv
+      namespace: poc-storage-dv
+    spec:
+      sourceRef:
+        kind: DataSource
+        name: fedora
+        namespace: openshift-virtualization-os-images
+      storage:
+        resources:
+          requests:
+            storage: 20Gi
+        accessModes:
+          - ReadWriteOnce

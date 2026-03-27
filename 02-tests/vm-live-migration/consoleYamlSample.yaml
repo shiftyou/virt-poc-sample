@@ -1,13 +1,23 @@
-# =============================================================================
-# [Console YAML Sample] VirtualMachineInstanceMigration
-# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
-# VM이 실행 중인 상태에서 적용하면 라이브 마이그레이션이 시작됩니다.
-# =============================================================================
-apiVersion: kubevirt.io/v1
-kind: VirtualMachineInstanceMigration
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
 metadata:
-  name: test-migration
-  namespace: poc-live-migration
+  name: poc-vm-live-migration
 spec:
-  # 마이그레이션할 VMI 이름
-  vmiName: test-migration-vm
+  title: "POC VM Live Migration 트리거"
+  description: "실행 중인 VM(test-migration-vm)을 다른 노드로 라이브 마이그레이션합니다. VM이 Running 상태이고 RWX 스토리지를 사용 중일 때 적용하세요."
+  targetResource:
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachineInstanceMigration
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] VirtualMachineInstanceMigration
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    # VM이 Running 상태일 때 적용하면 라이브 마이그레이션이 시작됩니다.
+    # =============================================================================
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachineInstanceMigration
+    metadata:
+      name: test-migration
+      namespace: poc-live-migration
+    spec:
+      vmiName: test-migration-vm

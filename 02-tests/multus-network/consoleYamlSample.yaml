@@ -1,55 +1,65 @@
-# =============================================================================
-# [Console YAML Sample] VM with Multus Network
-# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
-#
-# 주의: poc-nad/poc-bridge-nad를 실제 NAD 경로로 변경하세요.
-# =============================================================================
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
 metadata:
-  name: test-multus-vm
-  namespace: poc-multus
+  name: poc-multus-vm
 spec:
-  running: false
-  template:
+  title: "POC Multus 멀티 네트워크 VM"
+  description: "Pod 네트워크와 Bridge 네트워크(${NAD_NAMESPACE}/poc-bridge-nad) 두 개의 인터페이스를 가진 VM입니다. NAD가 먼저 생성되어 있어야 합니다."
+  targetResource:
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] VM with Multus Network
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    # 참조 변수: NAD_NAMESPACE=${NAD_NAMESPACE}
+    # =============================================================================
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: test-multus-vm
+      namespace: poc-multus
     spec:
-      domain:
-        cpu:
-          cores: 1
-        devices:
-          disks:
-            - name: rootdisk
-              disk:
-                bus: virtio
-          interfaces:
+      running: false
+      template:
+        spec:
+          domain:
+            cpu:
+              cores: 1
+            devices:
+              disks:
+                - name: rootdisk
+                  disk:
+                    bus: virtio
+              interfaces:
+                - name: default
+                  masquerade: {}
+                - name: secondary
+                  bridge: {}
+            resources:
+              requests:
+                memory: 1Gi
+          networks:
             - name: default
-              masquerade: {}
+              pod: {}
             - name: secondary
-              bridge: {}
-        resources:
-          requests:
-            memory: 1Gi
-      networks:
-        - name: default
-          pod: {}
-        - name: secondary
-          multus:
-            networkName: poc-nad/poc-bridge-nad
-      volumes:
-        - name: rootdisk
-          dataVolume:
+              multus:
+                networkName: ${NAD_NAMESPACE}/poc-bridge-nad
+          volumes:
+            - name: rootdisk
+              dataVolume:
+                name: test-multus-vm-rootdisk
+      dataVolumeTemplates:
+        - apiVersion: cdi.kubevirt.io/v1beta1
+          kind: DataVolume
+          metadata:
             name: test-multus-vm-rootdisk
-  dataVolumeTemplates:
-    - apiVersion: cdi.kubevirt.io/v1beta1
-      kind: DataVolume
-      metadata:
-        name: test-multus-vm-rootdisk
-      spec:
-        sourceRef:
-          kind: DataSource
-          name: fedora
-          namespace: openshift-virtualization-os-images
-        storage:
-          resources:
-            requests:
-              storage: 20Gi
+          spec:
+            sourceRef:
+              kind: DataSource
+              name: fedora
+              namespace: openshift-virtualization-os-images
+            storage:
+              resources:
+                requests:
+                  storage: 20Gi

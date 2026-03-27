@@ -86,12 +86,17 @@ oc get pods -n openshift-workload-availability | grep self-node
 
 ## SNR 구성
 
-설치 후 `01-environment/snr/` 디렉토리의 가이드를 참조합니다.
+설치 후 `01-environment/snr/` 디렉토리의 apply.sh를 실행하면
+SNR 설정과 **Node Health Check(NHC)** CR이 함께 생성됩니다.
 
 ```bash
 cd 01-environment/snr
 ./apply.sh
 ```
+
+> **NHC(Node Health Check) Operator도 함께 설치해야** 자동 복구가 동작합니다.
+> NHC가 노드 상태를 감지하여 SNR을 트리거하는 구조입니다.
+> → [06-nhc-operator.md](./06-nhc-operator.md) 참조
 
 ---
 

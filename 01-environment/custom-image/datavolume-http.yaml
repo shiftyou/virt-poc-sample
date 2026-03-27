@@ -1,0 +1,33 @@
+# =============================================================================
+# DataVolume - HTTP URL에서 커스텀 이미지 가져오기
+#
+# HTTP/HTTPS로 접근 가능한 qcow2/raw 이미지를 CDI가 직접 다운로드합니다.
+# 임포트 완료 후 datasource.yaml 을 적용하여 UI에 등록하세요.
+#
+# 사용법:
+#   MY_IMAGE_NAME=my-custom-os MY_IMAGE_URL=https://... MY_IMAGE_SIZE=30Gi \
+#   MY_STORAGE_CLASS=ocs-storagecluster-ceph-rbd-virtualization \
+#   envsubst < datavolume-http.yaml | oc apply -f -
+#
+# 진행 상황 확인:
+#   oc get dv ${MY_IMAGE_NAME}-dv -n openshift-virtualization-os-images -w
+# =============================================================================
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: ${MY_IMAGE_NAME}-dv
+  namespace: openshift-virtualization-os-images
+  annotations:
+    cdi.kubevirt.io/storage.import.requiresScratch: "true"
+spec:
+  source:
+    http:
+      url: "${MY_IMAGE_URL}"
+  storage:
+    resources:
+      requests:
+        storage: ${MY_IMAGE_SIZE}
+    storageClassName: ${MY_STORAGE_CLASS}
+    accessModes:
+      - ReadWriteMany
+    volumeMode: Block

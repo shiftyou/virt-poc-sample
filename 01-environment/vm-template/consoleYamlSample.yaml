@@ -1,94 +1,105 @@
-# =============================================================================
-# [Console YAML Sample] VM Template
-# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
-# openshift 네임스페이스를 선택하면 전체 클러스터에서 사용 가능
-# =============================================================================
-apiVersion: template.openshift.io/v1
-kind: Template
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
 metadata:
   name: poc-rhel9-vm-template
-  namespace: openshift
-  labels:
-    template.kubevirt.io/type: vm
-    os.template.kubevirt.io/rhel9.0: "true"
-  annotations:
-    description: "POC RHEL9 VM 템플릿"
-    openshift.io/display-name: "POC RHEL9 VM Template"
-parameters:
-  - name: NAME
-    description: "VM 이름"
-    required: true
-  - name: NAMESPACE
-    description: "VM 네임스페이스"
-    required: true
-  - name: CPU_CORES
-    value: "2"
-  - name: MEMORY
-    value: "4Gi"
-  - name: DISK_SIZE
-    value: "30Gi"
-  - name: STORAGE_CLASS
-    value: "ocs-storagecluster-ceph-rbd-virtualization"
-objects:
-  - apiVersion: kubevirt.io/v1
-    kind: VirtualMachine
+spec:
+  title: "POC RHEL9 VM Template"
+  description: "RHEL9 기반 VM 템플릿입니다. openshift 네임스페이스에 생성하면 전체 클러스터의 Virtualization > Templates 메뉴에서 사용 가능합니다."
+  targetResource:
+    apiVersion: template.openshift.io/v1
+    kind: Template
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] VM Template (RHEL9)
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    # openshift 네임스페이스에 생성하면 전체 클러스터에서 사용 가능
+    # =============================================================================
+    apiVersion: template.openshift.io/v1
+    kind: Template
     metadata:
-      name: "${NAME}"
-      namespace: "${NAMESPACE}"
+      name: poc-rhel9-vm-template
+      namespace: openshift
       labels:
-        app: "${NAME}"
-    spec:
-      running: false
-      template:
+        template.kubevirt.io/type: vm
+        os.template.kubevirt.io/rhel9.0: "true"
+      annotations:
+        description: "POC RHEL9 VM 템플릿"
+        openshift.io/display-name: "POC RHEL9 VM Template"
+    parameters:
+      - name: NAME
+        description: "VM 이름"
+        required: true
+      - name: NAMESPACE
+        description: "VM 네임스페이스"
+        required: true
+      - name: CPU_CORES
+        value: "2"
+      - name: MEMORY
+        value: "4Gi"
+      - name: DISK_SIZE
+        value: "30Gi"
+      - name: STORAGE_CLASS
+        value: "ocs-storagecluster-ceph-rbd-virtualization"
+    objects:
+      - apiVersion: kubevirt.io/v1
+        kind: VirtualMachine
         metadata:
+          name: "${NAME}"
+          namespace: "${NAMESPACE}"
           labels:
-            kubevirt.io/domain: "${NAME}"
+            app: "${NAME}"
         spec:
-          domain:
-            cpu:
-              cores: ${{CPU_CORES}}
-              sockets: 1
-              threads: 1
-            devices:
-              disks:
-                - name: rootdisk
-                  disk:
-                    bus: virtio
-                - name: cloudinitdisk
-                  disk:
-                    bus: virtio
-              interfaces:
+          running: false
+          template:
+            metadata:
+              labels:
+                kubevirt.io/domain: "${NAME}"
+            spec:
+              domain:
+                cpu:
+                  cores: ${{CPU_CORES}}
+                  sockets: 1
+                  threads: 1
+                devices:
+                  disks:
+                    - name: rootdisk
+                      disk:
+                        bus: virtio
+                    - name: cloudinitdisk
+                      disk:
+                        bus: virtio
+                  interfaces:
+                    - name: default
+                      masquerade: {}
+                resources:
+                  requests:
+                    memory: "${MEMORY}"
+              networks:
                 - name: default
-                  masquerade: {}
-            resources:
-              requests:
-                memory: "${MEMORY}"
-          networks:
-            - name: default
-              pod: {}
-          volumes:
-            - name: rootdisk
-              dataVolume:
+                  pod: {}
+              volumes:
+                - name: rootdisk
+                  dataVolume:
+                    name: "${NAME}-rootdisk"
+                - name: cloudinitdisk
+                  cloudInitNoCloud:
+                    userData: |
+                      #cloud-config
+                      user: cloud-user
+                      password: redhat123
+                      chpasswd: { expire: False }
+          dataVolumeTemplates:
+            - apiVersion: cdi.kubevirt.io/v1beta1
+              kind: DataVolume
+              metadata:
                 name: "${NAME}-rootdisk"
-            - name: cloudinitdisk
-              cloudInitNoCloud:
-                userData: |
-                  #cloud-config
-                  user: cloud-user
-                  password: redhat123
-                  chpasswd: { expire: False }
-      dataVolumeTemplates:
-        - apiVersion: cdi.kubevirt.io/v1beta1
-          kind: DataVolume
-          metadata:
-            name: "${NAME}-rootdisk"
-          spec:
-            sourceRef:
-              kind: DataSource
-              name: rhel9
-              namespace: openshift-virtualization-os-images
-            storage:
-              resources:
-                requests:
-                  storage: "${DISK_SIZE}"
-              storageClassName: "${STORAGE_CLASS}"
+              spec:
+                sourceRef:
+                  kind: DataSource
+                  name: rhel9
+                  namespace: openshift-virtualization-os-images
+                storage:
+                  resources:
+                    requests:
+                      storage: "${DISK_SIZE}"
+                  storageClassName: "${STORAGE_CLASS}"

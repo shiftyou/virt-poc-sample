@@ -1,37 +1,50 @@
-# =============================================================================
-# [Console YAML Sample] LimitRange + ResourceQuota
-# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
-# =============================================================================
-apiVersion: v1
-kind: LimitRange
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
 metadata:
-  name: poc-limitrange
-  namespace: poc-resource-limits
+  name: poc-resource-limits
 spec:
-  limits:
-    - type: Container
-      default:
-        cpu: "500m"
-        memory: "256Mi"
-      defaultRequest:
-        cpu: "100m"
-        memory: "128Mi"
-      max:
-        cpu: "4"
-        memory: "4Gi"
-      min:
-        cpu: "50m"
-        memory: "64Mi"
----
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: poc-quota
-  namespace: poc-resource-limits
-spec:
-  hard:
-    requests.cpu: "8"
-    limits.cpu: "16"
-    requests.memory: "8Gi"
-    limits.memory: "16Gi"
-    pods: "20"
+  title: "POC LimitRange + ResourceQuota"
+  description: "poc-resource-limits 네임스페이스의 Container 리소스 기본값/최대값(LimitRange)과 네임스페이스 총 리소스 한도(ResourceQuota)를 설정합니다."
+  targetResource:
+    apiVersion: v1
+    kind: ResourceQuota
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] LimitRange + ResourceQuota
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    # =============================================================================
+    apiVersion: v1
+    kind: LimitRange
+    metadata:
+      name: poc-limitrange
+      namespace: poc-resource-limits
+    spec:
+      limits:
+        - type: Container
+          default:
+            cpu: "500m"
+            memory: "256Mi"
+          defaultRequest:
+            cpu: "100m"
+            memory: "128Mi"
+          max:
+            cpu: "4"
+            memory: "4Gi"
+          min:
+            cpu: "50m"
+            memory: "64Mi"
+    ---
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: poc-quota
+      namespace: poc-resource-limits
+    spec:
+      hard:
+        requests.cpu: "8"
+        limits.cpu: "16"
+        requests.memory: "8Gi"
+        limits.memory: "16Gi"
+        pods: "20"
+        persistentvolumeclaims: "10"
+        requests.storage: "100Gi"
