@@ -439,10 +439,9 @@ set +a
 
 RENDERED_COUNT=0
 
-# Pass only env.conf variables to envsubst (protect OpenShift Template parameters)
-# ${NAME}, ${NAMESPACE} etc. in OpenShift Templates are not substituted
-ENVSUBST_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | \
-    awk '{printf "${%s} ", $1}')
+# Build allowed variable list from env.conf (protect OpenShift Template parameters)
+# Only variables defined in env.conf are substituted; ${NAME}, ${NAMESPACE} etc. are left as-is
+ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
 # Render targets:
 #   1. yaml files containing env var placeholders (${...})
@@ -453,7 +452,16 @@ while IFS= read -r yaml_file; do
     out_dir="$(dirname "$out_file")"
 
     mkdir -p "$out_dir"
-    envsubst "$ENVSUBST_VARS" < "$yaml_file" > "$out_file"
+    awk -v allowed="$ALLOWED_VARS" '
+    BEGIN { n = split(allowed, vars, " "); for (i=1;i<=n;i++) ok[vars[i]]=1 }
+    {
+        while (match($0, /\$\{[A-Z_][A-Z0-9_]*\}/)) {
+            varname = substr($0, RSTART+2, RLENGTH-3)
+            val = (varname in ok) ? ENVIRON[varname] : "${" varname "}"
+            $0 = substr($0, 1, RSTART-1) val substr($0, RSTART+RLENGTH)
+        }
+        print
+    }' "$yaml_file" > "$out_file"
     print_ok "  created: $out_file"
     RENDERED_COUNT=$((RENDERED_COUNT + 1))
 done < <({ grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null; \

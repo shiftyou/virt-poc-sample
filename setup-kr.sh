@@ -439,10 +439,9 @@ set +a
 
 RENDERED_COUNT=0
 
-# env.conf 변수 목록만 envsubst에 전달 (OpenShift Template 파라미터 보호)
+# env.conf에 정의된 변수만 치환 (OpenShift Template 파라미터 보호)
 # ${NAME}, ${NAMESPACE} 등 OpenShift Template 파라미터를 치환하지 않음
-ENVSUBST_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | \
-    awk '{printf "${%s} ", $1}')
+ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
 
 # 렌더링 대상:
 #   1. 환경변수 플레이스홀더(${...})가 포함된 yaml 파일
@@ -454,7 +453,16 @@ while IFS= read -r yaml_file; do
     out_dir="$(dirname "$out_file")"
 
     mkdir -p "$out_dir"
-    envsubst "$ENVSUBST_VARS" < "$yaml_file" > "$out_file"
+    awk -v allowed="$ALLOWED_VARS" '
+    BEGIN { n = split(allowed, vars, " "); for (i=1;i<=n;i++) ok[vars[i]]=1 }
+    {
+        while (match($0, /\$\{[A-Z_][A-Z0-9_]*\}/)) {
+            varname = substr($0, RSTART+2, RLENGTH-3)
+            val = (varname in ok) ? ENVIRON[varname] : "${" varname "}"
+            $0 = substr($0, 1, RSTART-1) val substr($0, RSTART+RLENGTH)
+        }
+        print
+    }' "$yaml_file" > "$out_file"
     print_ok "  생성: $out_file"
     RENDERED_COUNT=$((RENDERED_COUNT + 1))
 done < <({ grep -rl '\${' . --include="*.yaml" --exclude-dir=rendered 2>/dev/null; \
