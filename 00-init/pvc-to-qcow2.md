@@ -148,24 +148,35 @@ virtctl vmexport delete rhel9-export -n openshift-virtualization-os-images
 
 ---
 
-## Part 2: qcow2 → openshift-virtualization-os-images (업로드)
+## Part 2: qcow2 → 클러스터 전체에서 VM 부팅 이미지로 등록
 
-로컬 qcow2 파일을 클러스터에 업로드하여 VM 부팅 이미지로 등록합니다.
-업로드 후 DataSource를 생성하면 VM 생성 시 부팅 이미지로 선택할 수 있습니다.
+로컬 qcow2 파일을 `openshift-virtualization-os-images` 네임스페이스에 업로드하고 DataSource로 등록합니다.
+DataSource를 이 네임스페이스에 두면 **CDI가 VM 생성 시 자동으로 해당 네임스페이스에 PVC를 클론**하므로,
+어떤 네임스페이스에서도 동일한 이미지로 VM을 생성할 수 있습니다.
 
-### 1단계: virtctl로 qcow2 업로드
+```
+rhel9-poc-vm.qcow2 (로컬)
+        │  virtctl image-upload
+        ▼
+PVC: rhel9-golden-poc  (openshift-virtualization-os-images)
+        │  DataSource 생성
+        ▼
+DataSource: rhel9-golden-poc  (openshift-virtualization-os-images)
+        │  VM 생성 시 CDI 자동 클론
+        ▼
+PVC: <vm-name>-rootdisk  (어느 네임스페이스든)
+```
+
+---
+
+### 1단계: qcow2 업로드
 
 ```bash
-IMAGE_NAME=my-rhel9          # 등록할 이미지 이름 (소문자, 하이픈 허용)
-IMAGE_FILE=./rhel9.qcow2     # 업로드할 로컬 qcow2 파일 경로
-DISK_SIZE=30Gi               # PVC 크기 (이미지보다 충분히 크게)
-STORAGE_CLASS=ocs-storagecluster-ceph-rbd-virtualization
-
 virtctl image-upload \
-  --image-path="${IMAGE_FILE}" \
-  --pvc-name="${IMAGE_NAME}" \
-  --pvc-size="${DISK_SIZE}" \
-  --storage-class="${STORAGE_CLASS}" \
+  --image-path=rhel9-poc-vm.qcow2 \
+  --pvc-name=rhel9-golden-poc \
+  --pvc-size=30Gi \
+  --storage-class=ocs-storagecluster-ceph-rbd-virtualization \
   --access-mode=ReadWriteMany \
   --block-volume \
   -n openshift-virtualization-os-images \
@@ -184,60 +195,101 @@ virtctl image-upload \
 업로드 완료 후 PVC 상태를 확인합니다.
 
 ```bash
-oc get pvc "${IMAGE_NAME}" -n openshift-virtualization-os-images
+oc get pvc rhel9-golden-poc -n openshift-virtualization-os-images
 ```
 
 ---
 
 ### 2단계: DataSource 생성
 
-업로드한 PVC를 VM 부팅 이미지로 사용할 수 있도록 DataSource를 생성합니다.
-DataSource가 있어야 OpenShift Virtualization UI의 **부팅 소스** 목록에 나타납니다.
+업로드한 PVC를 DataSource로 등록합니다.
+DataSource가 있어야 OpenShift Virtualization UI의 **부팅 소스** 목록에 나타나고,
+다른 네임스페이스에서 VM 생성 시 CDI가 이 DataSource를 참조하여 PVC를 자동 클론합니다.
 
 ```bash
-IMAGE_NAME=my-rhel9
-
-cat <<EOF | oc apply -f -
+cat <<'EOF' | oc apply -f -
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataSource
 metadata:
-  name: ${IMAGE_NAME}
+  name: rhel9-golden-poc
   namespace: openshift-virtualization-os-images
 spec:
   source:
     pvc:
-      name: ${IMAGE_NAME}
+      name: rhel9-golden-poc
       namespace: openshift-virtualization-os-images
 EOF
 ```
 
-DataSource 상태를 확인합니다. `Ready` 상태여야 합니다.
+DataSource 상태를 확인합니다. `READY=true` 여야 합니다.
 
 ```bash
-oc get datasource "${IMAGE_NAME}" -n openshift-virtualization-os-images
+oc get datasource rhel9-golden-poc -n openshift-virtualization-os-images
+```
+
+출력 예시:
+```
+NAME                READY
+rhel9-golden-poc    true
 ```
 
 ---
 
-### 3단계: VM 생성 시 이미지 사용
+### 3단계: 어느 네임스페이스에서든 VM 생성
 
-등록된 DataSource를 VM의 `dataVolumeTemplates`에서 참조합니다.
+VM의 `dataVolumeTemplates`에서 `sourceRef`로 DataSource를 참조합니다.
+CDI가 VM이 생성되는 네임스페이스로 PVC를 **자동으로 클론**합니다.
 
-```yaml
-dataVolumeTemplates:
-  - apiVersion: cdi.kubevirt.io/v1beta1
-    kind: DataVolume
-    metadata:
-      name: my-vm-rootdisk
+```bash
+cat <<'EOF' | oc apply -f -
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: my-rhel9-vm
+  namespace: my-project          # 어떤 네임스페이스든 가능
+spec:
+  running: false
+  template:
     spec:
-      sourceRef:
-        kind: DataSource
-        name: my-rhel9                           # 등록한 DataSource 이름
-        namespace: openshift-virtualization-os-images
-      storage:
-        resources:
-          requests:
-            storage: 30Gi
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: my-rhel9-vm-rootdisk
+  dataVolumeTemplates:
+    - apiVersion: cdi.kubevirt.io/v1beta1
+      kind: DataVolume
+      metadata:
+        name: my-rhel9-vm-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: rhel9-golden-poc                      # DataSource 이름
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+EOF
+```
+
+VM 생성 후 클론 진행 상황을 확인합니다.
+
+```bash
+# DataVolume 클론 상태 확인
+oc get datavolume my-rhel9-vm-rootdisk -n my-project
+
+# 클론 완료 후 VM 시작
+virtctl start my-rhel9-vm -n my-project
 ```
 
 ---
