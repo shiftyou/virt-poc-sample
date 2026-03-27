@@ -1,0 +1,22 @@
+# =============================================================================
+# DataSource - 커스텀 이미지를 Virtualization UI에 등록
+#
+# DataVolume 임포트 완료 후 이 DataSource를 생성하면
+# Virtualization > Create VirtualMachine > From catalog 에서 이미지를 선택할 수 있습니다.
+#
+# 사용법:
+#   MY_IMAGE_NAME=my-custom-os MY_DV_NAME=my-custom-os-dv \
+#   envsubst < datasource.yaml | oc apply -f -
+# =============================================================================
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataSource
+metadata:
+  name: ${MY_IMAGE_NAME}
+  namespace: openshift-virtualization-os-images
+  labels:
+    app: custom-os-image
+spec:
+  source:
+    pvc:
+      namespace: openshift-virtualization-os-images
+      name: ${MY_DV_NAME}

@@ -10,9 +10,10 @@
 
 1. [OpenShift Virtualization](./01-openshift-virtualization.md) - VM 생성/관리의 핵심
 2. [OADP Operator](./02-oadp-operator.md) - VM 백업/복원
-3. [Fence Agents Remediation](./03-far-operator.md) - 노드 장애 복구
+3. [Fence Agents Remediation](./03-far-operator.md) - 노드 장애 복구 (IPMI)
 4. [Self Node Remediation](./04-snr-operator.md) - 자동 노드 복구
-5. [Descheduler](./05-descheduler-operator.md) - 워크로드 재배치
+5. [Node Health Check](./06-nhc-operator.md) - 노드 상태 감지 → SNR/FAR 트리거 (SNR/FAR 설치 후)
+6. [Descheduler](./05-descheduler-operator.md) - 워크로드 재배치
 
 ---
 

@@ -6,6 +6,44 @@ airgap 환경에서 GitHub으로부터 다운로드 후 바로 사용할 수 있
 
 ---
 
+## 문서 목록
+
+### Operator 설치 및 초기화
+- [00-init/README.md](00-init/README.md) — Operator 설치 순서 및 개요
+- [00-init/pvc-to-qcow2.md](00-init/pvc-to-qcow2.md) — PVC를 qcow2 이미지로 만드는 방법
+
+### 기본 환경 구성
+- [01-environment/README.md](01-environment/README.md) — 환경 구성 개요
+- [01-environment/htpasswd/README.md](01-environment/htpasswd/README.md) — htpasswd 사용자 생성
+- [01-environment/vm-template/README.md](01-environment/vm-template/README.md) — VM 템플릿 생성
+- [01-environment/custom-image/README.md](01-environment/custom-image/README.md) — 커스텀 이미지 업로드
+- [01-environment/image-registry/README.md](01-environment/image-registry/README.md) — 내부 이미지 레지스트리 + VDDK
+- [01-environment/nncp/README.md](01-environment/nncp/README.md) — NodeNetworkConfigurationPolicy
+- [01-environment/nad/README.md](01-environment/nad/README.md) — NetworkAttachmentDefinition
+- [01-environment/far/README.md](01-environment/far/README.md) — Fence Agents Remediation
+- [01-environment/snr/README.md](01-environment/snr/README.md) — Self Node Remediation + NHC
+- [01-environment/oadp/README.md](01-environment/oadp/README.md) — OADP 설정
+- [01-environment/minio/README.md](01-environment/minio/README.md) — MinIO (S3 백엔드)
+- [01-environment/grafana/README.md](01-environment/grafana/README.md) — Grafana 모니터링
+
+### 기능 테스트
+- [02-tests/README.md](02-tests/README.md) — 테스트 목록 개요
+- [02-tests/console-ip-restriction/README.md](02-tests/console-ip-restriction/README.md) — Console 접근 IP 제한
+- [02-tests/resource-limits/README.md](02-tests/resource-limits/README.md) — LimitRange + ResourceQuota
+- [02-tests/descheduler/README.md](02-tests/descheduler/README.md) — Descheduler 설정
+- [02-tests/alerts/README.md](02-tests/alerts/README.md) — PrometheusRule Alert
+- [02-tests/network-policy/README.md](02-tests/network-policy/README.md) — NetworkPolicy
+- [02-tests/oadp-backup-restore/README.md](02-tests/oadp-backup-restore/README.md) — VM 백업/복원
+- [02-tests/cpu-overcommit/README.md](02-tests/cpu-overcommit/README.md) — CPU Overcommit
+- [02-tests/node-maintenance/README.md](02-tests/node-maintenance/README.md) — 노드 유지보수
+- [02-tests/node-exporter/README.md](02-tests/node-exporter/README.md) — Node Exporter
+- [02-tests/vm-live-migration/README.md](02-tests/vm-live-migration/README.md) — VM 라이브 마이그레이션
+- [02-tests/vm-snapshot/README.md](02-tests/vm-snapshot/README.md) — VM 스냅샷/복원
+- [02-tests/multus-network/README.md](02-tests/multus-network/README.md) — Multus 멀티 네트워크
+- [02-tests/storage-dv/README.md](02-tests/storage-dv/README.md) — DataVolume + StorageProfile
+
+---
+
 ## 전제 조건
 
 - OpenShift 4.20 이상
@@ -25,13 +63,13 @@ cd virt-poc-sample
 ./setup.sh
 
 # 3. Operator 설치 (가이드 참조)
-# 00-operators/README.md 참조
+# → 00-init/README.md
 
 # 4. 기본 환경 구성
-# 01-environment/README.md 참조
+# → 01-environment/README.md
 
 # 5. 기능 테스트
-# 02-tests/README.md 참조
+# → 02-tests/README.md
 ```
 
 ---
@@ -60,7 +98,7 @@ virt-poc-sample/
 ├── setup.sh                    # 환경 변수 수집 및 env.conf 생성
 ├── env.conf.example            # 환경 변수 예시 파일
 │
-├── 00-operators/               # Operator 설치 가이드
+├── 00-init/               # Operator 설치 가이드
 │   ├── 01-openshift-virtualization.md
 │   ├── 02-oadp-operator.md
 │   ├── 03-far-operator.md

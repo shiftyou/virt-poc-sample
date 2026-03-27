@@ -1,16 +1,25 @@
-# =============================================================================
-# [Console YAML Sample] Console Route IP 제한
-# OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
-#
-# 주의: 허용 IP를 실제 환경에 맞게 수정하세요.
-# 잘못된 설정 시 Console 접근이 차단됩니다!
-# =============================================================================
-apiVersion: route.openshift.io/v1
-kind: Route
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
 metadata:
-  name: console
-  namespace: openshift-console
-  annotations:
-    # 허용할 IP 목록 (공백으로 구분)
-    # 예: "10.0.0.0/8 192.168.1.0/24"
-    haproxy.router.openshift.io/ip_whitelist: "10.0.0.0/8"
+  name: poc-console-ip-restriction
+spec:
+  title: "POC Console Route IP 접근 제한"
+  description: "Console Route에 IP 화이트리스트(${CONSOLE_ALLOWED_CIDRS})를 설정합니다. 경고: 현재 접속 IP가 CIDR에 포함되어 있는지 반드시 확인 후 적용하세요!"
+  targetResource:
+    apiVersion: route.openshift.io/v1
+    kind: Route
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] Console Route IP 접근 제한
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    # 참조 변수: CONSOLE_ALLOWED_CIDRS=${CONSOLE_ALLOWED_CIDRS}
+    #
+    # 경고: 현재 접속 IP가 CIDR에 포함되어 있는지 반드시 확인 후 적용하세요!
+    # =============================================================================
+    apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: console
+      namespace: openshift-console
+      annotations:
+        haproxy.router.openshift.io/ip_whitelist: "${CONSOLE_ALLOWED_CIDRS}"
