@@ -6,7 +6,6 @@
 #   1. poc-far 네임스페이스 생성
 #   2. FenceAgentsRemediationTemplate 생성 (IPMI 설정)
 #   3. NodeHealthCheck CR 생성 (FAR 연동)
-#   4. poc 템플릿으로 VM 2개 배포 → TEST_NODE에 배치
 #
 # 사용법: ./09-far.sh
 # =============================================================================
@@ -37,22 +36,6 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
-ensure_runstrategy() {
-    local vm="$1" ns="$2"
-    local running
-    running=$(oc get vm "$vm" -n "$ns" \
-        -o jsonpath='{.spec.running}' 2>/dev/null || true)
-    [ -z "$running" ] && return 0
-    local rs="Halted"
-    [ "$running" = "true" ] && rs="Always"
-    oc patch vm "$vm" -n "$ns" --type=json -p "[
-      {\"op\":\"remove\",\"path\":\"/spec/running\"},
-      {\"op\":\"add\",\"path\":\"/spec/runStrategy\",\"value\":\"${rs}\"}
-    ]" &>/dev/null || true
-}
-
 # =============================================================================
 # 사전 확인
 # =============================================================================
@@ -79,12 +62,6 @@ preflight() {
     fi
     print_ok "Node Health Check Operator 확인"
 
-    if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
-        exit 1
-    fi
-    print_ok "poc Template 확인"
-
     if ! oc get node "$NODE1" &>/dev/null; then
         print_error "노드 $NODE1 를 찾을 수 없습니다. env.conf 의 TEST_NODE 를 확인하세요."
         exit 1
@@ -106,7 +83,7 @@ preflight() {
 # 1단계: 네임스페이스 생성
 # =============================================================================
 step_namespace() {
-    print_step "1/4  네임스페이스 생성 (${NS})"
+    print_step "1/3  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"
@@ -120,7 +97,7 @@ step_namespace() {
 # 2단계: FenceAgentsRemediationTemplate 생성
 # =============================================================================
 step_far_template() {
-    print_step "2/4  FenceAgentsRemediationTemplate 생성"
+    print_step "2/3  FenceAgentsRemediationTemplate 생성"
 
     # 워커 노드 목록 수집 → nodeparameters 블록 생성
     # '--' 로 시작하는 YAML 키는 파서 오류를 일으킬 수 있으므로 따옴표로 감싸서 생성
@@ -164,7 +141,7 @@ step_far_template() {
 # 3단계: NodeHealthCheck 생성
 # =============================================================================
 step_nhc() {
-    print_step "3/4  NodeHealthCheck 생성 (FAR 연동)"
+    print_step "3/3  NodeHealthCheck 생성 (FAR 연동)"
 
     cat > nhc-far.yaml <<EOF
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -196,39 +173,6 @@ EOF
 }
 
 # =============================================================================
-# 4단계: VM 배포
-# =============================================================================
-step_vms() {
-    print_step "4/4  VM 배포 → ${NODE1}"
-
-    for VM in poc-far-vm-1 poc-far-vm-2; do
-        if oc get vm "$VM" -n "$NS" &>/dev/null; then
-            print_ok "VM $VM 이미 존재 — 스킵"
-            continue
-        fi
-
-        oc process -n openshift poc -p NAME="$VM" | \
-        sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
-        oc apply -n "$NS" -f "${VM}.yaml"
-
-        ensure_runstrategy "$VM" "$NS"
-        oc patch vm "$VM" -n "$NS" --type=merge -p "{
-          \"spec\": {
-            \"template\": {
-              \"spec\": {
-                \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
-                \"evictionStrategy\": \"LiveMigrate\"
-              }
-            }
-          }
-        }"
-
-        virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 배포 완료 (노드: ${NODE1})"
-    done
-}
-
-# =============================================================================
 # 완료 요약
 # =============================================================================
 print_summary() {
@@ -236,9 +180,6 @@ print_summary() {
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}  완료! FAR 실습 환경이 준비되었습니다.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "  VM 배치 확인:"
-    echo -e "    ${CYAN}oc get vmi -n ${NS} -o wide${NC}"
     echo ""
     echo -e "  NHC 상태 확인:"
     echo -e "    ${CYAN}oc get nodehealthcheck poc-far-nhc${NC}"
@@ -270,7 +211,6 @@ main() {
     step_namespace
     step_far_template
     step_nhc
-    step_vms
     print_summary
 }
 
