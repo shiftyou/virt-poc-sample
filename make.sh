@@ -20,6 +20,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 RED='\033[0;31m'
+DIM='\033[2m'
 NC='\033[0m'
 
 print_info()  { echo -e "${CYAN}[make]${NC} $1"; }
@@ -49,29 +50,107 @@ if [ ${#STEPS[@]} -eq 0 ]; then
     exit 1
 fi
 
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}  virt-poc-sample 전체 실행${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "  실행 단계:"
-for dir in "${STEPS[@]}"; do
-    echo -e "    ${YELLOW}▶${NC} ${dir}/${dir}.sh"
+TOTAL=${#STEPS[@]}
+
+# 각 스텝 상태 배열 (인덱스 대응): pending / ok / skip / fail
+STEP_RESULTS=()
+for i in $(seq 0 $((TOTAL - 1))); do
+    STEP_RESULTS+=("pending")
 done
+
+# 스텝 설명
+step_desc() {
+    case "$1" in
+        01-template)        echo "DataVolume 업로드 → DataSource → Template 등록" ;;
+        02-network)         echo "NNCP Linux Bridge + NAD + VM 생성" ;;
+        03-vm-management)   echo "네임스페이스 + NAD 준비" ;;
+        04-network-policy)  echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
+        05-resource-quota)  echo "ResourceQuota — CPU·Memory·Pod·PVC 제한" ;;
+        06-descheduler)     echo "Descheduler — VM 자동 재배치 (Operator 필요)" ;;
+        07-node-maintenance) echo "Node Maintenance — 노드 유지보수 VM Migration (Operator 필요)" ;;
+        08-snr)             echo "SNR — 노드 자가 재시작 복구 (Operator 필요)" ;;
+        09-far)             echo "FAR — IPMI/BMC 전원 재시작 복구 (Operator 필요)" ;;
+        10-liveness-probe)  echo "VM Liveness Probe — HTTP·TCP·Exec" ;;
+        11-alert)           echo "VM Alert — PrometheusRule 알림" ;;
+        12-node-exporter)   echo "Node Exporter — 커스텀 메트릭 수집" ;;
+        13-monitoring)      echo "Grafana 모니터링 (Operator 필요)" ;;
+        14-oadp)            echo "OADP — VM 백업/복원 (Operator 필요)" ;;
+        15-hyperconverged)  echo "HyperConverged — CPU Overcommit 설정" ;;
+        16-mtv)             echo "MTV — VMware → OpenShift 마이그레이션 (Operator 필요)" ;;
+        *)                  echo "$1" ;;
+    esac
+}
+
+# 진행 상황 테이블 출력
+print_progress() {
+    local completed=0 skipped=0 failed=0
+    for r in "${STEP_RESULTS[@]}"; do
+        case "$r" in
+            ok)   completed=$((completed+1)) ;;
+            skip) skipped=$((skipped+1)) ;;
+            fail) failed=$((failed+1)) ;;
+        esac
+    done
+
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    printf "${CYAN}  진행 상황  완료:%-3d 건너뜀:%-3d 실패:%-3d / 전체:%-3d${NC}\n" \
+        "$completed" "$skipped" "$failed" "$TOTAL"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    printf "  %-28s %s\n" "Step" "Status"
+    echo "  ──────────────────────────────────────────────────────────"
+
+    local i=0
+    for dir in "${STEPS[@]}"; do
+        local result="${STEP_RESULTS[$i]}"
+        local desc
+        desc=$(step_desc "$dir")
+        case "$result" in
+            ok)
+                printf "  ${GREEN}[✔]${NC} %-26s ${GREEN}→ 완료${NC}  ${DIM}%s${NC}\n" \
+                    "$dir" "$desc"
+                ;;
+            skip)
+                printf "  ${YELLOW}[~]${NC} %-26s ${YELLOW}→ 건너뜀${NC}  ${DIM}%s${NC}\n" \
+                    "$dir" "$desc"
+                ;;
+            fail)
+                printf "  ${RED}[✘]${NC} %-26s ${RED}→ 실패${NC}  ${DIM}%s${NC}\n" \
+                    "$dir" "$desc"
+                ;;
+            pending)
+                printf "  ${DIM}[·] %-26s   대기 중  %s${NC}\n" \
+                    "$dir" "$desc"
+                ;;
+        esac
+        i=$((i+1))
+    done
+    echo "  ──────────────────────────────────────────────────────────"
+    echo ""
+}
+
+# 시작 헤더
 echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}  virt-poc-sample 전체 실행 (총 ${TOTAL}단계)${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+# 초기 상태 테이블 출력
+print_progress
 
 # 순서대로 실행
-TOTAL=${#STEPS[@]}
 IDX=0
 for dir in "${STEPS[@]}"; do
-    IDX=$((IDX + 1))
     SH_FILE="${SCRIPT_DIR}/${dir}/${dir}.sh"
 
     echo ""
+    IDX=$((IDX + 1))
     echo -e "${CYAN}━━━ [${IDX}/${TOTAL}] ${dir} ━━━${NC}"
 
     if [ ! -f "$SH_FILE" ]; then
         print_error "스크립트를 찾을 수 없습니다: ${dir}/${dir}.sh — 건너뜁니다"
+        STEP_RESULTS[$((IDX-1))]="skip"
+        print_progress
         continue
     fi
 
@@ -83,14 +162,21 @@ for dir in "${STEPS[@]}"; do
     (cd "$OUT_DIR" && bash "$SH_FILE")
     EXIT_CODE=$?
     set -e
+
     if [ $EXIT_CODE -eq 0 ]; then
+        STEP_RESULTS[$((IDX-1))]="ok"
         print_ok "${dir} 완료"
     elif [ $EXIT_CODE -eq 77 ]; then
+        STEP_RESULTS[$((IDX-1))]="skip"
         echo -e "${YELLOW}[make]${NC} ${dir} 건너뜀 (오퍼레이터 미설치)"
     else
+        STEP_RESULTS[$((IDX-1))]="fail"
         print_error "${dir} 실패 (exit code: ${EXIT_CODE})"
+        print_progress
         exit $EXIT_CODE
     fi
+
+    print_progress
 done
 
 echo ""
