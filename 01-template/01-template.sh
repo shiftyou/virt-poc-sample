@@ -69,7 +69,7 @@ preflight() {
     if [ -n "${1:-}" ]; then
         IMAGE_PATH="$1"
     else
-        IMAGE_PATH="${SCRIPT_DIR}/../../vm-images/rhel9-poc-golden.qcow2"
+        IMAGE_PATH="${SCRIPT_DIR}/../vm-images/rhel9-poc-golden.qcow2"
     fi
 
     if [ ! -f "$IMAGE_PATH" ]; then
