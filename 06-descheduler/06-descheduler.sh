@@ -4,12 +4,13 @@
 #
 # Descheduler 실습 환경 구성
 #   1. poc-descheduler 네임스페이스 생성
-#   2. poc 템플릿으로 3개 VM을 TEST_NODE에 배포
+#   2. poc 템플릿으로 3개 VM 배포 (nodeSelector 없이 아무 노드에나 기동)
 #      - vm-1, vm-2 : descheduler 대상
-#      - vm-fixed   : PDB로 보호 (descheduler 제외)
-#   3. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
-#   4. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
-#   5. 트리거 VM 배포 → 노드 임계값 초과 → Descheduler 발동
+#      - vm-fixed   : annotation으로 descheduler 제외
+#   3. Running 후 3개 VM을 TEST_NODE로 Live Migration (nodeSelector 임시 → 완료 후 제거)
+#   4. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
+#   5. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
+#   6. 트리거 VM을 TEST_NODE에 배포 → 노드 임계값 초과 → Descheduler 발동
 #
 # 사용법: ./06-descheduler.sh
 # =============================================================================
@@ -95,10 +96,10 @@ step_namespace() {
 }
 
 # =============================================================================
-# 2단계: 3개 VM 배포 (NODE1 고정)
+# 2단계: 3개 VM 배포 (nodeSelector 없이 아무 노드에나 기동)
 # =============================================================================
 step_vms() {
-    print_step "2/5  VM 3개 배포 (노드: ${NODE1})"
+    print_step "2/6  VM 3개 배포 (nodeSelector 없음 — 아무 노드에나 기동)"
 
     # vm-1, vm-2: descheduler 대상 / vm-fixed: annotation으로 descheduler 제외
     for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
@@ -112,12 +113,11 @@ step_vms() {
         echo "생성된 파일: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
-        # nodeSelector + CPU/Memory request + LiveMigrate 전략 패치
+        # CPU/Memory request + LiveMigrate 전략 패치 (nodeSelector 없음)
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
             \"template\": {
               \"spec\": {
-                \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
                 \"evictionStrategy\": \"LiveMigrate\",
                 \"domain\": {
                   \"resources\": {
@@ -149,7 +149,108 @@ step_vms() {
         fi
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 배포 완료 (node: ${NODE1}, cpu: ${VM_CPU_REQUEST})"
+        print_ok "VM $VM 배포 완료 (cpu: ${VM_CPU_REQUEST})"
+    done
+}
+
+# =============================================================================
+# 3단계: 3개 VM을 NODE1으로 Live Migration
+# =============================================================================
+step_migrate_to_node1() {
+    print_step "3/6  VM Live Migration → ${NODE1}"
+
+    # Running 상태 대기 (VM당 최대 3분)
+    print_info "VM Running 상태 대기 중..."
+    for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
+        local retries=36
+        local i=0
+        while [ $i -lt $retries ]; do
+            local phase
+            phase=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            if [ "$phase" = "Running" ]; then
+                print_ok "VMI $VM Running"
+                break
+            fi
+            printf "  [%d/%d] %s 대기 중... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
+            sleep 5
+            i=$((i+1))
+        done
+        echo ""
+        if [ $i -eq $retries ]; then
+            print_warn "$VM 가 Running 상태가 되지 않았습니다. Migration 을 건너뜁니다."
+        fi
+    done
+
+    # 각 VM을 NODE1으로 Live Migration
+    for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
+        # 현재 노드 확인
+        local current_node
+        current_node=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.nodeName}' 2>/dev/null || true)
+
+        if [ "$current_node" = "$NODE1" ]; then
+            print_ok "VM $VM 이미 ${NODE1} 에 있음 — Migration 스킵"
+            continue
+        fi
+
+        print_info "VM $VM Migration 시작: ${current_node} → ${NODE1}"
+
+        # nodeSelector를 NODE1으로 임시 설정 → Migration 목적지 유도
+        oc patch vm "$VM" -n "$NS" --type=merge -p "{
+          \"spec\": {
+            \"template\": {
+              \"spec\": {
+                \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"}
+              }
+            }
+          }
+        }"
+
+        # VMIM 생성
+        local VMIM_NAME="migrate-${VM}-to-node1"
+        cat > "vmim-${VM}.yaml" <<EOF
+apiVersion: kubevirt.io/v1
+kind: VirtualMachineInstanceMigration
+metadata:
+  name: ${VMIM_NAME}
+  namespace: ${NS}
+spec:
+  vmiName: ${VM}
+EOF
+        echo "생성된 파일: vmim-${VM}.yaml"
+        oc apply -f "vmim-${VM}.yaml"
+
+        # Migration 완료 대기 (최대 3분)
+        local retries=36
+        local i=0
+        while [ $i -lt $retries ]; do
+            local phase
+            phase=$(oc get vmim "$VMIM_NAME" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            if [ "$phase" = "Succeeded" ]; then
+                print_ok "VM $VM Migration 완료 → ${NODE1}"
+                break
+            fi
+            if [ "$phase" = "Failed" ]; then
+                print_warn "VM $VM Migration 실패"
+                break
+            fi
+            printf "  [%d/%d] Migration 진행 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
+            sleep 5
+            i=$((i+1))
+        done
+        echo ""
+
+        # nodeSelector 제거 — descheduler가 vm-1, vm-2를 자유롭게 이동할 수 있도록
+        # vm-fixed는 annotation으로 evict 방지하므로 nodeSelector 불필요
+        oc patch vm "$VM" -n "$NS" --type=merge -p '{
+          "spec": {
+            "template": {
+              "spec": {
+                "nodeSelector": null
+              }
+            }
+          }
+        }'
+        print_info "  → nodeSelector 제거 (descheduler 자유 대상)"
     done
 }
 
@@ -157,7 +258,7 @@ step_vms() {
 # 3단계: KubeDescheduler 설정 (LifecycleAndUtilization / High / 네임스페이스 한정)
 # =============================================================================
 step_descheduler() {
-    print_step "3/5  KubeDescheduler 설정"
+    print_step "4/6  KubeDescheduler 설정"
 
     cat > kubedescheduler.yaml <<'EOF'
 apiVersion: operator.openshift.io/v1
@@ -188,7 +289,7 @@ EOF
 # 5단계: 노드 리소스 분석 → 트리거 VM 산출 및 배포
 # =============================================================================
 step_trigger_vm() {
-    print_step "5/5  트리거 VM 배포 (노드 임계값 초과)"
+    print_step "6/6  트리거 VM 배포 (노드 임계값 초과)"
 
     print_info "${NODE1} 리소스 현황 분석 중..."
 
@@ -293,14 +394,14 @@ step_trigger_vm() {
     print_ok "트리거 VM poc-descheduler-vm-trigger 배포 완료"
     print_info "  → Descheduler 가 ${NODE1} 를 overutilized 로 감지하면"
     print_info "    vm-1, vm-2 가 다른 노드로 Live Migration 됩니다."
-    print_info "    vm-fixed 는 PDB 로 보호되어 이동되지 않습니다."
+    print_info "    vm-fixed 는 annotation 으로 보호되어 이동되지 않습니다."
 }
 
 # =============================================================================
 # 4단계: ConsoleYAMLSample 등록
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "4/5  ConsoleYAMLSample 등록"
+    print_step "5/6  ConsoleYAMLSample 등록"
 
     cat > consoleyamlsample-kubedescheduler.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -352,7 +453,7 @@ print_summary() {
     echo -e "  예상 결과:"
     echo -e "    poc-descheduler-vm-1       → 다른 노드로 Migration"
     echo -e "    poc-descheduler-vm-2       → 다른 노드로 Migration"
-    echo -e "    poc-descheduler-vm-fixed   → ${NODE1} 유지 (PDB 보호)"
+    echo -e "    poc-descheduler-vm-fixed   → ${NODE1} 유지 (annotation 보호)"
     echo -e "    poc-descheduler-vm-trigger → ${NODE1} 유지 (가장 최근 배포)"
     echo ""
     echo -e "  자세한 내용: 06-descheduler.md 참조"
@@ -371,6 +472,7 @@ main() {
     preflight
     step_namespace
     step_vms
+    step_migrate_to_node1
     step_descheduler
     step_consoleyamlsamples
     step_trigger_vm
