@@ -318,6 +318,7 @@ objects:
               name: '${DATA_SOURCE_NAME}'
               namespace: '${DATA_SOURCE_NAMESPACE}'
             storage:
+              storageClassName: ${STORAGE_CLASS}
               resources:
                 requests:
                   storage: 30Gi

@@ -157,7 +157,7 @@ EOF
 step_template() {
     print_step "3/4  Template 등록 (poc @ openshift)"
 
-    cat > template-poc.yaml <<'EOF'
+    cat > template-poc.yaml <<EOF
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
@@ -211,24 +211,25 @@ objects:
             }
           ]
       labels:
-        app: '${NAME}'
+        app: '\${NAME}'
         kubevirt.io/dynamic-credentials-support: 'true'
         vm.kubevirt.io/template: poc
         vm.kubevirt.io/template.revision: '1'
         vm.kubevirt.io/template.namespace: openshift
-      name: '${NAME}'
+      name: '\${NAME}'
     spec:
       dataVolumeTemplates:
         - apiVersion: cdi.kubevirt.io/v1beta1
           kind: DataVolume
           metadata:
-            name: '${NAME}'
+            name: '\${NAME}'
           spec:
             sourceRef:
               kind: DataSource
-              name: '${DATA_SOURCE_NAME}'
-              namespace: '${DATA_SOURCE_NAMESPACE}'
+              name: '\${DATA_SOURCE_NAME}'
+              namespace: '\${DATA_SOURCE_NAMESPACE}'
             storage:
+              storageClassName: ${STORAGE_CLASS}
               resources:
                 requests:
                   storage: 30Gi
@@ -240,7 +241,7 @@ objects:
             vm.kubevirt.io/os: rhel9
             vm.kubevirt.io/workload: server
           labels:
-            kubevirt.io/domain: '${NAME}'
+            kubevirt.io/domain: '\${NAME}'
             kubevirt.io/size: small
         spec:
           architecture: amd64
@@ -276,13 +277,13 @@ objects:
           terminationGracePeriodSeconds: 180
           volumes:
             - dataVolume:
-                name: '${NAME}'
+                name: '\${NAME}'
               name: rootdisk
             - cloudInitNoCloud:
                 userData: |-
                   #cloud-config
                   user: cloud-user
-                  password: ${CLOUD_USER_PASSWORD}
+                  password: \${CLOUD_USER_PASSWORD}
                   chpasswd: { expire: False }
               name: cloudinitdisk
 parameters:
