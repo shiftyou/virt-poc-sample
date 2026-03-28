@@ -71,11 +71,11 @@ preflight() {
     print_ok "대상 노드: $NODE1"
 
     if [ "${DESCHEDULER_INSTALLED:-false}" != "true" ]; then
-        print_warn "DESCHEDULER_INSTALLED=false — KubeDescheduler 설치를 확인하세요."
-        print_warn "00-operator/descheduler-operator.md 참조"
-    else
-        print_ok "Kube Descheduler Operator 확인"
+        print_warn "Kube Descheduler Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/descheduler-operator.md"
+        exit 77
     fi
+    print_ok "Kube Descheduler Operator 확인"
 
     print_info "  NS    : ${NS}"
     print_info "  NODE1 : ${NODE1}"

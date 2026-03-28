@@ -60,7 +60,7 @@ cd virt-poc-sample
 | 03 | [03-vm-management](03-vm-management/03-vm-management.md) | 네임스페이스 + NAD 준비, VM 생성·스토리지·네트워크·Static IP·Live Migration |
 | 04 | [04-network-policy](04-network-policy/04-network-policy.md) | NetworkPolicy 실습 — Deny All / Allow Same NS / Allow IP |
 | 05 | [05-resource-quota](05-resource-quota/05-resource-quota.md) | ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한 |
-| 06 | [06-descheduler](06-descheduler/06-descheduler.md) | Descheduler 실습 — 노드 과부하 시 VM 자동 재배치 |
+| 06 | [06-descheduler](06-descheduler/06-descheduler.md) | Descheduler 실습 — VM 3개를 Live Migration으로 TEST_NODE에 집중 후 트리거 VM으로 과부하 유발 → 자동 재배치 |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -114,7 +114,7 @@ virt-poc-sample/
 │
 ├── 06-descheduler/             # Descheduler 실습
 │   ├── 06-descheduler.md       # 가이드 문서
-│   └── 06-descheduler.sh       # 자동화 스크립트 (NS·VM3개·PDB·Descheduler·트리거VM)
+│   └── 06-descheduler.sh       # 자동화 스크립트 (NS·VM3개·Live Migration→NODE1·Descheduler·트리거VM)
 │
 └── disabled/                   # 비활성 항목 (참고용)
 ```

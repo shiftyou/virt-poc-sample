@@ -79,8 +79,18 @@ for dir in "${STEPS[@]}"; do
     mkdir -p "$OUT_DIR"
 
     print_info "실행: ${dir}/${dir}.sh  (생성 파일 → poc-setup/${dir}/)"
+    set +e
     (cd "$OUT_DIR" && bash "$SH_FILE")
-    print_ok "${dir} 완료"
+    EXIT_CODE=$?
+    set -e
+    if [ $EXIT_CODE -eq 0 ]; then
+        print_ok "${dir} 완료"
+    elif [ $EXIT_CODE -eq 77 ]; then
+        echo -e "${YELLOW}[make]${NC} ${dir} 건너뜀 (오퍼레이터 미설치)"
+    else
+        print_error "${dir} 실패 (exit code: ${EXIT_CODE})"
+        exit $EXIT_CODE
+    fi
 done
 
 echo ""

@@ -55,9 +55,9 @@ preflight() {
     # NMState Operator 확인 (env.conf의 NMSTATE_INSTALLED 우선, 없으면 직접 확인)
     if [ "${NMSTATE_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
-            print_error "NMState Operator 가 설치되어 있지 않습니다."
-            echo "  설치 방법: 00-operator/nmstate-operator.md 참조"
-            exit 1
+            print_warn "Kubernetes NMState Operator 미설치 → 건너뜁니다."
+            print_warn "  설치 가이드: 00-operator/nmstate-operator.md"
+            exit 77
         fi
     fi
     print_ok "NMState Operator 확인"
@@ -93,24 +93,23 @@ kind: NodeNetworkConfigurationPolicy
 metadata:
   name: poc-bridge-nncp
 spec:
-  nodeSelector:
-    node-role.kubernetes.io/worker: ""
   desiredState:
     interfaces:
-      - name: ${BRIDGE_NAME}
-        description: "POC VM용 Linux Bridge (${BRIDGE_INTERFACE} 기반)"
-        type: linux-bridge
-        state: up
-        ipv4:
-          enabled: false
-        ipv6:
-          enabled: false
-        bridge:
+      - bridge:
           options:
             stp:
               enabled: false
           port:
             - name: ${BRIDGE_INTERFACE}
+        description: Linux bridge with ${BRIDGE_INTERFACE} as a port
+        ipv4:
+          dhcp: false
+          enabled: false
+        name: ${BRIDGE_NAME}
+        state: up
+        type: linux-bridge
+  nodeSelector:
+    node-role.kubernetes.io/worker: ''
 EOF
     echo "생성된 파일: nncp-poc-bridge.yaml"
     oc apply -f nncp-poc-bridge.yaml

@@ -20,23 +20,22 @@ spec:
     apiVersion: nmstate.io/v1
     kind: NodeNetworkConfigurationPolicy
     metadata:
-      name: poc-bridge-nncp
+      name: br1
     spec:
-      nodeSelector:
-        node-role.kubernetes.io/worker: ""
       desiredState:
         interfaces:
-          - name: br1
-            description: "POC VM용 Linux Bridge (ens4 기반)"
-            type: linux-bridge
-            state: up
-            ipv4:
-              enabled: false
-            ipv6:
-              enabled: false
-            bridge:
+          - bridge:
               options:
                 stp:
                   enabled: false
               port:
                 - name: ens4
+            description: Linux bridge with ens4 as a port
+            ipv4:
+              dhcp: false
+              enabled: false
+            name: br1
+            state: up
+            type: linux-bridge
+      nodeSelector:
+        node-role.kubernetes.io/worker: ''

@@ -44,6 +44,13 @@ print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 preflight() {
     print_step "사전 확인"
 
+    # OpenShift Virtualization Operator 확인
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        exit 77
+    fi
+
     if ! oc whoami &>/dev/null; then
         print_error "OpenShift 에 로그인되어 있지 않습니다."
         exit 1
