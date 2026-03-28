@@ -9,8 +9,10 @@
 #       03-vm-management/03-vm-management.sh
 #
 # 사용법:
-#   ./make.sh          전체 실행
-#   ./make.sh clean    poc- 네임스페이스 전체 삭제
+#   ./make.sh            전체 실행
+#   ./make.sh 7          07 단계만 실행
+#   ./make.sh from 7     07 단계부터 끝까지 실행
+#   ./make.sh clean      poc- 네임스페이스 전체 삭제
 # =============================================================================
 
 set -euo pipefail
@@ -30,10 +32,14 @@ print_ok()    { echo -e "${GREEN}[make]${NC} $1"; }
 print_error() { echo -e "${RED}[make]${NC} $1"; }
 print_warn()  { echo -e "${YELLOW}[make]${NC} $1"; }
 
+# 인수 파싱
+ARG1="${1:-}"
+ARG2="${2:-}"
+
 # =============================================================================
 # clean 서브커맨드
 # =============================================================================
-if [ "${1:-}" = "clean" ]; then
+if [ "$ARG1" = "clean" ]; then
     if ! oc whoami &>/dev/null; then
         print_error "OpenShift 에 로그인되어 있지 않습니다."
         exit 1
@@ -90,14 +96,44 @@ set +a
 
 POC_SETUP_DIR="${SCRIPT_DIR}/poc-setup"
 
+# 실행 모드 결정
+MODE="all"
+START_NUM=""
+
+if [ "$ARG1" = "from" ] && [[ "$ARG2" =~ ^[0-9]+$ ]]; then
+    MODE="from"
+    START_NUM=$(printf "%02d" "$ARG2")
+elif [[ "$ARG1" =~ ^[0-9]+$ ]]; then
+    MODE="only"
+    START_NUM=$(printf "%02d" "$ARG1")
+fi
+
 # 번호 디렉토리를 정렬해서 수집
-STEPS=()
+ALL_STEPS=()
 while IFS= read -r dir; do
-    STEPS+=("$(basename "$dir")")
+    ALL_STEPS+=("$(basename "$dir")")
 done < <(find "$SCRIPT_DIR" -maxdepth 1 -type d -name '[0-9][0-9]-*' | sort)
 
-if [ ${#STEPS[@]} -eq 0 ]; then
+if [ ${#ALL_STEPS[@]} -eq 0 ]; then
     print_error "실행할 단계가 없습니다. 01-, 02-... 디렉토리 없음"
+    exit 1
+fi
+
+# 모드에 따라 실행할 단계 필터링
+STEPS=()
+for dir in "${ALL_STEPS[@]}"; do
+    NUM="${dir:0:2}"
+    NUM_INT=$((10#$NUM))
+    START_INT=$((10#${START_NUM:-0}))
+    case "$MODE" in
+        only) [ "$NUM_INT" -eq "$START_INT" ] && STEPS+=("$dir") ;;
+        from) [ "$NUM_INT" -ge "$START_INT" ] && STEPS+=("$dir") ;;
+        all)  STEPS+=("$dir") ;;
+    esac
+done
+
+if [ ${#STEPS[@]} -eq 0 ]; then
+    print_error "실행할 단계가 없습니다. (번호 ${START_NUM} 에 해당하는 디렉토리가 없음)"
     exit 1
 fi
 
@@ -183,7 +219,11 @@ print_progress() {
 # 시작 헤더
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}  virt-poc-sample 전체 실행 (총 ${TOTAL}단계)${NC}"
+case "$MODE" in
+    only) echo -e "${CYAN}  virt-poc-sample — ${START_NUM} 단계만 실행${NC}" ;;
+    from) echo -e "${CYAN}  virt-poc-sample — ${START_NUM} 단계부터 실행 (총 ${TOTAL}단계)${NC}" ;;
+    all)  echo -e "${CYAN}  virt-poc-sample 전체 실행 (총 ${TOTAL}단계)${NC}" ;;
+esac
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # 초기 상태 테이블 출력
