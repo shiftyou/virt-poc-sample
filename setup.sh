@@ -341,27 +341,22 @@ print_header "5. VDDK Image"
 print_info "VDDK image path in internal registry (push manually before use)"
 ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 
-# =============================================================================
-# 6. Console / API Access CIDR
-# =============================================================================
-print_header "6. Console / API Access CIDR"
-
-ask "Console allowed CIDRs (comma-separated, e.g. 10.0.0.0/8,192.168.1.0/24)" "0.0.0.0/0" CONSOLE_ALLOWED_CIDRS
-ask "API server allowed CIDRs (comma-separated)" "0.0.0.0/0" API_ALLOWED_CIDRS
+CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
+API_ALLOWED_CIDRS="0.0.0.0/0"
 
 # =============================================================================
-# 7. Fence Agents Remediation
+# 6. Fence Agents Remediation
 # =============================================================================
-print_header "7. Fence Agents Remediation (FAR)"
+print_header "6. Fence Agents Remediation (FAR)"
 
 ask "IPMI/BMC IP address" "192.168.1.100" FENCE_AGENT_IP
 ask "IPMI username" "admin" FENCE_AGENT_USER
 ask "IPMI password" "password" FENCE_AGENT_PASS "true"
 
 # =============================================================================
-# 8. Node Info
+# 7. Node Info
 # =============================================================================
-print_header "8. Node Info"
+print_header "7. Node Info"
 
 # Auto-detect worker nodes
 if check_oc 2>/dev/null; then
@@ -381,9 +376,9 @@ ask "Worker node names (space-separated)" "${DETECTED_WORKERS:-worker-0 worker-1
 ask "Single node name for testing" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 9. Grafana
+# 8. Grafana
 # =============================================================================
-print_header "9. Grafana"
+print_header "8. Grafana"
 
 ask "Grafana admin password" "grafana123" GRAFANA_ADMIN_PASS "true"
 
