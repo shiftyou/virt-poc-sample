@@ -85,7 +85,7 @@ NMEOF
 # 1단계: NNCP — Linux Bridge 생성
 # =============================================================================
 step_nncp() {
-    print_step "1/2  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
+    print_step "1/4  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
 
     cat > nncp-poc-bridge.yaml <<EOF
 apiVersion: nmstate.io/v1
@@ -151,7 +151,7 @@ EOF
 # 2단계: NAD — NetworkAttachmentDefinition 등록
 # =============================================================================
 step_nad() {
-    print_step "2/3  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
+    print_step "2/4  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
 
     oc new-project "${NAD_NAMESPACE}" 2>/dev/null || \
         oc project "${NAD_NAMESPACE}" 2>/dev/null || true
@@ -175,10 +175,51 @@ EOF
 }
 
 # =============================================================================
-# 3단계: ConsoleYAMLSample 등록
+# 3단계: VM 생성 (poc 템플릿 + NAD 보조 네트워크)
+# =============================================================================
+step_vm() {
+    print_step "3/4  VM 생성 (poc 템플릿 + poc-bridge-nad)"
+
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_warn "poc Template 없음 — VM 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        return
+    fi
+
+    local VM_NAME="poc-network-vm"
+
+    if oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" &>/dev/null; then
+        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+        return
+    fi
+
+    # poc 템플릿으로 VM 생성
+    oc process -n openshift poc -p NAME="$VM_NAME" > "vm-${VM_NAME}.yaml"
+    echo "생성된 파일: vm-${VM_NAME}.yaml"
+    oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
+
+    # 보조 NIC (poc-bridge-nad) 추가 패치
+    oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/domain/devices/interfaces/-",
+        "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
+      },
+      {
+        "op": "add",
+        "path": "/spec/template/spec/networks/-",
+        "value": {"name": "bridge-net", "multus": {"networkName": "poc-bridge-nad"}}
+      }
+    ]'
+
+    virtctl start "$VM_NAME" -n "$NAD_NAMESPACE" 2>/dev/null || true
+    print_ok "VM $VM_NAME 생성 완료 (eth0: masquerade, eth1: poc-bridge-nad)"
+}
+
+# =============================================================================
+# 4단계: ConsoleYAMLSample 등록
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "3/3  ConsoleYAMLSample 등록"
+    print_step "4/4  ConsoleYAMLSample 등록"
 
     cat > consoleyamlsample-nncp.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -253,12 +294,13 @@ EOF
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! NNCP + NAD 구성이 적용되었습니다.${NC}"
+    echo -e "${GREEN}  완료! NNCP + NAD 구성 및 VM 생성이 완료되었습니다.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  NNCP 상태 : ${CYAN}oc get nncp${NC}"
     echo -e "  NNCE 상태 : ${CYAN}oc get nnce${NC}"
     echo -e "  NAD 확인  : ${CYAN}oc get net-attach-def -n ${NAD_NAMESPACE}${NC}"
+    echo -e "  VM 상태   : ${CYAN}oc get vm,vmi -n ${NAD_NAMESPACE}${NC}"
     echo ""
 }
 
@@ -268,12 +310,13 @@ print_summary() {
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  네트워크 구성: NNCP + NAD${NC}"
+    echo -e "${CYAN}  네트워크 구성: NNCP + NAD + VM${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight
     step_nncp
     step_nad
+    step_vm
     step_consoleyamlsamples
     print_summary
 }
