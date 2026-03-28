@@ -38,7 +38,8 @@ cd virt-poc-sample
 
 | 오퍼레이터 | 가이드 | 필수 여부 |
 |-----------|--------|----------|
-| OpenShift Virtualization | — | 필수 |
+| OpenShift Virtualization | [openshift-virtualization-operator.md](00-operator/openshift-virtualization-operator.md) | 필수 |
+| Migration Toolkit for Virtualization (MTV) | [mtv-operator.md](00-operator/mtv-operator.md) | VM 마이그레이션 사용 시 |
 | Kubernetes NMState | [nmstate-operator.md](00-operator/nmstate-operator.md) | NNCP/NAD 사용 시 필수 |
 | OADP | [oadp-operator.md](00-operator/oadp-operator.md) | 백업/복원 사용 시 |
 | Fence Agents Remediation | [far-operator.md](00-operator/far-operator.md) | 노드 장애 복구 사용 시 |
@@ -73,13 +74,15 @@ virt-poc-sample/
 ├── env.conf.example
 │
 ├── 00-operator/                # 오퍼레이터 설치 가이드 (사전 준비)
+│   ├── openshift-virtualization-operator.md  # 필수
+│   ├── mtv-operator.md
+│   ├── nmstate-operator.md
 │   ├── oadp-operator.md
 │   ├── far-operator.md
 │   ├── snr-operator.md
 │   ├── descheduler-operator.md
 │   ├── nhc-operator.md
 │   ├── node-maintenance-operator.md
-│   ├── nmstate-operator.md
 │   └── grafana-operator.md
 │
 ├── 01-template/                # RHEL9 황금 이미지 → Template 등록
