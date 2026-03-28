@@ -447,80 +447,6 @@ EOF
 print_ok "env.conf created: $ENV_FILE"
 
 # =============================================================================
-# Generate rendered YAMLs
-# =============================================================================
-print_header "Generating rendered YAMLs..."
-
-RENDERED_DIR="./poc-setup"
-
-# Clean existing rendered directory
-if [ -d "$RENDERED_DIR" ]; then
-    rm -rf "$RENDERED_DIR"
-fi
-
-# Load env.conf
-set -a
-# shellcheck source=./env.conf
-source "$ENV_FILE"
-set +a
-
-RENDERED_COUNT=0
-
-# Build allowed variable list from env.conf (protect OpenShift Template parameters)
-# Only variables defined in env.conf are substituted; ${NAME}, ${NAMESPACE} etc. are left as-is
-ALLOWED_VARS=$(grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | tr '\n' ' ')
-
-# awk renderer: substitutes only allowed vars from env.conf
-render_file() {
-    local src="$1" dst="$2"
-    mkdir -p "$(dirname "$dst")"
-    awk -v allowed="$ALLOWED_VARS" '
-    BEGIN { n = split(allowed, vars, " "); for (i=1;i<=n;i++) ok[vars[i]]=1 }
-    {
-        while (match($0, /\$\{[A-Z_][A-Z0-9_]*\}/)) {
-            varname = substr($0, RSTART+2, RLENGTH-3)
-            val = (varname in ok) ? ENVIRON[varname] : "${" varname "}"
-            $0 = substr($0, 1, RSTART-1) val substr($0, RSTART+RLENGTH)
-        }
-        print
-    }' "$src" > "$dst"
-}
-
-# Collect render targets:
-#   1) .sh in numbered dirs  → poc-setup/XX-name/XX-name.sh
-#   2) yaml files with ${...} in numbered dirs → poc-setup/XX-name/*.yaml
-print_info "Scanning files to render..."
-
-RENDER_SRCS=()
-while IFS= read -r f; do
-    RENDER_SRCS+=("$f")
-done < <(find . -maxdepth 2 -path './[0-9][0-9]-*/*.sh' 2>/dev/null | sort)
-while IFS= read -r f; do
-    RENDER_SRCS+=("$f")
-done < <(grep -rl '\${' . --include="*.yaml" \
-    --exclude-dir=poc-setup --exclude-dir=disabled 2>/dev/null | \
-    grep '\./[0-9][0-9]-' | sort -u)
-
-TOTAL_FILES=${#RENDER_SRCS[@]}
-print_info "Found ${TOTAL_FILES} files to render."
-echo ""
-
-for src_file in "${RENDER_SRCS[@]}"; do
-    RENDERED_COUNT=$((RENDERED_COUNT + 1))
-    rel_path="${src_file#./}"
-    out_file="${RENDERED_DIR}/${rel_path}"
-
-    printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
-    render_file "$src_file" "$out_file"
-
-    if [[ "$out_file" == *.sh ]]; then
-        chmod +x "$out_file"
-    fi
-done
-
-print_ok "Total ${RENDERED_COUNT} files generated in poc-setup/"
-
-# =============================================================================
 # Done
 # =============================================================================
 echo ""
@@ -535,5 +461,4 @@ echo -e "      00-operator/README.md"
 echo -e ""
 echo -e "  ${CYAN}[2] Run make.sh${NC}"
 echo -e "      ./make.sh"
-echo -e "          01-make-template  — Upload qcow2 → DataSource → Template"
 echo ""
