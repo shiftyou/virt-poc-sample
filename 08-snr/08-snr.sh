@@ -123,6 +123,7 @@ kind: NodeHealthCheck
 metadata:
   name: poc-snr-nhc
 spec:
+  minHealthy: "51%"
   remediationTemplate:
     apiVersion: self-node-remediation.medik8s.io/v1alpha1
     kind: SelfNodeRemediationTemplate

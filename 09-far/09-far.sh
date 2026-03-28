@@ -153,6 +153,7 @@ kind: NodeHealthCheck
 metadata:
   name: poc-far-nhc
 spec:
+  minHealthy: "51%"
   remediationTemplate:
     apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
     kind: FenceAgentsRemediationTemplate
