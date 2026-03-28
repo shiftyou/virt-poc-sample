@@ -157,7 +157,7 @@ step_vms() {
 # 3단계: KubeDescheduler 설정 (LifecycleAndUtilization / High / 네임스페이스 한정)
 # =============================================================================
 step_descheduler() {
-    print_step "3/4  KubeDescheduler 설정"
+    print_step "3/5  KubeDescheduler 설정"
 
     cat > kubedescheduler.yaml <<'EOF'
 apiVersion: operator.openshift.io/v1
@@ -188,7 +188,7 @@ EOF
 # 5단계: 노드 리소스 분석 → 트리거 VM 산출 및 배포
 # =============================================================================
 step_trigger_vm() {
-    print_step "4/4  트리거 VM 배포 (노드 임계값 초과)"
+    print_step "5/5  트리거 VM 배포 (노드 임계값 초과)"
 
     print_info "${NODE1} 리소스 현황 분석 중..."
 
@@ -297,6 +297,44 @@ step_trigger_vm() {
 }
 
 # =============================================================================
+# 4단계: ConsoleYAMLSample 등록
+# =============================================================================
+step_consoleyamlsamples() {
+    print_step "4/5  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-kubedescheduler.yaml <<EOF
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-kubedescheduler
+spec:
+  title: "POC KubeDescheduler 설정"
+  description: "LifecycleAndUtilization 프로파일로 과부하 노드의 VM을 자동 재배치합니다. High 임계값: underutilized<40%, overutilized>60%. Kube Descheduler Operator 설치 후 적용하세요."
+  targetResource:
+    apiVersion: operator.openshift.io/v1
+    kind: KubeDescheduler
+  yaml: |
+    apiVersion: operator.openshift.io/v1
+    kind: KubeDescheduler
+    metadata:
+      name: cluster
+      namespace: openshift-kube-descheduler-operator
+    spec:
+      deschedulingIntervalSeconds: 60
+      profiles:
+        - LifecycleAndUtilization
+      profileCustomizations:
+        devLowNodeUtilizationThresholds: High
+        namespaces:
+          included:
+            - ${NS}    # 대상 네임스페이스로 변경
+EOF
+    echo "생성된 파일: consoleyamlsample-kubedescheduler.yaml"
+    oc apply -f consoleyamlsample-kubedescheduler.yaml
+    print_ok "ConsoleYAMLSample poc-kubedescheduler 등록 완료"
+}
+
+# =============================================================================
 # 완료 요약
 # =============================================================================
 print_summary() {
@@ -334,6 +372,7 @@ main() {
     step_namespace
     step_vms
     step_descheduler
+    step_consoleyamlsamples
     step_trigger_vm
     print_summary
 }

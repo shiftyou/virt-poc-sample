@@ -83,7 +83,7 @@ step_namespace() {
 # 2단계: NAD 등록
 # =============================================================================
 step_nad() {
-    print_step "2/2  NAD — NetworkAttachmentDefinition 등록 (${VM_NS})"
+    print_step "2/3  NAD — NetworkAttachmentDefinition 등록 (${VM_NS})"
 
     cat > nad-vm-bridge.yaml <<EOF
 apiVersion: k8s.cni.cncf.io/v1
@@ -100,6 +100,80 @@ EOF
     oc apply -f nad-vm-bridge.yaml
 
     print_ok "NAD poc-bridge-nad 등록 완료 (namespace: ${VM_NS})"
+}
+
+# =============================================================================
+# 3단계: ConsoleYAMLSample 등록
+# =============================================================================
+step_consoleyamlsamples() {
+    print_step "3/3  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-virtualmachine.yaml <<EOF
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-virtualmachine
+spec:
+  title: "POC VirtualMachine 생성 (Bridge 네트워크 연결)"
+  description: "poc 템플릿 기반 VM에 Linux Bridge NAD(${BRIDGE_NAME})를 보조 네트워크로 연결합니다. poc Template 및 NAD 등록 후 적용하세요."
+  targetResource:
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+  yaml: |
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: poc-vm
+      namespace: ${VM_NS}
+    spec:
+      running: false
+      template:
+        spec:
+          domain:
+            cpu:
+              cores: 1
+              sockets: 1
+              threads: 1
+            devices:
+              disks:
+                - disk:
+                    bus: virtio
+                  name: rootdisk
+              interfaces:
+                - masquerade: {}
+                  model: virtio
+                  name: default
+                - bridge: {}
+                  model: virtio
+                  name: bridge-net
+            memory:
+              guest: 2Gi
+          networks:
+            - name: default
+              pod: {}
+            - name: bridge-net
+              multus:
+                networkName: poc-bridge-nad
+          volumes:
+            - dataVolume:
+                name: poc-vm
+              name: rootdisk
+      dataVolumeTemplates:
+        - metadata:
+            name: poc-vm
+          spec:
+            sourceRef:
+              kind: DataSource
+              name: poc
+              namespace: openshift-virtualization-os-images
+            storage:
+              resources:
+                requests:
+                  storage: 30Gi
+EOF
+    echo "생성된 파일: consoleyamlsample-virtualmachine.yaml"
+    oc apply -f consoleyamlsample-virtualmachine.yaml
+    print_ok "ConsoleYAMLSample poc-virtualmachine 등록 완료"
 }
 
 # =============================================================================
@@ -135,6 +209,7 @@ main() {
     preflight
     step_namespace
     step_nad
+    step_consoleyamlsamples
     print_summary
 }
 

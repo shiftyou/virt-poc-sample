@@ -148,7 +148,7 @@ EOF
 # 3단계: Template 등록
 # =============================================================================
 step_template() {
-    print_step "3/3  Template 등록 (poc @ openshift)"
+    print_step "3/4  Template 등록 (poc @ openshift)"
 
     cat > template-poc.yaml <<'EOF'
 apiVersion: template.openshift.io/v1
@@ -301,6 +301,40 @@ EOF
 }
 
 # =============================================================================
+# 4단계: ConsoleYAMLSample 등록
+# =============================================================================
+step_consoleyamlsamples() {
+    print_step "4/4  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-datasource.yaml <<EOF
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-datasource
+spec:
+  title: "POC DataSource 등록"
+  description: "Golden Image PVC를 참조하는 DataSource를 등록합니다. virtctl image-upload 로 PVC 업로드 후 적용하세요."
+  targetResource:
+    apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataSource
+  yaml: |
+    apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataSource
+    metadata:
+      name: poc
+      namespace: openshift-virtualization-os-images
+    spec:
+      source:
+        pvc:
+          name: poc-golden
+          namespace: openshift-virtualization-os-images
+EOF
+    echo "생성된 파일: consoleyamlsample-datasource.yaml"
+    oc apply -f consoleyamlsample-datasource.yaml
+    print_ok "ConsoleYAMLSample poc-datasource 등록 완료"
+}
+
+# =============================================================================
 # 완료 요약
 # =============================================================================
 print_summary() {
@@ -333,6 +367,7 @@ main() {
     step_upload
     step_datasource
     step_template
+    step_consoleyamlsamples
     print_summary
 }
 

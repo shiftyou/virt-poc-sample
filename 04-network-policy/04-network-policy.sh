@@ -65,7 +65,7 @@ preflight() {
 # 1단계: 네임스페이스 생성
 # =============================================================================
 step_namespaces() {
-    print_step "1/5  네임스페이스 생성"
+    print_step "1/6  네임스페이스 생성"
 
     for NS in "$NS1" "$NS2"; do
         if oc get namespace "$NS" &>/dev/null; then
@@ -81,7 +81,7 @@ step_namespaces() {
 # 2단계: NAD 등록
 # =============================================================================
 step_nad() {
-    print_step "2/5  NAD 등록 (${NS1}, ${NS2})"
+    print_step "2/6  NAD 등록 (${NS1}, ${NS2})"
 
     for NS in "$NS1" "$NS2"; do
         cat > "nad-${NS}.yaml" <<EOF
@@ -105,7 +105,7 @@ EOF
 # 3단계: Default Deny All NetworkPolicy
 # =============================================================================
 step_deny_all() {
-    print_step "3/5  NetworkPolicy — Default Deny All"
+    print_step "3/6  NetworkPolicy — Default Deny All"
 
     for NS in "$NS1" "$NS2"; do
         cat > "netpol-deny-all-${NS}.yaml" <<EOF
@@ -130,7 +130,7 @@ EOF
 # 4단계: Allow Same Namespace NetworkPolicy
 # =============================================================================
 step_allow_same_ns() {
-    print_step "4/5  NetworkPolicy — Allow Same Namespace"
+    print_step "4/6  NetworkPolicy — Allow Same Namespace"
 
     for NS in "$NS1" "$NS2"; do
         cat > "netpol-allow-same-ns-${NS}.yaml" <<EOF
@@ -161,7 +161,7 @@ EOF
 # 5단계: VM 배포 (poc 템플릿)
 # =============================================================================
 step_vms() {
-    print_step "5/5  VM 배포 (poc 템플릿)"
+    print_step "5/6  VM 배포 (poc 템플릿)"
 
     for NS in "$NS1" "$NS2"; do
         VM_NAME="poc-vm-$(echo "$NS" | awk -F'-' '{print $NF}')"
@@ -171,13 +171,80 @@ step_vms() {
             continue
         fi
 
-        oc process -n openshift poc \
-            -p NAME="$VM_NAME" \
-            | oc apply -n "$NS" -f -
+        oc process -n openshift poc -p NAME="$VM_NAME" > "${VM_NAME}.yaml"
+        echo "생성된 파일: ${VM_NAME}.yaml"
+        oc apply -n "$NS" -f "${VM_NAME}.yaml"
 
         virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
         print_ok "VM $VM_NAME 배포 완료 (namespace: $NS)"
     done
+}
+
+# =============================================================================
+# 6단계: ConsoleYAMLSample 등록
+# =============================================================================
+step_consoleyamlsamples() {
+    print_step "6/6  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-netpol-deny-all.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-netpol-deny-all
+spec:
+  title: "POC NetworkPolicy — Default Deny All"
+  description: "네임스페이스의 모든 Ingress/Egress를 차단합니다. 다른 허용 정책과 함께 사용하세요."
+  targetResource:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+  yaml: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: default-deny-all
+      namespace: poc-netpol-1    # 적용할 네임스페이스로 변경
+    spec:
+      podSelector: {}
+      policyTypes:
+        - Ingress
+        - Egress
+EOF
+    echo "생성된 파일: consoleyamlsample-netpol-deny-all.yaml"
+    oc apply -f consoleyamlsample-netpol-deny-all.yaml
+    print_ok "ConsoleYAMLSample poc-netpol-deny-all 등록 완료"
+
+    cat > consoleyamlsample-netpol-allow-same-ns.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-netpol-allow-same-ns
+spec:
+  title: "POC NetworkPolicy — Allow Same Namespace"
+  description: "같은 네임스페이스 내 Pod 간 통신을 허용합니다. Default Deny All 정책과 함께 사용하세요."
+  targetResource:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+  yaml: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: allow-same-namespace
+      namespace: poc-netpol-1    # 적용할 네임스페이스로 변경
+    spec:
+      podSelector: {}
+      policyTypes:
+        - Ingress
+        - Egress
+      ingress:
+        - from:
+            - podSelector: {}
+      egress:
+        - to:
+            - podSelector: {}
+EOF
+    echo "생성된 파일: consoleyamlsample-netpol-allow-same-ns.yaml"
+    oc apply -f consoleyamlsample-netpol-allow-same-ns.yaml
+    print_ok "ConsoleYAMLSample poc-netpol-allow-same-ns 등록 완료"
 }
 
 # =============================================================================
@@ -216,6 +283,7 @@ main() {
     step_nad
     step_deny_all
     step_allow_same_ns
+    step_consoleyamlsamples
     step_vms
     print_summary
 }

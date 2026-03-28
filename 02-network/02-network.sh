@@ -152,7 +152,7 @@ EOF
 # 2단계: NAD — NetworkAttachmentDefinition 등록
 # =============================================================================
 step_nad() {
-    print_step "2/2  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
+    print_step "2/3  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
 
     oc new-project "${NAD_NAMESPACE}" 2>/dev/null || \
         oc project "${NAD_NAMESPACE}" 2>/dev/null || true
@@ -173,6 +173,79 @@ EOF
     oc apply -f nad-poc-bridge.yaml
 
     print_ok "NAD poc-bridge-nad 등록 완료"
+}
+
+# =============================================================================
+# 3단계: ConsoleYAMLSample 등록
+# =============================================================================
+step_consoleyamlsamples() {
+    print_step "3/3  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-nncp.yaml <<EOF
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-bridge-nncp
+spec:
+  title: "POC Linux Bridge NNCP 생성"
+  description: "워커 노드에 Linux Bridge(${BRIDGE_NAME})를 생성합니다. NMState Operator 설치 후 적용하세요. 인터페이스 이름(${BRIDGE_INTERFACE})을 환경에 맞게 수정하세요."
+  targetResource:
+    apiVersion: nmstate.io/v1
+    kind: NodeNetworkConfigurationPolicy
+  yaml: |
+    apiVersion: nmstate.io/v1
+    kind: NodeNetworkConfigurationPolicy
+    metadata:
+      name: poc-bridge-nncp
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      desiredState:
+        interfaces:
+          - name: ${BRIDGE_NAME}
+            description: "POC VM용 Linux Bridge (${BRIDGE_INTERFACE} 기반)"
+            type: linux-bridge
+            state: up
+            ipv4:
+              enabled: false
+            ipv6:
+              enabled: false
+            bridge:
+              options:
+                stp:
+                  enabled: false
+              port:
+                - name: ${BRIDGE_INTERFACE}
+EOF
+    echo "생성된 파일: consoleyamlsample-nncp.yaml"
+    oc apply -f consoleyamlsample-nncp.yaml
+    print_ok "ConsoleYAMLSample poc-bridge-nncp 등록 완료"
+
+    cat > consoleyamlsample-nad.yaml <<EOF
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-bridge-nad
+spec:
+  title: "POC Linux Bridge NAD 등록"
+  description: "NNCP로 생성된 Linux Bridge(${BRIDGE_NAME})를 VM 보조 네트워크로 등록합니다. NNCP가 Available 상태인 후 적용하세요."
+  targetResource:
+    apiVersion: k8s.cni.cncf.io/v1
+    kind: NetworkAttachmentDefinition
+  yaml: |
+    apiVersion: k8s.cni.cncf.io/v1
+    kind: NetworkAttachmentDefinition
+    metadata:
+      name: poc-bridge-nad
+      namespace: poc-vm-management
+      annotations:
+        k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
+    spec:
+      config: '{"cniVersion":"0.3.1","name":"poc-bridge-nad","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
+EOF
+    echo "생성된 파일: consoleyamlsample-nad.yaml"
+    oc apply -f consoleyamlsample-nad.yaml
+    print_ok "ConsoleYAMLSample poc-bridge-nad 등록 완료"
 }
 
 # =============================================================================
@@ -202,6 +275,7 @@ main() {
     preflight
     step_nncp
     step_nad
+    step_consoleyamlsamples
     print_summary
 }
 

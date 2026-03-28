@@ -81,7 +81,7 @@ step_namespace() {
 #   requests.cpu: "2" → VM 2개(각 750m=1500m)는 통과, 3번째(2250m)는 초과
 # =============================================================================
 step_quota() {
-    print_step "2/3  ResourceQuota 적용 (${NS})"
+    print_step "2/4  ResourceQuota 적용 (${NS})"
 
     cat > resourcequota-poc.yaml <<'EOF'
 apiVersion: v1
@@ -118,12 +118,55 @@ EOF
 }
 
 # =============================================================================
-# 3단계: VM 배포 및 Quota 초과 실증
+# 3단계: ConsoleYAMLSample 등록
+# =============================================================================
+step_consoleyamlsamples() {
+    print_step "3/4  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-resourcequota.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-resource-quota
+spec:
+  title: "POC ResourceQuota 설정"
+  description: "네임스페이스의 CPU·Memory·Pod·PVC 등 리소스 사용량을 제한합니다. 네임스페이스 생성 후 적용하세요. 초과 시 새로운 리소스 생성이 거부됩니다."
+  targetResource:
+    apiVersion: v1
+    kind: ResourceQuota
+  yaml: |
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: poc-quota
+      namespace: poc-resource-quota    # 대상 네임스페이스로 변경
+    spec:
+      hard:
+        pods: "10"
+        requests.cpu: "2"
+        limits.cpu: "4"
+        requests.memory: 4Gi
+        limits.memory: 8Gi
+        persistentvolumeclaims: "10"
+        requests.storage: 100Gi
+        services: "10"
+        services.loadbalancers: "2"
+        services.nodeports: "0"
+        configmaps: "20"
+        secrets: "20"
+EOF
+    echo "생성된 파일: consoleyamlsample-resourcequota.yaml"
+    oc apply -f consoleyamlsample-resourcequota.yaml
+    print_ok "ConsoleYAMLSample poc-resource-quota 등록 완료"
+}
+
+# =============================================================================
+# 4단계: VM 배포 및 Quota 초과 실증
 #   - poc-quota-vm-1, poc-quota-vm-2: 정상 생성 (requests.cpu 합계 1500m < 2000m)
 #   - poc-quota-vm-3: 생성 시도 → Quota 초과로 거부 (2250m > 2000m)
 # =============================================================================
 step_vms() {
-    print_step "3/3  VM 배포 및 ResourceQuota 초과 실증"
+    print_step "4/4  VM 배포 및 ResourceQuota 초과 실증"
 
     # VM 1, 2: 정상 생성
     for VM in poc-quota-vm-1 poc-quota-vm-2; do
@@ -249,6 +292,7 @@ main() {
     preflight
     step_namespace
     step_quota
+    step_consoleyamlsamples
     step_vms
     print_summary
 }
