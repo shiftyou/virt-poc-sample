@@ -23,3 +23,5 @@ poc-*.yaml
 
 # macOS
 .DS_Store
+aa.txt
+*.swp
