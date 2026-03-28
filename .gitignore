@@ -7,3 +7,19 @@ rendered/
 # VM 이미지 파일 (용량이 크므로 git 관리 제외)
 *.qcow2
 vm-images/
+
+# 스크립트 실행 시 생성되는 임시 yaml (poc-setup/ 하위에도 생성됨)
+poc-setup/
+datasource-*.yaml
+template-*.yaml
+nmstate-cr.yaml
+nncp-*.yaml
+nad-*.yaml
+netpol-*.yaml
+resourcequota-*.yaml
+kubedescheduler.yaml
+vmim-*.yaml
+poc-*.yaml
+
+# macOS
+.DS_Store
