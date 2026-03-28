@@ -100,16 +100,19 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo -e "${CYAN}  poc- 네임스페이스 목록:${NC}"
 echo ""
-declare -A NS_DESC=(
-    ["poc-vm-management"]="03 VM 생성·스토리지·네트워크·Live Migration 실습"
-    ["poc-netpol-1"]="04 NetworkPolicy 실습 — NS1 (Deny All / Allow Same NS)"
-    ["poc-netpol-2"]="04 NetworkPolicy 실습 — NS2 (Deny All / Allow Same NS)"
-    ["poc-resource-quota"]="05 ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한"
-    ["poc-descheduler"]="06 Descheduler 실습 — 노드 과부하 시 VM 자동 재배치"
-)
+ns_desc() {
+    case "$1" in
+        poc-vm-management)  echo "03 VM 생성·스토리지·네트워크·Live Migration 실습" ;;
+        poc-netpol-1)       echo "04 NetworkPolicy 실습 — NS1 (Deny All / Allow Same NS)" ;;
+        poc-netpol-2)       echo "04 NetworkPolicy 실습 — NS2 (Deny All / Allow Same NS)" ;;
+        poc-resource-quota) echo "05 ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한" ;;
+        poc-descheduler)    echo "06 Descheduler 실습 — 노드 과부하 시 VM 자동 재배치" ;;
+        *)                  echo "" ;;
+    esac
+}
 oc get namespace --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | grep '^poc-' | \
     while read -r ns; do
-        desc="${NS_DESC[$ns]:-}"
+        desc=$(ns_desc "$ns")
         if [ -n "$desc" ]; then
             echo -e "    ${GREEN}●${NC} ${ns}  ${YELLOW}# ${desc}${NC}"
         else
