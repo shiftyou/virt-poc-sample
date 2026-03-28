@@ -293,6 +293,7 @@ for dir in "${STEPS[@]}"; do
     print_progress
 done
 
+if [ "$MODE" != "only" ]; then
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}  모든 단계 완료!${NC}"
@@ -329,3 +330,4 @@ oc get namespace --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null 
         fi
     done
 echo ""
+fi
