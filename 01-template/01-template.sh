@@ -91,7 +91,7 @@ preflight() {
 # 1단계: DataVolume 업로드
 # =============================================================================
 step_upload() {
-    print_step "1/3  DataVolume 업로드 (poc-golden)"
+    print_step "1/4  DataVolume 업로드 (poc-golden)"
 
     local phase
     phase=$(oc get dv "$DV_NAME" -n "$TARGET_NS" \
@@ -124,7 +124,7 @@ step_upload() {
 # 2단계: DataSource 등록
 # =============================================================================
 step_datasource() {
-    print_step "2/3  DataSource 등록 (poc)"
+    print_step "2/4  DataSource 등록 (poc)"
 
     cat > datasource-poc.yaml <<EOF
 apiVersion: cdi.kubevirt.io/v1beta1

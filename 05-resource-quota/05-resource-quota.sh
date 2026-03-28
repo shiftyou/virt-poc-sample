@@ -73,7 +73,7 @@ preflight() {
 # 1단계: 네임스페이스 생성
 # =============================================================================
 step_namespace() {
-    print_step "1/3  네임스페이스 생성 (${NS})"
+    print_step "1/4  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"

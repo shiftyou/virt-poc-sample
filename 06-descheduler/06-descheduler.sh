@@ -85,7 +85,7 @@ preflight() {
 # 1단계: 네임스페이스 생성
 # =============================================================================
 step_namespace() {
-    print_step "1/5  네임스페이스 생성 (${NS})"
+    print_step "1/6  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"
@@ -335,7 +335,7 @@ EOF
 # 5단계: 노드 리소스 분석 → 트리거 VM 산출 및 배포
 # =============================================================================
 step_trigger_vm() {
-    print_step "6/6  트리거 VM 배포 (노드 임계값 초과)"
+    print_step "5/6  트리거 VM 배포 (노드 임계값 초과)"
 
     print_info "${NODE1} 리소스 현황 분석 중..."
 
@@ -448,7 +448,7 @@ step_trigger_vm() {
 # 4단계: ConsoleYAMLSample 등록
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "5/6  ConsoleYAMLSample 등록"
+    print_step "6/6  ConsoleYAMLSample 등록"
 
     cat > consoleyamlsample-kubedescheduler.yaml <<EOF
 apiVersion: console.openshift.io/v1
