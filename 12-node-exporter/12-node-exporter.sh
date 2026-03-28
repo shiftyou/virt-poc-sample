@@ -131,13 +131,6 @@ spec:
     - port: metric
       interval: 30s
       path: /metrics
-      relabelings:
-        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
-          targetLabel: job
-        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
-          targetLabel: vmname
-        - sourceLabels: [__address__]
-          targetLabel: instance
 EOF
     echo "생성된 파일: servicemonitor-node-exporter.yaml"
     oc apply -f servicemonitor-node-exporter.yaml
