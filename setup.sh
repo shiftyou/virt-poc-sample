@@ -311,12 +311,20 @@ ask "NAD namespace" "poc-nad" NAD_NAMESPACE
 # =============================================================================
 # 3. MinIO Settings
 # =============================================================================
-print_header "3. MinIO Settings (OADP S3 backend)"
+if [ "${OADP_INSTALLED:-false}" = "true" ]; then
+    print_header "3. MinIO Settings (OADP S3 backend)"
 
-ask "MinIO Access Key" "minio" MINIO_ACCESS_KEY
-ask "MinIO Secret Key" "minio123" MINIO_SECRET_KEY "true"
-ask "OADP backup bucket name" "velero" MINIO_BUCKET
-ask "MinIO service endpoint" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
+    ask "MinIO Access Key" "minio" MINIO_ACCESS_KEY
+    ask "MinIO Secret Key" "minio123" MINIO_SECRET_KEY "true"
+    ask "OADP backup bucket name" "velero" MINIO_BUCKET
+    ask "MinIO service endpoint" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
+else
+    print_info "3. MinIO Settings — OADP Operator 미설치, 기본값으로 설정합니다."
+    MINIO_ACCESS_KEY="minio"
+    MINIO_SECRET_KEY="minio123"
+    MINIO_BUCKET="velero"
+    MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
+fi
 
 # =============================================================================
 # 4. Storage Class
