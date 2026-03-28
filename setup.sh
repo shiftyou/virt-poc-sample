@@ -484,18 +484,18 @@ render_file() {
 }
 
 # Collect render targets:
-#   1) .sh.example in numbered dirs  → rendered/XX-name/XX-name.sh
-#   2) yaml files with ${...} in numbered dirs → rendered/XX-name/*.yaml
+#   1) .sh in numbered dirs  → poc-setup/XX-name/XX-name.sh
+#   2) yaml files with ${...} in numbered dirs → poc-setup/XX-name/*.yaml
 print_info "Scanning files to render..."
 
 RENDER_SRCS=()
 while IFS= read -r f; do
     RENDER_SRCS+=("$f")
-done < <(find . -maxdepth 2 -path './[0-9][0-9]-*/*.sh.example' 2>/dev/null | sort)
+done < <(find . -maxdepth 2 -path './[0-9][0-9]-*/*.sh' 2>/dev/null | sort)
 while IFS= read -r f; do
     RENDER_SRCS+=("$f")
 done < <(grep -rl '\${' . --include="*.yaml" \
-    --exclude-dir=rendered --exclude-dir=disabled 2>/dev/null | \
+    --exclude-dir=poc-setup --exclude-dir=disabled 2>/dev/null | \
     grep '\./[0-9][0-9]-' | sort -u)
 
 TOTAL_FILES=${#RENDER_SRCS[@]}
@@ -505,13 +505,7 @@ echo ""
 for src_file in "${RENDER_SRCS[@]}"; do
     RENDERED_COUNT=$((RENDERED_COUNT + 1))
     rel_path="${src_file#./}"
-
-    # .sh.example → rendered/XX-name/XX-name.sh  (drop .example suffix)
-    if [[ "$rel_path" == *.sh.example ]]; then
-        out_file="${RENDERED_DIR}/${rel_path%.example}"
-    else
-        out_file="${RENDERED_DIR}/${rel_path}"
-    fi
+    out_file="${RENDERED_DIR}/${rel_path}"
 
     printf "  ${BLUE}[%d/%d]${NC} %s\n" "$RENDERED_COUNT" "$TOTAL_FILES" "$rel_path"
     render_file "$src_file" "$out_file"
@@ -521,7 +515,7 @@ for src_file in "${RENDER_SRCS[@]}"; do
     fi
 done
 
-print_ok "Total ${RENDERED_COUNT} files generated in rendered/"
+print_ok "Total ${RENDERED_COUNT} files generated in poc-setup/"
 
 # =============================================================================
 # Done
