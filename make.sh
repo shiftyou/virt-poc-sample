@@ -9,7 +9,8 @@
 #       03-vm-management/03-vm-management.sh
 #
 # 사용법:
-#   ./make.sh            전체 실행
+#   ./make.sh            사용법 출력
+#   ./make.sh start      전체 실행
 #   ./make.sh 7          07 단계만 실행
 #   ./make.sh from 7     07 단계부터 끝까지 실행
 #   ./make.sh clean      poc- 네임스페이스 전체 삭제
@@ -35,6 +36,24 @@ print_warn()  { echo -e "${YELLOW}[make]${NC} $1"; }
 # 인수 파싱
 ARG1="${1:-}"
 ARG2="${2:-}"
+
+# =============================================================================
+# 인수 없음 → 사용법 출력
+# =============================================================================
+if [ -z "$ARG1" ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  virt-poc-sample make.sh${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  사용법:"
+    echo -e "    ${CYAN}./make.sh start${NC}       전체 실행"
+    echo -e "    ${CYAN}./make.sh 7${NC}            07 단계만 실행"
+    echo -e "    ${CYAN}./make.sh from 7${NC}       07 단계부터 끝까지 실행"
+    echo -e "    ${CYAN}./make.sh clean${NC}        poc- 네임스페이스 전체 삭제"
+    echo ""
+    exit 0
+fi
 
 # =============================================================================
 # clean 서브커맨드
@@ -106,6 +125,10 @@ if [ "$ARG1" = "from" ] && [[ "$ARG2" =~ ^[0-9]+$ ]]; then
 elif [[ "$ARG1" =~ ^[0-9]+$ ]]; then
     MODE="only"
     START_NUM=$(printf "%02d" "$ARG1")
+elif [ "$ARG1" != "start" ]; then
+    print_error "알 수 없는 인수: $ARG1"
+    echo -e "  ${CYAN}./make.sh${NC} 를 실행하면 사용법을 확인할 수 있습니다."
+    exit 1
 fi
 
 # 번호 디렉토리를 정렬해서 수집
