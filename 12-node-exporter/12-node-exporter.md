@@ -223,6 +223,9 @@ spec:
     - port: metric
       interval: 30s
       path: /metrics
+      relabelings:
+        - targetLabel: job
+          replacement: vm-node-exporter
 ```
 
 ### ServiceMonitor 확인
@@ -241,52 +244,54 @@ oc get pods -n openshift-user-workload-monitoring
 
 OpenShift Console → **Observe → Metrics** 에서 아래 쿼리를 입력합니다.
 
+ServiceMonitor의 `relabelings` 설정으로 모든 메트릭에 `job="vm-node-exporter"` 레이블이 붙습니다.
+
 ### CPU
 
 ```promql
 # CPU 사용률 (%)
-100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+100 - (avg by(instance) (rate(node_cpu_seconds_total{job="vm-node-exporter", mode="idle"}[5m])) * 100)
 
 # CPU 모드별 사용 시간
-rate(node_cpu_seconds_total[5m])
+rate(node_cpu_seconds_total{job="vm-node-exporter"}[5m])
 ```
 
 ### Memory
 
 ```promql
 # 사용 가능 메모리 (bytes)
-node_memory_MemAvailable_bytes
+node_memory_MemAvailable_bytes{job="vm-node-exporter"}
 
 # 메모리 사용률 (%)
-(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+(1 - node_memory_MemAvailable_bytes{job="vm-node-exporter"} / node_memory_MemTotal_bytes{job="vm-node-exporter"}) * 100
 ```
 
 ### Disk
 
 ```promql
 # 파일시스템 여유 공간 (bytes)
-node_filesystem_avail_bytes{mountpoint="/"}
+node_filesystem_avail_bytes{job="vm-node-exporter", mountpoint="/"}
 
 # 디스크 사용률 (%)
-(1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100
+(1 - node_filesystem_avail_bytes{job="vm-node-exporter", mountpoint="/"} / node_filesystem_size_bytes{job="vm-node-exporter", mountpoint="/"}) * 100
 ```
 
 ### Load Average
 
 ```promql
-node_load1
-node_load5
-node_load15
+node_load1{job="vm-node-exporter"}
+node_load5{job="vm-node-exporter"}
+node_load15{job="vm-node-exporter"}
 ```
 
 ### Network
 
 ```promql
 # 수신 속도 (bytes/s)
-rate(node_network_receive_bytes_total[5m])
+rate(node_network_receive_bytes_total{job="vm-node-exporter"}[5m])
 
 # 송신 속도 (bytes/s)
-rate(node_network_transmit_bytes_total[5m])
+rate(node_network_transmit_bytes_total{job="vm-node-exporter"}[5m])
 ```
 
 ---

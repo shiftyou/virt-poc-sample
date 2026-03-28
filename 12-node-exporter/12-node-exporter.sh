@@ -131,6 +131,9 @@ spec:
     - port: metric
       interval: 30s
       path: /metrics
+      relabelings:
+        - targetLabel: job
+          replacement: vm-node-exporter
 EOF
     echo "생성된 파일: servicemonitor-node-exporter.yaml"
     oc apply -f servicemonitor-node-exporter.yaml
