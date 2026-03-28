@@ -3,7 +3,7 @@
 # 12-node-exporter.sh
 #
 # OpenShift에 node-exporter Service 등록
-#   1. 사전 확인 (oc 로그인 상태)
+#   1. poc 템플릿으로 VM 생성 (monitor=metrics 레이블 포함)
 #   2. node-exporter-service.yaml 적용
 #   3. Endpoints 확인 안내
 #
@@ -20,6 +20,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 NS="poc-node-exporter"
+VM_NAME="poc-node-exporter-vm"
 SERVICE_YAML="${SCRIPT_DIR}/node-exporter-service.yaml"
 
 GREEN='\033[0;32m'
@@ -51,21 +52,63 @@ preflight() {
         print_ok "네임스페이스 $NS 생성 완료"
     fi
 
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        exit 1
+    fi
+    print_ok "poc Template 확인"
+
+    if ! command -v virtctl &>/dev/null; then
+        print_error "virtctl 을 찾을 수 없습니다."
+        exit 1
+    fi
+    print_ok "virtctl 확인"
+
     if [ ! -f "$SERVICE_YAML" ]; then
         print_error "Service YAML 파일을 찾을 수 없습니다: $SERVICE_YAML"
         exit 1
     fi
 }
 
+step_vm() {
+    print_step "1/3  VM 생성 (${VM_NAME})"
+
+    if oc get vm "$VM_NAME" -n "$NS" &>/dev/null; then
+        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+    else
+        oc process -n openshift poc -p NAME="$VM_NAME" > "${VM_NAME}.yaml"
+        echo "생성된 파일: ${VM_NAME}.yaml"
+        oc apply -n "$NS" -f "${VM_NAME}.yaml"
+        print_ok "VM $VM_NAME 생성 완료"
+    fi
+
+    # virt-launcher Pod에 monitor=metrics 레이블 전파를 위해 spec.template.metadata.labels 설정
+    oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
+      "spec": {
+        "template": {
+          "metadata": {
+            "labels": {
+              "monitor": "metrics"
+            }
+          }
+        }
+      }
+    }' 2>/dev/null && print_ok "레이블 monitor=metrics 설정 완료" || true
+
+    virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
+    print_info "VM 시작 요청 완료 (Running 상태까지 시간이 걸릴 수 있습니다)"
+    print_info "  ${CYAN}oc get vmi $VM_NAME -n $NS${NC}"
+}
+
 step_apply_service() {
-    print_step "1/2  node-exporter Service 적용"
+    print_step "2/3  node-exporter Service 적용"
 
     oc apply -f "$SERVICE_YAML"
     print_ok "node-exporter-service 적용 완료"
 }
 
 step_check_endpoints() {
-    print_step "2/2  Endpoints 확인"
+    print_step "3/3  Endpoints 확인"
 
     local ep_count
     ep_count=$(oc get endpoints node-exporter-service -n "$NS" \
@@ -87,6 +130,9 @@ print_summary() {
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}  완료! node-exporter Service가 등록되었습니다.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  VM 상태 확인:"
+    echo -e "    ${CYAN}oc get vmi ${VM_NAME} -n ${NS}${NC}"
     echo ""
     echo -e "  Service 상태 확인:"
     echo -e "    ${CYAN}oc get svc node-exporter-service -n ${NS}${NC}"
@@ -112,6 +158,7 @@ main() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight
+    step_vm
     step_apply_service
     step_check_endpoints
     print_summary
