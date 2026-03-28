@@ -87,8 +87,9 @@ virt-poc-sample/
 │   └── 01-template.sh          # 자동화 스크립트
 │
 ├── 02-network/                 # NNCP Linux Bridge + NAD
-│   ├── 02-network.md           # 가이드 문서
-│   ├── 02-network.sh           # 자동화 스크립트
+│   ├── 02-network.md               # 가이드 문서
+│   ├── 02-network.sh               # 자동화 스크립트
+│   ├── consoleyamlsample-nncp.yaml # Console YAML Sample (NNCP)
 │   └── consoleyamlsample-nad.yaml  # Console YAML Sample (NAD)
 │
 ├── 03-vm-management/           # VM 생성 및 관리
