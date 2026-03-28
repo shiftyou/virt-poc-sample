@@ -1,0 +1,42 @@
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-resource-quota
+spec:
+  title: "POC ResourceQuota 설정"
+  description: "네임스페이스의 CPU·Memory·Pod·PVC 등 리소스 사용량을 제한합니다. 네임스페이스 생성 후 적용하세요. 초과 시 새로운 리소스 생성이 거부됩니다."
+  targetResource:
+    apiVersion: v1
+    kind: ResourceQuota
+  yaml: |
+    # =============================================================================
+    # [Console YAML Sample] ResourceQuota 설정
+    # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
+    #
+    # 적용 전 namespace 및 hard 값을 환경에 맞게 수정하세요.
+    # =============================================================================
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: poc-quota
+      namespace: poc-resource-quota    # 대상 네임스페이스로 변경
+    spec:
+      hard:
+        # Pod 수
+        pods: "10"
+        # CPU (requests / limits)
+        requests.cpu: "4"
+        limits.cpu: "8"
+        # Memory (requests / limits)
+        requests.memory: 8Gi
+        limits.memory: 16Gi
+        # PersistentVolumeClaim 수 및 용량
+        persistentvolumeclaims: "10"
+        requests.storage: 100Gi
+        # Service
+        services: "10"
+        services.loadbalancers: "2"
+        services.nodeports: "0"
+        # ConfigMap / Secret
+        configmaps: "20"
+        secrets: "20"
