@@ -113,7 +113,7 @@ step_upload() {
 step_datasource() {
     print_step "2/3  DataSource 등록 (poc)"
 
-    oc apply -f - <<EOF
+    cat > datasource-poc.yaml <<EOF
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataSource
 metadata:
@@ -125,6 +125,8 @@ spec:
       name: ${DV_NAME}
       namespace: ${TARGET_NS}
 EOF
+    echo "생성된 파일: datasource-poc.yaml"
+    oc apply -f datasource-poc.yaml
 
     local ready
     ready=$(oc get datasource "$DS_NAME" -n "$TARGET_NS" \
@@ -142,7 +144,7 @@ EOF
 step_template() {
     print_step "3/3  Template 등록 (poc @ openshift)"
 
-    oc apply -f - <<'EOF'
+    cat > template-poc.yaml <<'EOF'
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
@@ -286,6 +288,8 @@ parameters:
     generate: expression
     from: '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}'
 EOF
+    echo "생성된 파일: template-poc.yaml"
+    oc apply -f template-poc.yaml
 
     print_ok "Template $TEMPLATE_NAME 등록 완료 (namespace: $TEMPLATE_NS)"
 }

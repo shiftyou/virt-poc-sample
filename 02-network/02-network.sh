@@ -54,12 +54,14 @@ preflight() {
     # NMState CR 확인
     if ! oc get nmstate 2>/dev/null | grep -q "."; then
         print_warn "NMState CR 이 없습니다. NMState 인스턴스를 생성합니다..."
-        oc apply -f - <<'NMEOF'
+        cat > nmstate-cr.yaml <<'NMEOF'
 apiVersion: nmstate.io/v1
 kind: NMState
 metadata:
   name: nmstate
 NMEOF
+        echo "생성된 파일: nmstate-cr.yaml"
+        oc apply -f nmstate-cr.yaml
         print_info "NMState 핸들러 준비 대기 중 (최대 60초)..."
         oc rollout status daemonset/nmstate-handler -n openshift-nmstate --timeout=60s 2>/dev/null || true
         print_ok "NMState CR 생성 완료"
@@ -74,7 +76,7 @@ NMEOF
 step_nncp() {
     print_step "1/2  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
 
-    oc apply -f - <<EOF
+    cat > nncp-poc-bridge.yaml <<EOF
 apiVersion: nmstate.io/v1
 kind: NodeNetworkConfigurationPolicy
 metadata:
@@ -99,6 +101,8 @@ spec:
           port:
             - name: ${BRIDGE_INTERFACE}
 EOF
+    echo "생성된 파일: nncp-poc-bridge.yaml"
+    oc apply -f nncp-poc-bridge.yaml
 
     print_info "NNCP 적용 완료 — 노드 설정 전파 대기 중..."
 
@@ -143,7 +147,7 @@ step_nad() {
         oc project "${NAD_NAMESPACE}" 2>/dev/null || true
     print_ok "네임스페이스: ${NAD_NAMESPACE}"
 
-    oc apply -f - <<EOF
+    cat > nad-poc-bridge.yaml <<EOF
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -154,6 +158,8 @@ metadata:
 spec:
   config: '{"cniVersion":"0.3.1","name":"poc-bridge-nad","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
 EOF
+    echo "생성된 파일: nad-poc-bridge.yaml"
+    oc apply -f nad-poc-bridge.yaml
 
     print_ok "NAD poc-bridge-nad 등록 완료"
 }

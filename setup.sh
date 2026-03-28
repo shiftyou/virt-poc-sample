@@ -448,7 +448,7 @@ print_ok "env.conf created: $ENV_FILE"
 # =============================================================================
 print_header "Generating rendered YAMLs..."
 
-RENDERED_DIR="./rendered"
+RENDERED_DIR="./poc-setup"
 
 # Clean existing rendered directory
 if [ -d "$RENDERED_DIR" ]; then
