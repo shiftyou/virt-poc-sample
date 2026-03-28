@@ -52,12 +52,15 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # NMState Operator 확인
-    if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
-        print_error "NMState Operator 가 설치되어 있지 않습니다."
-        echo "  설치 방법: 00-operator/nmstate-operator.md 참조"
-        exit 1
+    # NMState Operator 확인 (env.conf의 NMSTATE_INSTALLED 우선, 없으면 직접 확인)
+    if [ "${NMSTATE_INSTALLED:-false}" != "true" ]; then
+        if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
+            print_error "NMState Operator 가 설치되어 있지 않습니다."
+            echo "  설치 방법: 00-operator/nmstate-operator.md 참조"
+            exit 1
+        fi
     fi
+    print_ok "NMState Operator 확인"
 
     # NMState CR 확인
     if ! oc get nmstate 2>/dev/null | grep -q "."; then
