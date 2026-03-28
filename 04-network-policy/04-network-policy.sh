@@ -3,7 +3,7 @@
 # 04-network-policy.sh
 #
 # NetworkPolicy 실습 환경 구성
-#   - poc-netpol-1, poc-netpol-2 네임스페이스 생성
+#   - poc-network-policy-1, poc-network-policy-2 네임스페이스 생성
 #   - 각 네임스페이스에 NAD 등록
 #   - Default Deny All / Allow Same Namespace 정책 적용
 #   - poc 템플릿으로 각 네임스페이스에 VM 1대씩 배포
@@ -21,8 +21,8 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-NS1="poc-netpol-1"
-NS2="poc-netpol-2"
+NS1="poc-network-policy-1"
+NS2="poc-network-policy-2"
 BRIDGE_NAME="${BRIDGE_NAME}"
 
 GREEN='\033[0;32m'
@@ -210,7 +210,7 @@ spec:
     kind: NetworkPolicy
     metadata:
       name: default-deny-all
-      namespace: poc-netpol-1    # 적용할 네임스페이스로 변경
+      namespace: poc-network-policy-1    # 적용할 네임스페이스로 변경
     spec:
       podSelector: {}
       policyTypes:
@@ -237,7 +237,7 @@ spec:
     kind: NetworkPolicy
     metadata:
       name: allow-same-namespace
-      namespace: poc-netpol-1    # 적용할 네임스페이스로 변경
+      namespace: poc-network-policy-1    # 적용할 네임스페이스로 변경
     spec:
       podSelector: {}
       policyTypes:

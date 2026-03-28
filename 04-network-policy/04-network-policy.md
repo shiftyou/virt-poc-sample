@@ -1,10 +1,10 @@
 # NetworkPolicy 실습
 
-두 개의 네임스페이스(`poc-netpol-1`, `poc-netpol-2`)에 VM을 배포하고
+두 개의 네임스페이스(`poc-network-policy-1`, `poc-network-policy-2`)에 VM을 배포하고
 NetworkPolicy로 트래픽을 제어하는 실습입니다.
 
 ```
-poc-netpol-1                    poc-netpol-2
+poc-network-policy-1                    poc-network-policy-2
 ┌──────────────────┐            ┌──────────────────┐
 │  poc-vm-1        │            │  poc-vm-2        │
 │  (virt-launcher) │            │  (virt-launcher) │
@@ -41,7 +41,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-all
-  namespace: poc-netpol-1   # poc-netpol-2 동일
+  namespace: poc-network-policy-1   # poc-network-policy-2 동일
 spec:
   podSelector: {}
   policyTypes:
@@ -58,7 +58,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-same-namespace
-  namespace: poc-netpol-1   # poc-netpol-2 동일
+  namespace: poc-network-policy-1   # poc-network-policy-2 동일
 spec:
   podSelector: {}
   policyTypes:
@@ -78,12 +78,12 @@ spec:
 
 ```bash
 # 정책 목록
-oc get networkpolicy -n poc-netpol-1
-oc get networkpolicy -n poc-netpol-2
+oc get networkpolicy -n poc-network-policy-1
+oc get networkpolicy -n poc-network-policy-2
 
 # 상세 확인
-oc describe networkpolicy -n poc-netpol-1
-oc describe networkpolicy -n poc-netpol-2
+oc describe networkpolicy -n poc-network-policy-1
+oc describe networkpolicy -n poc-network-policy-2
 ```
 
 ---
@@ -92,18 +92,18 @@ oc describe networkpolicy -n poc-netpol-2
 
 ```bash
 # VM 실행 상태
-oc get vmi -n poc-netpol-1
-oc get vmi -n poc-netpol-2
+oc get vmi -n poc-network-policy-1
+oc get vmi -n poc-network-policy-2
 
 # VM Pod IP 확인 (NetworkPolicy 적용 대상 IP)
-oc get vmi -n poc-netpol-1 \
+oc get vmi -n poc-network-policy-1 \
   -o jsonpath='{range .items[*]}{.metadata.name}: {.status.interfaces[0].ipAddress}{"\n"}{end}'
 
-oc get vmi -n poc-netpol-2 \
+oc get vmi -n poc-network-policy-2 \
   -o jsonpath='{range .items[*]}{.metadata.name}: {.status.interfaces[0].ipAddress}{"\n"}{end}'
 
 # 또는 Pod IP 직접 확인
-oc get pod -n poc-netpol-1 -l kubevirt.io=virt-launcher \
+oc get pod -n poc-network-policy-1 -l kubevirt.io=virt-launcher \
   -o jsonpath='{range .items[*]}{.metadata.name}: {.status.podIP}{"\n"}{end}'
 ```
 
@@ -111,11 +111,11 @@ oc get pod -n poc-netpol-1 -l kubevirt.io=virt-launcher \
 
 ## NS1 → NS2 특정 IP 허용
 
-`poc-netpol-1` VM의 IP를 확인한 후 `netpol-allow-from-ns1-ip.yaml`을 수정하여 적용합니다.
+`poc-network-policy-1` VM의 IP를 확인한 후 `netpol-allow-from-ns1-ip.yaml`을 수정하여 적용합니다.
 
 ```bash
 # 1. NS1 VM IP 확인
-NS1_VM_IP=$(oc get vmi -n poc-netpol-1 \
+NS1_VM_IP=$(oc get vmi -n poc-network-policy-1 \
   -o jsonpath='{.items[0].status.interfaces[0].ipAddress}')
 echo "NS1 VM IP: ${NS1_VM_IP}"
 
@@ -125,8 +125,8 @@ echo "NS1 VM IP: ${NS1_VM_IP}"
 oc apply -f netpol-allow-from-ns1-ip.yaml
 
 # 3. 적용 확인
-oc get networkpolicy -n poc-netpol-2
-oc describe networkpolicy allow-from-ns1-vm-ip -n poc-netpol-2
+oc get networkpolicy -n poc-network-policy-2
+oc describe networkpolicy allow-from-ns1-vm-ip -n poc-network-policy-2
 ```
 
 ---
@@ -135,7 +135,7 @@ oc describe networkpolicy allow-from-ns1-vm-ip -n poc-netpol-2
 
 ```bash
 # NS1 VM 콘솔 접속
-virtctl console poc-vm-1 -n poc-netpol-1
+virtctl console poc-vm-1 -n poc-network-policy-1
 
 # VM 내부에서 NS2 VM IP로 ping 테스트
 # (allow-from-ns1-vm-ip 적용 전: 실패 / 적용 후: 성공)
@@ -156,7 +156,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-dns-egress
-  namespace: poc-netpol-1
+  namespace: poc-network-policy-1
 spec:
   podSelector: {}
   policyTypes:
@@ -176,13 +176,13 @@ EOF
 
 ```bash
 # NetworkPolicy 삭제
-oc delete networkpolicy --all -n poc-netpol-1
-oc delete networkpolicy --all -n poc-netpol-2
+oc delete networkpolicy --all -n poc-network-policy-1
+oc delete networkpolicy --all -n poc-network-policy-2
 
 # VM 삭제
-oc delete vm --all -n poc-netpol-1
-oc delete vm --all -n poc-netpol-2
+oc delete vm --all -n poc-network-policy-1
+oc delete vm --all -n poc-network-policy-2
 
 # 네임스페이스 삭제
-oc delete namespace poc-netpol-1 poc-netpol-2
+oc delete namespace poc-network-policy-1 poc-network-policy-2
 ```
