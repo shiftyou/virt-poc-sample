@@ -336,10 +336,15 @@ ask "Storage class for VM image upload" "${DETECTED_SC:-ocs-external-storageclus
 # =============================================================================
 # 5. VDDK Image
 # =============================================================================
-print_header "5. VDDK Image"
+if [ "${MTV_INSTALLED:-false}" = "true" ]; then
+    print_header "5. VDDK Image"
 
-print_info "VDDK image path in internal registry (push manually before use)"
-ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
+    print_info "VDDK image path in internal registry (push manually before use)"
+    ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
+else
+    print_info "5. VDDK Image — MTV Operator not installed, skipping."
+    VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
+fi
 
 CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
 API_ALLOWED_CIDRS="0.0.0.0/0"
@@ -347,11 +352,18 @@ API_ALLOWED_CIDRS="0.0.0.0/0"
 # =============================================================================
 # 6. Fence Agents Remediation
 # =============================================================================
-print_header "6. Fence Agents Remediation (FAR)"
+if [ "${FAR_INSTALLED:-false}" = "true" ]; then
+    print_header "6. Fence Agents Remediation (FAR)"
 
-ask "IPMI/BMC IP address" "192.168.1.100" FENCE_AGENT_IP
-ask "IPMI username" "admin" FENCE_AGENT_USER
-ask "IPMI password" "password" FENCE_AGENT_PASS "true"
+    ask "IPMI/BMC IP address" "192.168.1.100" FENCE_AGENT_IP
+    ask "IPMI username" "admin" FENCE_AGENT_USER
+    ask "IPMI password" "password" FENCE_AGENT_PASS "true"
+else
+    print_info "6. Fence Agents Remediation — FAR Operator not installed, skipping."
+    FENCE_AGENT_IP="192.168.1.100"
+    FENCE_AGENT_USER="admin"
+    FENCE_AGENT_PASS="password"
+fi
 
 # =============================================================================
 # 7. Node Info
@@ -378,9 +390,14 @@ ask "Single node name for testing" "${FIRST_WORKER:-worker-0}" TEST_NODE
 # =============================================================================
 # 8. Grafana
 # =============================================================================
-print_header "8. Grafana"
+if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
+    print_header "8. Grafana"
 
-ask "Grafana admin password" "grafana123" GRAFANA_ADMIN_PASS "true"
+    ask "Grafana admin password" "grafana123" GRAFANA_ADMIN_PASS "true"
+else
+    print_info "8. Grafana — Grafana Operator not installed, skipping."
+    GRAFANA_ADMIN_PASS="grafana123"
+fi
 
 # =============================================================================
 # Save env.conf
