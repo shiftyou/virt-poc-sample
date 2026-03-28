@@ -76,8 +76,8 @@ preflight() {
     fi
     print_ok "대상 노드: $NODE1"
 
-    # Node Maintenance Operator 설치 확인
-    if [ "${NODE_MAINTENANCE_INSTALLED:-false}" != "true" ]; then
+    # Node Maintenance Operator 설치 확인 (env.conf: NMO_INSTALLED)
+    if [ "${NMO_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "node-maintenance"; then
             print_warn "Node Maintenance Operator 미설치 → 건너뜁니다."
             print_warn "  설치 가이드: 00-operator/node-maintenance-operator.md"
