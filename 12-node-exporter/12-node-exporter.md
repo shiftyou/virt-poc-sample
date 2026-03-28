@@ -182,9 +182,116 @@ oc get svc node-exporter-service -n poc-node-exporter
 oc get endpoints node-exporter-service -n poc-node-exporter
 ```
 
+> **⚠️ 네트워크 주의사항**
+> poc 템플릿은 기본적으로 **masquerade(NAT) 네트워크**를 사용합니다.
+> 이 경우 virt-launcher Pod IP로 들어오는 9100 트래픽이 VM 내부 node_exporter에 도달하지 않습니다.
+> Prometheus scrape가 정상 동작하려면 VM에 **bridge 네트워크(NAD)를 추가하고 해당 IP로 Service를 구성**하거나,
+> VM 내부에서 직접 메트릭을 확인하는 방식을 사용하세요.
+
 ---
 
-## 3. 메트릭 접근 확인
+## 3. ServiceMonitor 등록 (Prometheus scrape)
+
+Service만으로는 Prometheus가 자동 수집하지 않습니다. **ServiceMonitor**를 등록해야 합니다.
+
+```bash
+# user-workload-monitoring 활성화 확인
+oc get configmap cluster-monitoring-config -n openshift-monitoring -o yaml | grep enableUserWorkload
+
+# 네임스페이스에 모니터링 레이블 설정
+oc label namespace poc-node-exporter openshift.io/cluster-monitoring=true
+
+# ServiceMonitor 적용
+oc apply -f servicemonitor-node-exporter.yaml
+```
+
+### servicemonitor-node-exporter.yaml
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: node-exporter-monitor
+  namespace: poc-node-exporter
+  labels:
+    servicetype: metrics
+spec:
+  selector:
+    matchLabels:
+      servicetype: metrics
+  endpoints:
+    - port: metric
+      interval: 30s
+      path: /metrics
+```
+
+### ServiceMonitor 확인
+
+```bash
+# ServiceMonitor 등록 확인
+oc get servicemonitor -n poc-node-exporter
+
+# Prometheus가 수집 대상으로 인식했는지 확인
+oc get pods -n openshift-user-workload-monitoring
+```
+
+---
+
+## 4. PromQL로 메트릭 확인
+
+OpenShift Console → **Observe → Metrics** 에서 아래 쿼리를 입력합니다.
+
+### CPU
+
+```promql
+# CPU 사용률 (%)
+100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+# CPU 모드별 사용 시간
+rate(node_cpu_seconds_total[5m])
+```
+
+### Memory
+
+```promql
+# 사용 가능 메모리 (bytes)
+node_memory_MemAvailable_bytes
+
+# 메모리 사용률 (%)
+(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100
+```
+
+### Disk
+
+```promql
+# 파일시스템 여유 공간 (bytes)
+node_filesystem_avail_bytes{mountpoint="/"}
+
+# 디스크 사용률 (%)
+(1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100
+```
+
+### Load Average
+
+```promql
+node_load1
+node_load5
+node_load15
+```
+
+### Network
+
+```promql
+# 수신 속도 (bytes/s)
+rate(node_network_receive_bytes_total[5m])
+
+# 송신 속도 (bytes/s)
+rate(node_network_transmit_bytes_total[5m])
+```
+
+---
+
+## 5. 메트릭 직접 확인 (port-forward)
 
 ```bash
 # Service를 통해 메트릭 접근 (port-forward)

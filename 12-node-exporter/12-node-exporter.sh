@@ -5,7 +5,8 @@
 # OpenShift에 node-exporter Service 등록
 #   1. poc 템플릿으로 VM 생성 (monitor=metrics 레이블 포함)
 #   2. node-exporter-service.yaml 적용
-#   3. Endpoints 확인 안내
+#   3. ServiceMonitor 등록 (Prometheus scrape 설정)
+#   4. Endpoints 확인 안내
 #
 # 사용법: ./12-node-exporter.sh
 # =============================================================================
@@ -101,14 +102,43 @@ step_vm() {
 }
 
 step_apply_service() {
-    print_step "2/3  node-exporter Service 적용"
+    print_step "2/4  node-exporter Service 적용"
+
+    # user-workload-monitoring이 네임스페이스를 수집하려면 레이블 필요
+    oc label namespace "$NS" openshift.io/cluster-monitoring=true --overwrite 2>/dev/null || true
+    print_ok "네임스페이스 모니터링 레이블 설정 완료"
 
     oc apply -f "$SERVICE_YAML"
     print_ok "node-exporter-service 적용 완료"
 }
 
+step_service_monitor() {
+    print_step "3/4  ServiceMonitor 등록"
+
+    cat > servicemonitor-node-exporter.yaml <<EOF
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: node-exporter-monitor
+  namespace: ${NS}
+  labels:
+    servicetype: metrics
+spec:
+  selector:
+    matchLabels:
+      servicetype: metrics
+  endpoints:
+    - port: metric
+      interval: 30s
+      path: /metrics
+EOF
+    echo "생성된 파일: servicemonitor-node-exporter.yaml"
+    oc apply -f servicemonitor-node-exporter.yaml
+    print_ok "ServiceMonitor node-exporter-monitor 등록 완료"
+}
+
 step_check_endpoints() {
-    print_step "3/3  Endpoints 확인"
+    print_step "4/4  Endpoints 확인"
 
     local ep_count
     ep_count=$(oc get endpoints node-exporter-service -n "$NS" \
@@ -140,6 +170,17 @@ print_summary() {
     echo -e "  Endpoints 확인:"
     echo -e "    ${CYAN}oc get endpoints node-exporter-service -n ${NS}${NC}"
     echo ""
+    echo -e "  ServiceMonitor 확인:"
+    echo -e "    ${CYAN}oc get servicemonitor -n ${NS}${NC}"
+    echo ""
+    echo -e "  Prometheus 수집 대상 확인 (user-workload):"
+    echo -e "    ${CYAN}oc get pods -n openshift-user-workload-monitoring${NC}"
+    echo ""
+    echo -e "  PromQL 예시 (OpenShift Console → Observe → Metrics):"
+    echo -e "    ${CYAN}node_memory_MemAvailable_bytes${NC}"
+    echo -e "    ${CYAN}rate(node_cpu_seconds_total{mode!=\"idle\"}[5m])${NC}"
+    echo -e "    ${CYAN}node_load1${NC}"
+    echo ""
     echo -e "  메트릭 접근 (port-forward):"
     echo -e "    ${CYAN}oc port-forward svc/node-exporter-service 9100:9100 -n ${NS}${NC}"
     echo -e "    ${CYAN}curl http://localhost:9100/metrics${NC}"
@@ -160,6 +201,7 @@ main() {
     preflight
     step_vm
     step_apply_service
+    step_service_monitor
     step_check_endpoints
     print_summary
 }
