@@ -224,8 +224,8 @@ spec:
       interval: 30s
       path: /metrics
       relabelings:
-        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
-          targetLabel: job
+        - targetLabel: job
+          replacement: vm_prometheus-metric
         - sourceLabels: [__meta_kubernetes_endpoint_hostname]
           targetLabel: vmname
         - sourceLabels: [__address__]
