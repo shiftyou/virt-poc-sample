@@ -263,34 +263,9 @@ spec:
   reason: "POC 유지보수 실습"
 EOF
     echo "생성된 파일: nodemaintenance-${NODE1}.yaml"
-    oc apply -f "nodemaintenance-${NODE1}.yaml"
-    print_ok "NodeMaintenance 생성 완료"
-
-    print_info "노드 cordon + VM Migration 대기 중..."
-
-    # VM이 다른 노드로 이동할 때까지 대기 (최대 5분)
-    local retries=60
-    local i=0
-    while [ $i -lt $retries ]; do
-        local remaining
-        remaining=$(oc get vmi -n "$NS" \
-            -o jsonpath='{range .items[*]}{.status.nodeName}{"\n"}{end}' 2>/dev/null | \
-            grep -c "^${NODE1}$" || true)
-        if [ "$remaining" -eq 0 ]; then
-            print_ok "모든 VM이 ${NODE1} 에서 다른 노드로 이동 완료"
-            break
-        fi
-        printf "  [%d/%d] %s 에 남은 VM: %d개\r" "$((i+1))" "$retries" "$NODE1" "$remaining"
-        sleep 5
-        i=$((i+1))
-    done
-    echo ""
-
-    echo ""
-    print_info "VM 이동 결과:"
-    oc get vmi -n "$NS" \
-      -o custom-columns=NAME:.metadata.name,NODE:.status.nodeName,PHASE:.status.phase \
-      2>/dev/null || true
+    print_ok "NodeMaintenance YAML 생성 완료 (apply 는 하지 않음)"
+    print_info "아래 명령으로 직접 적용하세요:"
+    echo -e "    ${CYAN}oc apply -f nodemaintenance-${NODE1}.yaml${NC}"
 }
 
 # =============================================================================
