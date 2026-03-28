@@ -1,224 +1,102 @@
 # Node Exporter 실습
 
-OpenShift에 내장된 node-exporter와 커스텀 메트릭 수집 방법을 설명합니다.
+VM(Linux) 내부에 node_exporter를 직접 설치하고, OpenShift에서 해당 메트릭을 수집할 수 있도록 Service를 등록하는 과정을 설명합니다.
 
 ---
 
-## OpenShift 내장 Node Exporter
+## 구성 개요
 
-OpenShift Monitoring은 **node-exporter를 기본 포함**합니다.
-별도 설치 없이 모든 노드에 DaemonSet으로 배포되어 있습니다.
-
-```bash
-# 내장 node-exporter Pod 확인
-oc get pods -n openshift-monitoring -l app.kubernetes.io/name=node-exporter
-
-# 수집 중인 메트릭 확인 (예: 첫 번째 Pod)
-NODE_EXPORTER_POD=$(oc get pods -n openshift-monitoring \
-  -l app.kubernetes.io/name=node-exporter \
-  -o jsonpath='{.items[0].metadata.name}')
-
-oc exec -n openshift-monitoring "$NODE_EXPORTER_POD" -- \
-  curl -s http://localhost:9100/metrics | grep node_cpu | head -10
+```
+VM (Linux)                          OpenShift
+┌─────────────────────┐             ┌──────────────────────────────┐
+│  node_exporter      │             │  Namespace: poscodx4         │
+│  (systemd service)  │◄────────────│                              │
+│  :9100/metrics      │             │  Service: node-exporter-service│
+└─────────────────────┘             │  selector: monitor: metrics  │
+                                    └──────────────────────────────┘
 ```
 
-### 주요 내장 메트릭
-
-| 메트릭 | 설명 |
-|--------|------|
-| `node_cpu_seconds_total` | CPU 사용 시간 (mode별) |
-| `node_memory_MemAvailable_bytes` | 사용 가능 메모리 |
-| `node_filesystem_avail_bytes` | 파일시스템 여유 공간 |
-| `node_network_receive_bytes_total` | 네트워크 수신 바이트 |
-| `node_disk_io_time_seconds_total` | 디스크 I/O 시간 |
-| `node_load1` / `node_load5` / `node_load15` | 시스템 Load Average |
+- node_exporter는 VM 내부에 **바이너리 + systemd** 방식으로 설치합니다.
+- 최신 릴리즈: https://github.com/prometheus/node_exporter/releases
+- OpenShift에는 VM Pod를 가리키는 **ClusterIP Service**를 등록합니다.
 
 ---
 
-## 커스텀 Node Exporter 추가
+## 1. VM에 node_exporter 설치
 
-기본 node-exporter에 없는 메트릭을 수집하려면 별도 배포합니다.
-OpenShift에서는 **Privileged** 설정이 필요합니다.
-
-### 1. ServiceAccount + SCC 설정
+VM(또는 Bare-metal 호스트)에 SSH로 접속한 뒤 `node-exporter-install.sh`를 실행합니다.
 
 ```bash
-oc create namespace poc-node-exporter
+# 기본 버전(1.10.2)으로 설치
+bash node-exporter-install.sh
 
-# ServiceAccount 생성
-oc create serviceaccount node-exporter-sa -n poc-node-exporter
-
-# privileged SCC 부여 (호스트 파일시스템 접근 필요)
-oc adm policy add-scc-to-user privileged \
-  -z node-exporter-sa -n poc-node-exporter
+# 특정 버전 지정
+VERSION=1.10.2 bash node-exporter-install.sh
 ```
 
-### 2. DaemonSet 배포
+### 설치 과정 요약
+
+| 단계 | 내용 |
+|------|------|
+| 1 | GitHub Releases에서 바이너리 다운로드 |
+| 2 | `/usr/bin/node_exporter`로 압축 해제 |
+| 3 | 전용 시스템 유저 `node_exporter` 생성 |
+| 4 | 파일 소유권 설정 |
+| 5 | systemd 서비스 파일 생성 (`/etc/systemd/system/node_exporter.service`) |
+| 6 | 서비스 활성화 및 시작 (`systemctl enable --now`) |
+
+### 설치 확인
 
 ```bash
-oc apply -f - <<'EOF'
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: custom-node-exporter
-  namespace: poc-node-exporter
-  labels:
-    app: custom-node-exporter
-spec:
-  selector:
-    matchLabels:
-      app: custom-node-exporter
-  template:
-    metadata:
-      labels:
-        app: custom-node-exporter
-    spec:
-      serviceAccountName: node-exporter-sa
-      hostNetwork: true
-      hostPID: true
-      tolerations:
-        - operator: Exists
-      containers:
-        - name: node-exporter
-          image: quay.io/prometheus/node-exporter:latest
-          args:
-            - "--path.rootfs=/host"
-            - "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/k8s.io/.+)($|/)"
-          ports:
-            - name: metrics
-              containerPort: 9100
-              hostPort: 9100
-          securityContext:
-            privileged: true
-            runAsUser: 0
-          volumeMounts:
-            - name: host-root
-              mountPath: /host
-              readOnly: true
-      volumes:
-        - name: host-root
-          hostPath:
-            path: /
-EOF
-```
+# 서비스 상태 확인
+systemctl status node_exporter
 
-### 3. Service + ServiceMonitor 등록
+# 메트릭 수집 확인
+curl http://localhost:9100/metrics | head -20
 
-```bash
-oc apply -f - <<'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: custom-node-exporter
-  namespace: poc-node-exporter
-  labels:
-    app: custom-node-exporter
-spec:
-  ports:
-    - name: metrics
-      port: 9100
-      targetPort: 9100
-  selector:
-    app: custom-node-exporter
-  clusterIP: None
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: custom-node-exporter
-  namespace: poc-node-exporter
-  labels:
-    app: custom-node-exporter
-spec:
-  selector:
-    matchLabels:
-      app: custom-node-exporter
-  endpoints:
-    - port: metrics
-      interval: 30s
-      path: /metrics
-EOF
+# 주요 메트릭 확인
+curl -s http://localhost:9100/metrics | grep -E '^node_(cpu|memory|filesystem|load)'
 ```
 
 ---
 
-## textfile Collector — 커스텀 메트릭 수집
+## 2. OpenShift Service 등록
 
-node-exporter의 `textfile` collector를 사용하면 스크립트로 생성한 메트릭을 수집할 수 있습니다.
-
-### 예: VM 개수 메트릭 수집 스크립트
-
-노드에서 실행되는 virt-launcher Pod 수를 수집하는 예제입니다.
+node_exporter가 설치된 VM Pod에 레이블 `monitor: metrics`가 있어야 합니다.
 
 ```bash
-# 메트릭 파일 생성 스크립트 (CronJob으로 주기 실행)
-cat > /var/lib/node_exporter/textfile_collector/vm_count.prom << 'EOF'
-# HELP node_vm_count Number of running VMs on this node
-# TYPE node_vm_count gauge
-node_vm_count $(crictl ps 2>/dev/null | grep -c virt-launcher || echo 0)
-EOF
+# VM Pod에 레이블 확인
+oc get pods -n poscodx4 --show-labels | grep monitor
+
+# 레이블이 없는 경우 추가
+oc label pod <pod-name> -n poscodx4 monitor=metrics
 ```
 
-CronJob으로 주기 수집:
+Service를 적용합니다.
 
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: vm-metrics-collector
-  namespace: poc-node-exporter
-spec:
-  schedule: "*/1 * * * *"
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          hostPID: true
-          tolerations:
-            - operator: Exists
-          containers:
-            - name: collector
-              image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-              command:
-                - /bin/sh
-                - -c
-                - |
-                  VM_COUNT=$(chroot /host crictl ps 2>/dev/null | grep -c virt-launcher || echo 0)
-                  echo "# HELP node_vm_count Number of running VMs on this node"
-                  echo "# TYPE node_vm_count gauge"
-                  echo "node_vm_count ${VM_COUNT}" > /textfile/vm_count.prom
-              securityContext:
-                privileged: true
-              volumeMounts:
-                - name: textfile
-                  mountPath: /textfile
-                - name: host-root
-                  mountPath: /host
-          volumes:
-            - name: textfile
-              hostPath:
-                path: /var/lib/node_exporter/textfile_collector
-            - name: host-root
-              hostPath:
-                path: /
-          restartPolicy: OnFailure
+```bash
+oc apply -f node-exporter-service.yaml
+```
+
+### Service 확인
+
+```bash
+# Service 상태
+oc get svc node-exporter-service -n poscodx4
+
+# Endpoints 확인 (VM Pod IP:9100 이 등록되어야 함)
+oc get endpoints node-exporter-service -n poscodx4
 ```
 
 ---
 
-## 메트릭 확인
+## 3. 메트릭 접근 확인
 
 ```bash
-# node-exporter 메트릭 접근 (port-forward)
-oc port-forward -n poc-node-exporter \
-  daemonset/custom-node-exporter 9100:9100 &
+# Service를 통해 메트릭 접근 (port-forward)
+oc port-forward svc/node-exporter-service 9100:9100 -n poscodx4 &
 
-curl http://localhost:9100/metrics | grep node_
-
-# Prometheus에서 쿼리
-# OpenShift Console → Observe → Metrics
-# 쿼리: node_memory_MemAvailable_bytes
-# 쿼리: node_cpu_seconds_total{mode="idle"}
+curl http://localhost:9100/metrics | grep node_memory_MemAvailable_bytes
 ```
 
 ---
@@ -226,19 +104,17 @@ curl http://localhost:9100/metrics | grep node_
 ## 트러블슈팅
 
 ```bash
-# DaemonSet 상태 확인
-oc get daemonset custom-node-exporter -n poc-node-exporter
+# node_exporter 서비스 재시작 (VM 내부)
+sudo systemctl restart node_exporter
+sudo journalctl -u node_exporter -f
 
-# Pod 로그 확인
-oc logs -n poc-node-exporter \
-  -l app=custom-node-exporter --tail=30
+# 방화벽 확인 (VM 내부, 9100 포트 허용 여부)
+sudo firewall-cmd --list-ports
+sudo firewall-cmd --add-port=9100/tcp --permanent && sudo firewall-cmd --reload
 
-# SCC 설정 확인
-oc get pod -n poc-node-exporter \
-  -o jsonpath='{.items[*].metadata.annotations.openshift\.io/scc}'
-
-# ServiceMonitor 상태 확인
-oc get servicemonitor -n poc-node-exporter
+# Endpoints가 비어 있는 경우 → Pod 레이블 확인
+oc describe svc node-exporter-service -n poscodx4
+oc get pods -n poscodx4 --show-labels
 ```
 
 ---
@@ -246,5 +122,13 @@ oc get servicemonitor -n poc-node-exporter
 ## 롤백
 
 ```bash
-oc delete namespace poc-node-exporter
+# OpenShift Service 삭제
+oc delete -f node-exporter-service.yaml
+
+# VM 내부 node_exporter 제거
+sudo systemctl disable --now node_exporter
+sudo rm /etc/systemd/system/node_exporter.service
+sudo rm /usr/bin/node_exporter
+sudo userdel node_exporter
+sudo systemctl daemon-reload
 ```
