@@ -8,7 +8,9 @@
 #       02-network/02-network.sh
 #       03-vm-management/03-vm-management.sh
 #
-# 사용법: ./make.sh
+# 사용법:
+#   ./make.sh          전체 실행
+#   ./make.sh clean    poc- 네임스페이스 전체 삭제
 # =============================================================================
 
 set -euo pipefail
@@ -26,6 +28,55 @@ NC='\033[0m'
 print_info()  { echo -e "${CYAN}[make]${NC} $1"; }
 print_ok()    { echo -e "${GREEN}[make]${NC} $1"; }
 print_error() { echo -e "${RED}[make]${NC} $1"; }
+print_warn()  { echo -e "${YELLOW}[make]${NC} $1"; }
+
+# =============================================================================
+# clean 서브커맨드
+# =============================================================================
+if [ "${1:-}" = "clean" ]; then
+    if ! oc whoami &>/dev/null; then
+        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        exit 1
+    fi
+
+    NAMESPACES=$(oc get namespace --no-headers \
+        -o custom-columns=NAME:.metadata.name 2>/dev/null | grep '^poc-' || true)
+
+    if [ -z "$NAMESPACES" ]; then
+        print_info "삭제할 poc- 네임스페이스가 없습니다."
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  make.sh clean — 아래 네임스페이스를 삭제합니다${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "$NAMESPACES" | while read -r ns; do
+        echo -e "    ${YELLOW}●${NC} ${ns}"
+    done
+    echo ""
+    echo -n -e "${YELLOW}  정말 삭제하시겠습니까? (y/N): ${NC}"
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_info "취소했습니다."
+        exit 0
+    fi
+
+    echo ""
+    echo "$NAMESPACES" | while read -r ns; do
+        print_info "삭제 중: ${ns}"
+        oc delete namespace "$ns" --wait=false 2>/dev/null && \
+            print_ok "${ns} 삭제 요청 완료" || \
+            print_warn "${ns} 삭제 실패 (이미 없거나 권한 부족)"
+    done
+
+    echo ""
+    print_info "네임스페이스 삭제가 백그라운드에서 진행됩니다."
+    print_info "상태 확인: oc get namespace | grep poc-"
+    echo ""
+    exit 0
+fi
 
 # env.conf 확인 및 로드
 if [ ! -f "$ENV_FILE" ]; then
