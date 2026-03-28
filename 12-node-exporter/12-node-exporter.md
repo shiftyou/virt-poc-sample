@@ -223,6 +223,13 @@ spec:
     - port: metric
       interval: 30s
       path: /metrics
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
+          targetLabel: job
+        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
+          targetLabel: vmname
+        - sourceLabels: [__address__]
+          targetLabel: instance
 ```
 
 ### ServiceMonitor 확인
