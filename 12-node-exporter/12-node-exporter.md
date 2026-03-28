@@ -226,6 +226,10 @@ spec:
       relabelings:
         - targetLabel: job
           replacement: vm-node-exporter
+        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
+          targetLabel: vmname
+        - sourceLabels: [__address__]
+          targetLabel: instance
 ```
 
 ### ServiceMonitor 확인

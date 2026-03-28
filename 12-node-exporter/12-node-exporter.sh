@@ -134,6 +134,10 @@ spec:
       relabelings:
         - targetLabel: job
           replacement: vm-node-exporter
+        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
+          targetLabel: vmname
+        - sourceLabels: [__address__]
+          targetLabel: instance
 EOF
     echo "생성된 파일: servicemonitor-node-exporter.yaml"
     oc apply -f servicemonitor-node-exporter.yaml
