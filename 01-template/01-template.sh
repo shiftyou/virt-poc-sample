@@ -14,6 +14,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# env.conf 자동 로드 (단독 실행 시)
+ENV_FILE="${SCRIPT_DIR}/../env.conf"
+if [ -f "$ENV_FILE" ]; then
+    set -a; source "$ENV_FILE"; set +a
+fi
+
 TARGET_NS="openshift-virtualization-os-images"
 DV_NAME="poc-golden"
 DS_NAME="poc"
