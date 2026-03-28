@@ -55,7 +55,7 @@ preflight() {
     # NMState Operator 확인
     if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
         print_error "NMState Operator 가 설치되어 있지 않습니다."
-        echo "  설치 방법: 00-operator/08-nmstate-operator.md 참조"
+        echo "  설치 방법: 00-operator/nmstate-operator.md 참조"
         exit 1
     fi
 
