@@ -2,7 +2,7 @@ kind: Service
 apiVersion: v1
 metadata:
   name: node-exporter-service
-  namespace: poscodx4
+  namespace: poc-node-exporter
   labels:
     servicetype: metrics
 spec:

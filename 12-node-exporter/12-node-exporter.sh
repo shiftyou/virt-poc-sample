@@ -19,7 +19,7 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-NS="poscodx4"
+NS="poc-node-exporter"
 SERVICE_YAML="${SCRIPT_DIR}/node-exporter-service.yaml"
 
 GREEN='\033[0;32m'
@@ -44,11 +44,12 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
-    if ! oc get namespace "$NS" &>/dev/null; then
-        print_error "네임스페이스 '$NS' 가 존재하지 않습니다. 먼저 생성하세요."
-        exit 1
+    if oc get namespace "$NS" &>/dev/null; then
+        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+    else
+        oc new-project "$NS" > /dev/null
+        print_ok "네임스페이스 $NS 생성 완료"
     fi
-    print_ok "네임스페이스 $NS 확인 완료"
 
     if [ ! -f "$SERVICE_YAML" ]; then
         print_error "Service YAML 파일을 찾을 수 없습니다: $SERVICE_YAML"
