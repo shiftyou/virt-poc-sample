@@ -58,6 +58,7 @@ cd virt-poc-sample
 | 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
 | 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 |
 | 03 | [03-vm-management](03-vm-management/03-vm-management.md) | 네임스페이스 + NAD 준비, VM 생성·스토리지·네트워크·Static IP·Live Migration |
+| 04 | [04-network-policy](04-network-policy/04-network-policy.md) | NetworkPolicy 실습 — Deny All / Allow Same NS / Allow IP |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -98,6 +99,11 @@ virt-poc-sample/
 ├── 03-vm-management/           # VM 생성 및 관리
 │   ├── 03-vm-management.md     # 가이드 문서 (VM 생성·스토리지·네트워크·Static IP·Live Migration)
 │   └── 03-vm-management.sh     # 자동화 스크립트 (네임스페이스 + NAD)
+│
+├── 04-network-policy/          # NetworkPolicy 실습
+│   ├── 04-network-policy.md    # 가이드 문서
+│   ├── 04-network-policy.sh    # 자동화 스크립트 (NS·NAD·정책·VM 배포)
+│   └── netpol-allow-from-ns1-ip.yaml  # NS1→NS2 IP 허용 정책 (IP 수정 후 적용)
 │
 └── disabled/                   # 비활성 항목 (참고용)
 ```
