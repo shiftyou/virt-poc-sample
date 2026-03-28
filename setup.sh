@@ -309,40 +309,22 @@ ask "Linux Bridge name to create" "br1" BRIDGE_NAME
 ask "NAD namespace" "poc-nad" NAD_NAMESPACE
 
 # =============================================================================
-# 3. MinIO Settings
+# 3. Storage Class
 # =============================================================================
-if [ "${OADP_INSTALLED:-false}" = "true" ]; then
-    print_header "3. MinIO Settings (OADP S3 backend)"
-
-    ask "MinIO Access Key" "minio" MINIO_ACCESS_KEY
-    ask "MinIO Secret Key" "minio123" MINIO_SECRET_KEY "true"
-    ask "OADP backup bucket name" "velero" MINIO_BUCKET
-    ask "MinIO service endpoint" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
-else
-    print_info "3. MinIO Settings — OADP Operator 미설치, 기본값으로 설정합니다."
-    MINIO_ACCESS_KEY="minio"
-    MINIO_SECRET_KEY="minio123"
-    MINIO_BUCKET="velero"
-    MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
-fi
-
-# =============================================================================
-# 4. Storage Class
-# =============================================================================
-print_header "4. Storage Class"
+print_header "3. Storage Class"
 
 ask "Storage class for VM image upload" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
 
 # =============================================================================
-# 5. VDDK Image
+# 4. VDDK Image
 # =============================================================================
 if [ "${MTV_INSTALLED:-false}" = "true" ]; then
-    print_header "5. VDDK Image"
+    print_header "4. VDDK Image"
 
     print_info "VDDK image path in internal registry (push manually before use)"
     ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 else
-    print_info "5. VDDK Image — MTV Operator not installed, skipping."
+    print_info "4. VDDK Image — MTV Operator not installed, skipping."
     VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
 fi
 
@@ -350,25 +332,25 @@ CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
 API_ALLOWED_CIDRS="0.0.0.0/0"
 
 # =============================================================================
-# 6. Fence Agents Remediation
+# 5. Fence Agents Remediation
 # =============================================================================
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
-    print_header "6. Fence Agents Remediation (FAR)"
+    print_header "5. Fence Agents Remediation (FAR)"
 
     ask "IPMI/BMC IP address" "192.168.1.100" FENCE_AGENT_IP
     ask "IPMI username" "admin" FENCE_AGENT_USER
     ask "IPMI password" "password" FENCE_AGENT_PASS "true"
 else
-    print_info "6. Fence Agents Remediation — FAR Operator not installed, skipping."
+    print_info "5. Fence Agents Remediation — FAR Operator not installed, skipping."
     FENCE_AGENT_IP="192.168.1.100"
     FENCE_AGENT_USER="admin"
     FENCE_AGENT_PASS="password"
 fi
 
 # =============================================================================
-# 7. Node Info
+# 6. Node Info
 # =============================================================================
-print_header "7. Node Info"
+print_header "6. Node Info"
 
 # Auto-detect worker nodes
 if check_oc 2>/dev/null; then
@@ -388,14 +370,14 @@ ask "Worker node names (space-separated)" "${DETECTED_WORKERS:-worker-0 worker-1
 ask "Single node name for testing" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 8. Grafana
+# 7. Grafana
 # =============================================================================
 if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-    print_header "8. Grafana"
+    print_header "7. Grafana"
 
     ask "Grafana admin password" "grafana123" GRAFANA_ADMIN_PASS "true"
 else
-    print_info "8. Grafana — Grafana Operator not installed, skipping."
+    print_info "7. Grafana — Grafana Operator not installed, skipping."
     GRAFANA_ADMIN_PASS="grafana123"
 fi
 
@@ -419,12 +401,6 @@ CLUSTER_API=${CLUSTER_API}
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 NAD_NAMESPACE=${NAD_NAMESPACE}
-
-# MinIO settings
-MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-MINIO_BUCKET=${MINIO_BUCKET}
-MINIO_ENDPOINT=${MINIO_ENDPOINT}
 
 # Storage class
 STORAGE_CLASS=${STORAGE_CLASS}

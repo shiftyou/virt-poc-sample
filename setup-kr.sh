@@ -309,71 +309,48 @@ ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
 ask "NAD 네임스페이스" "poc-nad" NAD_NAMESPACE
 
 # =============================================================================
-# 3. MinIO 설정
+# 3. 스토리지클래스
 # =============================================================================
-if [ "${OADP_INSTALLED:-false}" = "true" ]; then
-    print_header "3. MinIO 설정 (OADP S3 backend)"
-
-    ask "MinIO Access Key" "minio" MINIO_ACCESS_KEY
-    ask "MinIO Secret Key" "minio123" MINIO_SECRET_KEY "true"
-    ask "OADP 백업 버킷 이름" "velero" MINIO_BUCKET
-    ask "MinIO 서비스 엔드포인트" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
-else
-    print_info "3. MinIO 설정 — OADP Operator 미설치, 건너뜁니다."
-    MINIO_ACCESS_KEY="minio"
-    MINIO_SECRET_KEY="minio123"
-    MINIO_BUCKET="velero"
-    MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
-fi
-
-# =============================================================================
-# 4. 스토리지클래스
-# =============================================================================
-print_header "4. 스토리지클래스 설정"
+print_header "3. 스토리지클래스 설정"
 
 ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
 
 # =============================================================================
-# 5. VDDK 이미지
+# 4. VDDK 이미지
 # =============================================================================
 if [ "${MTV_INSTALLED:-false}" = "true" ]; then
-    print_header "5. VDDK 이미지 설정"
+    print_header "4. VDDK 이미지 설정"
 
     print_info "VDDK 이미지 경로 (내부 레지스트리에 직접 push 후 입력)"
     ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 else
-    print_info "5. VDDK 이미지 — MTV Operator 미설치, 건너뜁니다."
+    print_info "4. VDDK 이미지 — MTV Operator 미설치, 건너뜁니다."
     VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
 fi
 
-# =============================================================================
-# 6. Console / API 접근 IP 제한
-# =============================================================================
-print_header "6. Console / API 접근 IP 제한"
-
-ask "Console 접근 허용 CIDR (쉼표로 구분, 예: 10.0.0.0/8,192.168.1.0/24)" "0.0.0.0/0" CONSOLE_ALLOWED_CIDRS
-ask "API 서버 접근 허용 CIDR (쉼표로 구분)" "0.0.0.0/0" API_ALLOWED_CIDRS
+CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
+API_ALLOWED_CIDRS="0.0.0.0/0"
 
 # =============================================================================
-# 7. Fence Agents Remediation
+# 5. Fence Agents Remediation
 # =============================================================================
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
-    print_header "7. Fence Agents Remediation (FAR)"
+    print_header "5. Fence Agents Remediation (FAR)"
 
     ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
     ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
     ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
 else
-    print_info "7. Fence Agents Remediation — FAR Operator 미설치, 건너뜁니다."
+    print_info "5. Fence Agents Remediation — FAR Operator 미설치, 건너뜁니다."
     FENCE_AGENT_IP="192.168.1.100"
     FENCE_AGENT_USER="admin"
     FENCE_AGENT_PASS="password"
 fi
 
 # =============================================================================
-# 8. 노드 정보
+# 6. 노드 정보
 # =============================================================================
-print_header "8. 노드 정보"
+print_header "6. 노드 정보"
 
 # 노드 자동 감지
 if check_oc 2>/dev/null; then
@@ -393,14 +370,14 @@ ask "워커 노드 이름 목록 (공백으로 구분)" "${DETECTED_WORKERS:-wor
 ask "테스트용 단일 노드 이름" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 9. Grafana
+# 7. Grafana
 # =============================================================================
 if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-    print_header "9. Grafana 설정"
+    print_header "7. Grafana 설정"
 
     ask "Grafana admin 비밀번호" "grafana123" GRAFANA_ADMIN_PASS "true"
 else
-    print_info "9. Grafana — Grafana Operator 미설치, 건너뜁니다."
+    print_info "7. Grafana — Grafana Operator 미설치, 건너뜁니다."
     GRAFANA_ADMIN_PASS="grafana123"
 fi
 
@@ -424,12 +401,6 @@ CLUSTER_API=${CLUSTER_API}
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 NAD_NAMESPACE=${NAD_NAMESPACE}
-
-# MinIO 설정
-MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-MINIO_BUCKET=${MINIO_BUCKET}
-MINIO_ENDPOINT=${MINIO_ENDPOINT}
 
 # 스토리지클래스
 STORAGE_CLASS=${STORAGE_CLASS}
