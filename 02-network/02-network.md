@@ -152,7 +152,7 @@ oc describe net-attach-def poc-bridge-nad -n ${NAD_NAMESPACE}
 
 ## 자동 적용
 
-`02-network.sh`를 실행하면 NNCP → NAD를 순서대로 적용하고 상태를 확인합니다.
+`02-network.sh`를 실행하면 NNCP → NAD → VM 생성을 순서대로 적용하고 상태를 확인합니다.
 
 ```bash
 ./02-network/02-network.sh
@@ -160,44 +160,52 @@ oc describe net-attach-def poc-bridge-nad -n ${NAD_NAMESPACE}
 
 ---
 
-## VM에서 보조 네트워크 사용
+## 3단계: VM 생성 (poc 템플릿 + NAD 보조 네트워크)
 
-NAD 등록 후 VM을 생성할 때 보조 네트워크로 선택합니다.
+`poc` 템플릿으로 VM을 생성하고 `poc-bridge-nad`를 보조 네트워크로 연결합니다.
+
+```
+eth0 (masquerade) ── Pod Network
+eth1 (bridge)     ── poc-bridge-nad → Linux Bridge → 물리 네트워크
+```
 
 ```bash
 source env.conf
 
-cat <<EOF | oc apply -f -
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
-metadata:
-  name: test-vm
-  namespace: ${NAD_NAMESPACE}
-spec:
-  running: true
-  template:
-    spec:
-      domain:
-        devices:
-          interfaces:
-            - name: default
-              masquerade: {}
-            - name: bridge-net
-              bridge: {}
-        resources:
-          requests:
-            memory: 1Gi
-      networks:
-        - name: default
-          pod: {}
-        - name: bridge-net
-          multus:
-            networkName: poc-bridge-nad
-      volumes:
-        - name: rootdisk
-          containerDisk:
-            image: quay.io/containerdisks/fedora:latest
-EOF
+VM_NAME="poc-network-vm"
+
+# poc 템플릿으로 VM 생성
+oc process -n openshift poc -p NAME="${VM_NAME}" \
+  | oc apply -n "${NAD_NAMESPACE}" -f -
+
+# 보조 NIC (poc-bridge-nad) 추가
+oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/domain/devices/interfaces/-",
+    "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/networks/-",
+    "value": {"name": "bridge-net", "multus": {"networkName": "poc-bridge-nad"}}
+  }
+]'
+
+# VM 시작
+virtctl start "${VM_NAME}" -n "${NAD_NAMESPACE}"
+```
+
+### VM 네트워크 확인
+
+```bash
+# VMI NIC 상태 확인
+oc get vmi "${VM_NAME}" -n "${NAD_NAMESPACE}" \
+  -o jsonpath='{range .status.interfaces[*]}{.name}: {.ipAddress}{"\n"}{end}'
+
+# VM 콘솔에서 직접 확인
+virtctl console "${VM_NAME}" -n "${NAD_NAMESPACE}"
+# ip addr show
 ```
 
 > Console에서 VM 생성 시: **Network interfaces** 탭 → **Add network interface** → NAD 이름(`poc-bridge-nad`) 선택

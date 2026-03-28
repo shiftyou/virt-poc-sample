@@ -107,6 +107,7 @@ ns_desc() {
         poc-netpol-2)       echo "04 NetworkPolicy 실습 — NS2 (Deny All / Allow Same NS)" ;;
         poc-resource-quota) echo "05 ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한" ;;
         poc-descheduler)    echo "06 Descheduler 실습 — 노드 과부하 시 VM 자동 재배치" ;;
+        poc-maintenance)    echo "07 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
         *)                  echo "" ;;
     esac
 }

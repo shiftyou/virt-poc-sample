@@ -56,11 +56,12 @@ cd virt-poc-sample
 | 순서 | 디렉토리 | 설명 |
 |------|----------|------|
 | 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
-| 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 |
+| 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 + poc 템플릿으로 NAD 보조 네트워크 VM 생성 |
 | 03 | [03-vm-management](03-vm-management/03-vm-management.md) | 네임스페이스 + NAD 준비, VM 생성·스토리지·네트워크·Static IP·Live Migration |
 | 04 | [04-network-policy](04-network-policy/04-network-policy.md) | NetworkPolicy 실습 — Deny All / Allow Same NS / Allow IP |
 | 05 | [05-resource-quota](05-resource-quota/05-resource-quota.md) | ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한 |
 | 06 | [06-descheduler](06-descheduler/06-descheduler.md) | Descheduler 실습 — VM 3개를 Live Migration으로 TEST_NODE에 집중 후 트리거 VM으로 과부하 유발 → 자동 재배치 |
+| 07 | [07-node-maintenance](07-node-maintenance/07-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -92,9 +93,9 @@ virt-poc-sample/
 │   ├── 01-template.md          # 가이드 문서
 │   └── 01-template.sh          # 자동화 스크립트
 │
-├── 02-network/                 # NNCP Linux Bridge + NAD
+├── 02-network/                 # NNCP Linux Bridge + NAD + VM 생성
 │   ├── 02-network.md               # 가이드 문서
-│   ├── 02-network.sh               # 자동화 스크립트
+│   ├── 02-network.sh               # 자동화 스크립트 (NNCP·NAD·poc템플릿VM+NAD보조네트워크)
 │   ├── consoleyamlsample-nncp.yaml # Console YAML Sample (NNCP)
 │   └── consoleyamlsample-nad.yaml  # Console YAML Sample (NAD)
 │
@@ -115,6 +116,10 @@ virt-poc-sample/
 ├── 06-descheduler/             # Descheduler 실습
 │   ├── 06-descheduler.md       # 가이드 문서
 │   └── 06-descheduler.sh       # 자동화 스크립트 (NS·VM3개·Live Migration→NODE1·Descheduler·트리거VM)
+│
+├── 07-node-maintenance/        # Node Maintenance 실습
+│   ├── 07-node-maintenance.md  # 가이드 문서
+│   └── 07-node-maintenance.sh  # 자동화 스크립트 (NS·VM2개·Live Migration→NODE1·NodeMaintenance)
 │
 └── disabled/                   # 비활성 항목 (참고용)
 ```
