@@ -36,6 +36,8 @@ set -a
 source "$ENV_FILE"
 set +a
 
+POC_SETUP_DIR="${SCRIPT_DIR}/poc-setup"
+
 # 번호 디렉토리를 정렬해서 수집
 STEPS=()
 while IFS= read -r dir; do
@@ -73,8 +75,11 @@ for dir in "${STEPS[@]}"; do
         continue
     fi
 
-    print_info "실행: ${dir}/${dir}.sh"
-    bash "$SH_FILE"
+    OUT_DIR="${POC_SETUP_DIR}/${dir}"
+    mkdir -p "$OUT_DIR"
+
+    print_info "실행: ${dir}/${dir}.sh  (생성 파일 → poc-setup/${dir}/)"
+    (cd "$OUT_DIR" && bash "$SH_FILE")
     print_ok "${dir} 완료"
 done
 
