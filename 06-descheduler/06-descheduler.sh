@@ -267,7 +267,7 @@ metadata:
   name: cluster
   namespace: openshift-kube-descheduler-operator
 spec:
-  managementState: Managed
+#  managementState: Managed
   deschedulingIntervalSeconds: 60
   profiles:
     - LifecycleAndUtilization
@@ -296,21 +296,27 @@ EOF
             print_ok "KubeDescheduler Available"
             break
         fi
-        local reason
-        reason=$(oc get kubedescheduler cluster \
-            -n "$DESCHEDULER_NS" \
-            -o jsonpath='{.status.conditions[?(@.type=="Available")].message}' 2>/dev/null || true)
-        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${reason:-Pending}"
+        printf "  [%d/%d] 대기 중...\r" "$((i+1))" "$retries"
         sleep 5
         i=$((i+1))
     done
     echo ""
+
+    # 최종 상태 출력 (TYPE / STATUS / REASON / MESSAGE)
+    echo ""
+    printf "  %-30s %-8s %-20s %s\n" "TYPE" "STATUS" "REASON" "MESSAGE"
+    printf "  %-30s %-8s %-20s %s\n" "------------------------------" "--------" "--------------------" "-------"
+    oc get kubedescheduler cluster \
+        -n "$DESCHEDULER_NS" \
+        -o jsonpath='{range .status.conditions[*]}{.type}{"\t"}{.status}{"\t"}{.reason}{"\t"}{.message}{"\n"}{end}' \
+        2>/dev/null | \
+        while IFS=$'\t' read -r type status reason message; do
+            printf "  %-30s %-8s %-20s %s\n" "$type" "$status" "$reason" "$message"
+        done || true
+    echo ""
+
     if [ $i -eq $retries ]; then
-        print_warn "KubeDescheduler 준비 시간 초과. 상태를 직접 확인하세요:"
-        echo "  oc get kubedescheduler cluster -n ${DESCHEDULER_NS}"
-        oc get kubedescheduler cluster -n "$DESCHEDULER_NS" \
-            -o jsonpath='{.status.conditions}' 2>/dev/null | \
-            python3 -m json.tool 2>/dev/null || true
+        print_warn "KubeDescheduler 준비 시간 초과. 위 상태를 확인하세요."
     fi
 
     print_info "  managementState: Managed"
