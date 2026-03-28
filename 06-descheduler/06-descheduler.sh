@@ -267,6 +267,7 @@ metadata:
   name: cluster
   namespace: openshift-kube-descheduler-operator
 spec:
+  managementState: Managed
   deschedulingIntervalSeconds: 60
   profiles:
     - LifecycleAndUtilization
@@ -277,12 +278,46 @@ spec:
         - poc-descheduler
 EOF
     echo "생성된 파일: kubedescheduler.yaml"
-    oc apply -f kubedescheduler.yaml
-    print_ok "KubeDescheduler 설정 완료"
-    print_info "  Profile   : LifecycleAndUtilization"
-    print_info "  Threshold : High (underutilized <40%, overutilized >60%)"
-    print_info "  Interval  : 60초"
-    print_info "  Namespace : ${NS}"
+    if ! oc apply -f kubedescheduler.yaml; then
+        print_error "KubeDescheduler 적용 실패"
+        exit 1
+    fi
+
+    # 적용 후 상태 확인 (최대 60초 대기)
+    print_info "KubeDescheduler 상태 확인 중..."
+    local retries=12
+    local i=0
+    while [ $i -lt $retries ]; do
+        local available
+        available=$(oc get kubedescheduler cluster \
+            -n "$DESCHEDULER_NS" \
+            -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
+        if [ "$available" = "True" ]; then
+            print_ok "KubeDescheduler Available"
+            break
+        fi
+        local reason
+        reason=$(oc get kubedescheduler cluster \
+            -n "$DESCHEDULER_NS" \
+            -o jsonpath='{.status.conditions[?(@.type=="Available")].message}' 2>/dev/null || true)
+        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${reason:-Pending}"
+        sleep 5
+        i=$((i+1))
+    done
+    echo ""
+    if [ $i -eq $retries ]; then
+        print_warn "KubeDescheduler 준비 시간 초과. 상태를 직접 확인하세요:"
+        echo "  oc get kubedescheduler cluster -n ${DESCHEDULER_NS}"
+        oc get kubedescheduler cluster -n "$DESCHEDULER_NS" \
+            -o jsonpath='{.status.conditions}' 2>/dev/null | \
+            python3 -m json.tool 2>/dev/null || true
+    fi
+
+    print_info "  managementState: Managed"
+    print_info "  Profile        : LifecycleAndUtilization"
+    print_info "  Threshold      : High (underutilized <40%, overutilized >60%)"
+    print_info "  Interval       : 60초"
+    print_info "  Namespace      : ${NS}"
 }
 
 # =============================================================================
@@ -421,6 +456,7 @@ spec:
       name: cluster
       namespace: openshift-kube-descheduler-operator
     spec:
+      managementState: Managed
       deschedulingIntervalSeconds: 60
       profiles:
         - LifecycleAndUtilization
