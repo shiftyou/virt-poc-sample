@@ -14,13 +14,13 @@ spec:
     # OpenShift Console > + 버튼 (Import YAML) 에서 붙여넣기 후 사용
     #
     # 적용 전 아래 값을 환경에 맞게 수정하세요.
-    #   - interfaces[0].name       : 생성할 Bridge 이름 (env.conf BRIDGE_NAME, 예: br1)
-    #   - interfaces[0].bridge.port: 물리 NIC 이름    (env.conf BRIDGE_INTERFACE, 예: ens4)
+    #   - interfaces[0].name       : 생성할 Bridge 이름 (env.conf BRIDGE_NAME, 예: br-flat)
+    #   - interfaces[0].bridge.port: 물리 NIC 이름    (env.conf BRIDGE_INTERFACE, 예: enp3s0)
     # =============================================================================
     apiVersion: nmstate.io/v1
     kind: NodeNetworkConfigurationPolicy
     metadata:
-      name: br1
+      name: poc-bridge-nncp
     spec:
       desiredState:
         interfaces:
@@ -29,12 +29,12 @@ spec:
                 stp:
                   enabled: false
               port:
-                - name: ens4
-            description: Linux bridge with ens4 as a port
+                - name: enp3s0
+            description: Linux bridge with enp3s0 as a port
             ipv4:
               dhcp: false
               enabled: false
-            name: br1
+            name: br-flat
             state: up
             type: linux-bridge
       nodeSelector:
