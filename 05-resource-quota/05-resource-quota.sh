@@ -41,6 +41,22 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
+# spec.running(deprecated) -> spec.runStrategy 마이그레이션
+# oc patch vm 전에 호출하여 admission webhook 경고 제거
+ensure_runstrategy() {
+    local vm="$1" ns="$2"
+    local running
+    running=$(oc get vm "$vm" -n "$ns" \
+        -o jsonpath='{.spec.running}' 2>/dev/null || true)
+    [ -z "$running" ] && return 0
+    local rs="Halted"
+    [ "$running" = "true" ] && rs="Always"
+    oc patch vm "$vm" -n "$ns" --type=json -p "[
+      {\"op\":\"remove\",\"path\":\"/spec/running\"},
+      {\"op\":\"add\",\"path\":\"/spec/runStrategy\",\"value\":\"${rs}\"}
+    ]" &>/dev/null || true
+}
+
 # =============================================================================
 # 사전 확인
 # =============================================================================
@@ -187,6 +203,7 @@ step_vms() {
         echo "생성된 파일: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
+        ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
             \"template\": {
@@ -234,6 +251,7 @@ step_vms() {
     # virt-launcher pod 생성 시 quota 초과 → VM은 생성되나 pod 기동 불가
     oc apply -n "$NS" -f "${VM3}.yaml"
 
+    ensure_runstrategy "$VM3" "$NS"
     oc patch vm "$VM3" -n "$NS" --type=merge -p "{
       \"spec\": {
         \"template\": {

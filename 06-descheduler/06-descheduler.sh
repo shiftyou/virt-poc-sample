@@ -46,6 +46,22 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
+# spec.running(deprecated) -> spec.runStrategy 마이그레이션
+# oc patch vm 전에 호출하여 admission webhook 경고 제거
+ensure_runstrategy() {
+    local vm="$1" ns="$2"
+    local running
+    running=$(oc get vm "$vm" -n "$ns" \
+        -o jsonpath='{.spec.running}' 2>/dev/null || true)
+    [ -z "$running" ] && return 0
+    local rs="Halted"
+    [ "$running" = "true" ] && rs="Always"
+    oc patch vm "$vm" -n "$ns" --type=json -p "[
+      {\"op\":\"remove\",\"path\":\"/spec/running\"},
+      {\"op\":\"add\",\"path\":\"/spec/runStrategy\",\"value\":\"${rs}\"}
+    ]" &>/dev/null || true
+}
+
 # =============================================================================
 # 사전 확인
 # =============================================================================
@@ -115,6 +131,7 @@ step_vms() {
         oc apply -n "$NS" -f "${VM}.yaml"
 
         # CPU/Memory request + LiveMigrate 전략 패치 (nodeSelector 없음)
+        ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
             \"template\": {
@@ -135,6 +152,7 @@ step_vms() {
 
         # vm-fixed: descheduler 제외 annotation 추가
         if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
+            ensure_runstrategy "$VM" "$NS"
             oc patch vm "$VM" -n "$NS" --type=merge -p '{
               "spec": {
                 "template": {
@@ -196,6 +214,7 @@ step_migrate_to_node1() {
         print_info "VM $VM Migration 시작: ${current_node} → ${NODE1}"
 
         # nodeSelector를 NODE1으로 임시 설정 → Migration 목적지 유도
+        ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
             \"template\": {
@@ -242,6 +261,7 @@ EOF
 
         # nodeSelector 제거 — descheduler가 vm-1, vm-2를 자유롭게 이동할 수 있도록
         # vm-fixed는 annotation으로 evict 방지하므로 nodeSelector 불필요
+        ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p '{
           "spec": {
             "template": {
@@ -418,6 +438,7 @@ step_trigger_vm() {
     echo "생성된 파일: poc-descheduler-vm-trigger.yaml"
     oc apply -n "$NS" -f "poc-descheduler-vm-trigger.yaml"
 
+    ensure_runstrategy poc-descheduler-vm-trigger "$NS"
     oc patch vm poc-descheduler-vm-trigger -n "$NS" --type=merge -p "{
       \"spec\": {
         \"template\": {

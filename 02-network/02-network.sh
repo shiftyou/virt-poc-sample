@@ -35,6 +35,22 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
+# spec.running(deprecated) -> spec.runStrategy 마이그레이션
+# oc patch vm 전에 호출하여 admission webhook 경고 제거
+ensure_runstrategy() {
+    local vm="$1" ns="$2"
+    local running
+    running=$(oc get vm "$vm" -n "$ns" \
+        -o jsonpath='{.spec.running}' 2>/dev/null || true)
+    [ -z "$running" ] && return 0
+    local rs="Halted"
+    [ "$running" = "true" ] && rs="Always"
+    oc patch vm "$vm" -n "$ns" --type=json -p "[
+      {\"op\":\"remove\",\"path\":\"/spec/running\"},
+      {\"op\":\"add\",\"path\":\"/spec/runStrategy\",\"value\":\"${rs}\"}
+    ]" &>/dev/null || true
+}
+
 # =============================================================================
 # 사전 확인
 # =============================================================================
@@ -236,6 +252,7 @@ step_vm() {
     oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
 
     # 보조 NIC (poc-bridge-nad) 추가 패치
+    ensure_runstrategy "$VM_NAME" "$NAD_NAMESPACE"
     oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p='[
       {
         "op": "add",

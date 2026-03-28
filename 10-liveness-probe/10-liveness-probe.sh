@@ -35,6 +35,22 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
+# spec.running(deprecated) -> spec.runStrategy 마이그레이션
+# oc patch vm 전에 호출하여 admission webhook 경고 제거
+ensure_runstrategy() {
+    local vm="$1" ns="$2"
+    local running
+    running=$(oc get vm "$vm" -n "$ns" \
+        -o jsonpath='{.spec.running}' 2>/dev/null || true)
+    [ -z "$running" ] && return 0
+    local rs="Halted"
+    [ "$running" = "true" ] && rs="Always"
+    oc patch vm "$vm" -n "$ns" --type=json -p "[
+      {\"op\":\"remove\",\"path\":\"/spec/running\"},
+      {\"op\":\"add\",\"path\":\"/spec/runStrategy\",\"value\":\"${rs}\"}
+    ]" &>/dev/null || true
+}
+
 # =============================================================================
 # 사전 확인
 # =============================================================================
@@ -88,6 +104,7 @@ step_vm() {
 
     # HTTP Liveness Probe (port 80) 패치
     # spec.template.spec.readinessProbe / livenessProbe → KubeVirt VMI 수준에서 지원
+    ensure_runstrategy "$VM_NAME" "$NS"
     oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
       "spec": {
         "template": {
