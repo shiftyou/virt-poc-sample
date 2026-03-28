@@ -100,7 +100,7 @@ step_namespace() {
 step_vms() {
     print_step "2/5  VM 3개 배포 (노드: ${NODE1})"
 
-    # vm-1, vm-2: descheduler 대상 / vm-fixed: PDB 보호
+    # vm-1, vm-2: descheduler 대상 / vm-fixed: annotation으로 descheduler 제외
     for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
             print_ok "VM $VM 이미 존재 — 스킵"
@@ -130,39 +130,32 @@ step_vms() {
           }
         }"
 
+        # vm-fixed: descheduler 제외 annotation 추가
+        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
+            oc patch vm "$VM" -n "$NS" --type=merge -p '{
+              "spec": {
+                "template": {
+                  "metadata": {
+                    "annotations": {
+                      "descheduler.alpha.kubernetes.io/evict": "false"
+                    }
+                  }
+                }
+              }
+            }'
+            print_info "  → descheduler.alpha.kubernetes.io/evict: false 적용"
+        fi
+
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
         print_ok "VM $VM 배포 완료 (node: ${NODE1}, cpu: ${VM_CPU_REQUEST})"
     done
 }
 
 # =============================================================================
-# 3단계: poc-descheduler-vm-fixed 에 PDB 적용 (descheduler 제외)
-# =============================================================================
-step_pdb() {
-    print_step "3/5  PDB 적용 (poc-descheduler-vm-fixed — descheduler 제외)"
-
-    cat > pdb-vm-fixed.yaml <<'EOF'
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: pdb-vm-fixed
-  namespace: poc-descheduler
-spec:
-  maxUnavailable: 0
-  selector:
-    matchLabels:
-      vm.kubevirt.io/name: poc-descheduler-vm-fixed
-EOF
-    echo "생성된 파일: pdb-vm-fixed.yaml"
-    oc apply -f pdb-vm-fixed.yaml
-    print_ok "PDB pdb-vm-fixed 적용 완료 — vm-fixed 는 descheduler 대상 제외"
-}
-
-# =============================================================================
-# 4단계: KubeDescheduler 설정 (LifecycleAndUtilization / High / 네임스페이스 한정)
+# 3단계: KubeDescheduler 설정 (LifecycleAndUtilization / High / 네임스페이스 한정)
 # =============================================================================
 step_descheduler() {
-    print_step "4/5  KubeDescheduler 설정"
+    print_step "3/4  KubeDescheduler 설정"
 
     cat > kubedescheduler.yaml <<'EOF'
 apiVersion: operator.openshift.io/v1
@@ -193,7 +186,7 @@ EOF
 # 5단계: 노드 리소스 분석 → 트리거 VM 산출 및 배포
 # =============================================================================
 step_trigger_vm() {
-    print_step "5/5  트리거 VM 배포 (노드 임계값 초과)"
+    print_step "4/4  트리거 VM 배포 (노드 임계값 초과)"
 
     print_info "${NODE1} 리소스 현황 분석 중..."
 
@@ -336,7 +329,6 @@ main() {
     preflight
     step_namespace
     step_vms
-    step_pdb
     step_descheduler
     step_trigger_vm
     print_summary

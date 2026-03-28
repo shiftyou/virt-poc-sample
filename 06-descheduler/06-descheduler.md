@@ -9,7 +9,7 @@ KubeDescheduler가 노드 부하를 감지하여 VM을 자동으로 재배치하
 │                                 │     │              │
 │  ● vm-1        (250m CPU)       │     │  (여유 있음)  │
 │  ● vm-2        (250m CPU)       │     │              │
-│  ● vm-fixed    (250m CPU) [PDB] │     │              │
+│  ● vm-fixed    (250m CPU) [evict=false] │     │              │
 │  ● vm-trigger  (계산된 CPU)     │     │              │
 │                                 │     │              │
 │  CPU 사용률 > 60%  ← 임계값 초과 │     │              │
@@ -39,9 +39,9 @@ Descheduler 발동 후 (60초 이내)
 
 | VM | 노드 고정 | CPU request | descheduler 대상 | 이유 |
 |----|----------|-------------|-----------------|------|
-| poc-descheduler-vm-1 | NODE1 | 250m | ✅ 대상 | PDB 없음 |
-| poc-descheduler-vm-2 | NODE1 | 250m | ✅ 대상 | PDB 없음 |
-| poc-descheduler-vm-fixed | NODE1 | 250m | ❌ 제외 | PDB maxUnavailable: 0 |
+| poc-descheduler-vm-1 | NODE1 | 250m | ✅ 대상 | annotation 없음 |
+| poc-descheduler-vm-2 | NODE1 | 250m | ✅ 대상 | annotation 없음 |
+| poc-descheduler-vm-fixed | NODE1 | 250m | ❌ 제외 | `descheduler.alpha.kubernetes.io/evict: "false"` |
 | poc-descheduler-vm-trigger | NODE1 | 계산된 값 | ✅ 잠재 대상 | 가장 나중에 배포 |
 
 ---
@@ -76,22 +76,31 @@ NODE1의 CPU requests 합계가 Allocatable의 **60% 초과** 시 → overutiliz
 
 ---
 
-## PDB — vm-fixed 보호 원리
+## Annotation — vm-fixed 보호 원리
 
 ```yaml
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: pdb-vm-fixed
-  namespace: poc-descheduler
-spec:
-  maxUnavailable: 0        # 동시에 중단 가능한 Pod 수 = 0
-  selector:
-    matchLabels:
-      vm.kubevirt.io/name: poc-descheduler-vm-fixed
+# VM spec.template.metadata.annotations
+descheduler.alpha.kubernetes.io/evict: "false"
 ```
 
-`maxUnavailable: 0` → Descheduler가 vm-fixed의 virt-launcher Pod를 evict하려 할 때 PDB 위반으로 거부됨 → NODE1 유지
+VM의 Pod 템플릿에 위 annotation을 추가하면 Descheduler가 해당 Pod를 evict 대상에서 제외합니다.
+
+```bash
+# 06-descheduler.sh 에서 적용되는 패치
+oc patch vm poc-descheduler-vm-fixed -n poc-descheduler --type=merge -p '{
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "descheduler.alpha.kubernetes.io/evict": "false"
+        }
+      }
+    }
+  }
+}'
+```
+
+`descheduler.alpha.kubernetes.io/evict: "false"` → Descheduler가 vm-fixed의 virt-launcher Pod를 evict 대상에서 제외 → NODE1 유지
 
 ---
 
