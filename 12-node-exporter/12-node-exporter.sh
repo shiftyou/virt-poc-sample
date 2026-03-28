@@ -132,8 +132,8 @@ spec:
       interval: 30s
       path: /metrics
       relabelings:
-        - targetLabel: job
-          replacement: vm-node-exporter
+        - sourceLabels: [__meta_kubernetes_endpoint_hostname]
+          targetLabel: job
         - sourceLabels: [__meta_kubernetes_endpoint_hostname]
           targetLabel: vmname
         - sourceLabels: [__address__]
