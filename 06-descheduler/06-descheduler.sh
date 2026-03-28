@@ -7,10 +7,9 @@
 #   2. poc 템플릿으로 3개 VM 배포
 #      - vm-1, vm-2 : nodeSelector로 NODE1에 배치 → Running 후 nodeSelector 제거
 #      - vm-fixed   : annotation으로 descheduler 제외
-#   3. vm-fixed를 TEST_NODE로 Live Migration (nodeSelector 임시 → 완료 후 제거)
-#   4. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
-#   5. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
-#   6. 트리거 VM을 TEST_NODE에 배포 → 노드 임계값 초과 → Descheduler 발동
+#   3. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
+#   4. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
+#   5. 트리거 VM을 TEST_NODE에 배포 → 노드 임계값 초과 → Descheduler 발동
 #
 # 사용법: ./06-descheduler.sh
 # =============================================================================
@@ -101,7 +100,7 @@ preflight() {
 # 1단계: 네임스페이스 생성
 # =============================================================================
 step_namespace() {
-    print_step "1/6  네임스페이스 생성 (${NS})"
+    print_step "1/5  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"
@@ -115,7 +114,7 @@ step_namespace() {
 # 2단계: 3개 VM 배포 (nodeSelector 없이 아무 노드에나 기동)
 # =============================================================================
 step_vms() {
-    print_step "2/6  VM 3개 배포"
+    print_step "2/5  VM 3개 배포"
 
     # vm-1, vm-2: descheduler 대상 / vm-fixed: annotation으로 descheduler 제외
     for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
@@ -132,105 +131,56 @@ step_vms() {
 
         ensure_runstrategy "$VM" "$NS"
 
-        if [ "$VM" != "poc-descheduler-vm-fixed" ]; then
-            # vm-1, vm-2: nodeSelector로 NODE1에 배치
-            oc patch vm "$VM" -n "$NS" --type=merge -p "{
+        # 모든 VM: nodeSelector로 NODE1에 배치
+        oc patch vm "$VM" -n "$NS" --type=merge -p "{
+          \"spec\": {
+            \"template\": {
               \"spec\": {
-                \"template\": {
-                  \"spec\": {
-                    \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
-                    \"evictionStrategy\": \"LiveMigrate\",
-                    \"domain\": {
-                      \"resources\": {
-                        \"requests\": {
-                          \"cpu\": \"${VM_CPU_REQUEST}\",
-                          \"memory\": \"${VM_MEM_REQUEST}\"
-                        }
-                      }
+                \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
+                \"evictionStrategy\": \"LiveMigrate\",
+                \"domain\": {
+                  \"resources\": {
+                    \"requests\": {
+                      \"cpu\": \"${VM_CPU_REQUEST}\",
+                      \"memory\": \"${VM_MEM_REQUEST}\"
                     }
                   }
                 }
               }
-            }"
-            print_info "  → nodeSelector: ${NODE1} 설정"
-        else
-            # vm-fixed: nodeSelector 없이 배포 + descheduler 제외 annotation
-            oc patch vm "$VM" -n "$NS" --type=merge -p "{
-              \"spec\": {
-                \"template\": {
-                  \"metadata\": {
-                    \"annotations\": {
-                      \"descheduler.alpha.kubernetes.io/evict\": \"false\"
-                    }
-                  },
-                  \"spec\": {
-                    \"evictionStrategy\": \"LiveMigrate\",
-                    \"domain\": {
-                      \"resources\": {
-                        \"requests\": {
-                          \"cpu\": \"${VM_CPU_REQUEST}\",
-                          \"memory\": \"${VM_MEM_REQUEST}\"
-                        }
-                      }
+            }
+          }
+        }"
+        print_info "  → nodeSelector: ${NODE1} 설정"
+
+        # vm-fixed: descheduler 제외 annotation 추가
+        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
+            ensure_runstrategy "$VM" "$NS"
+            oc patch vm "$VM" -n "$NS" --type=merge -p '{
+              "spec": {
+                "template": {
+                  "metadata": {
+                    "annotations": {
+                      "descheduler.alpha.kubernetes.io/evict": "false"
                     }
                   }
                 }
               }
-            }"
+            }'
             print_info "  → descheduler.alpha.kubernetes.io/evict: false 적용"
         fi
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
         print_ok "VM $VM 배포 완료 (cpu: ${VM_CPU_REQUEST})"
 
-        # vm-1, vm-2: Running 대기 후 nodeSelector 제거
-        if [ "$VM" != "poc-descheduler-vm-fixed" ]; then
-            print_info "  → Running 대기 후 nodeSelector 제거..."
-            local retries=36
-            local i=0
-            while [ $i -lt $retries ]; do
-                local phase
-                phase=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-                if [ "$phase" = "Running" ]; then
-                    print_ok "  VMI $VM Running"
-                    break
-                fi
-                printf "  [%d/%d] %s 대기 중... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
-                sleep 5
-                i=$((i+1))
-            done
-            echo ""
-            ensure_runstrategy "$VM" "$NS"
-            oc patch vm "$VM" -n "$NS" --type=merge -p '{
-              "spec": {
-                "template": {
-                  "spec": {
-                    "nodeSelector": null
-                  }
-                }
-              }
-            }'
-            print_ok "  → nodeSelector 제거 완료 (descheduler 자유 대상)"
-        fi
-    done
-}
-
-# =============================================================================
-# 3단계: 3개 VM을 NODE1으로 Live Migration
-# =============================================================================
-step_migrate_to_node1() {
-    print_step "3/6  vm-fixed Live Migration → ${NODE1}"
-
-    # Running 상태 대기 (vm-fixed)
-    print_info "VM Running 상태 대기 중..."
-    for VM in poc-descheduler-vm-fixed; do
+        # Running 대기 후 nodeSelector 제거
+        print_info "  → Running 대기 후 nodeSelector 제거..."
         local retries=36
         local i=0
         while [ $i -lt $retries ]; do
             local phase
             phase=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
             if [ "$phase" = "Running" ]; then
-                print_ok "VMI $VM Running"
+                print_ok "  VMI $VM Running"
                 break
             fi
             printf "  [%d/%d] %s 대기 중... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
@@ -238,111 +188,6 @@ step_migrate_to_node1() {
             i=$((i+1))
         done
         echo ""
-        if [ $i -eq $retries ]; then
-            print_warn "$VM 가 Running 상태가 되지 않았습니다. Migration 을 건너뜁니다."
-        fi
-    done
-
-    # vm-fixed를 NODE1으로 Live Migration
-    for VM in poc-descheduler-vm-fixed; do
-        # 현재 노드 확인
-        local current_node
-        current_node=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.nodeName}' 2>/dev/null || true)
-
-        if [ "$current_node" = "$NODE1" ]; then
-            print_ok "VM $VM 이미 ${NODE1} 에 있음 — Migration 스킵"
-            continue
-        fi
-
-        print_info "VM $VM Migration 시작: ${current_node} → ${NODE1}"
-
-        # nodeSelector를 NODE1으로 임시 설정 → Migration 목적지 유도
-        ensure_runstrategy "$VM" "$NS"
-        oc patch vm "$VM" -n "$NS" --type=merge -p "{
-          \"spec\": {
-            \"template\": {
-              \"spec\": {
-                \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"}
-              }
-            }
-          }
-        }"
-
-        # 기존 in-flight VMIM 대기/정리
-        local VMIM_NAME="migrate-${VM}-to-node1"
-        local existing_phase
-        existing_phase=$(oc get vmim "$VMIM_NAME" -n "$NS" \
-            -o jsonpath='{.status.phase}' 2>/dev/null || true)
-        if [ -n "$existing_phase" ]; then
-            if [ "$existing_phase" = "Succeeded" ] || [ "$existing_phase" = "Failed" ]; then
-                oc delete vmim "$VMIM_NAME" -n "$NS" --ignore-not-found &>/dev/null || true
-                print_info "  → 이전 VMIM ($existing_phase) 삭제"
-            else
-                # 이미 진행 중 → 완료까지 대기
-                print_info "  → 기존 VMIM 진행 중 ($existing_phase), 완료 대기..."
-                local w=0
-                while [ $w -lt 36 ]; do
-                    existing_phase=$(oc get vmim "$VMIM_NAME" -n "$NS" \
-                        -o jsonpath='{.status.phase}' 2>/dev/null || true)
-                    [ "$existing_phase" = "Succeeded" ] || [ "$existing_phase" = "Failed" ] && break
-                    printf "  [%d/36] 대기 중... (%s)\r" "$((w+1))" "$existing_phase"
-                    sleep 5
-                    w=$((w+1))
-                done
-                echo ""
-                oc delete vmim "$VMIM_NAME" -n "$NS" --ignore-not-found &>/dev/null || true
-            fi
-        fi
-
-        # VMI에 다른 in-flight 마이그레이션이 있으면 대기
-        local w=0
-        while [ $w -lt 12 ]; do
-            local inflight
-            inflight=$(oc get vmim -n "$NS" \
-                -o jsonpath='{range .items[?(@.spec.vmiName=="'"$VM"'")]}{.status.phase}{"\n"}{end}' \
-                2>/dev/null | grep -vE "^(Succeeded|Failed|)$" || true)
-            [ -z "$inflight" ] && break
-            printf "  [%d/12] 이전 마이그레이션 완료 대기... (%s)\r" "$((w+1))" "$inflight"
-            sleep 5
-            w=$((w+1))
-        done
-        echo ""
-
-        # VMIM 생성
-        cat > "vmim-${VM}.yaml" <<EOF
-apiVersion: kubevirt.io/v1
-kind: VirtualMachineInstanceMigration
-metadata:
-  name: ${VMIM_NAME}
-  namespace: ${NS}
-spec:
-  vmiName: ${VM}
-EOF
-        echo "생성된 파일: vmim-${VM}.yaml"
-        oc apply -f "vmim-${VM}.yaml"
-
-        # Migration 완료 대기 (최대 3분)
-        local retries=36
-        local i=0
-        while [ $i -lt $retries ]; do
-            local phase
-            phase=$(oc get vmim "$VMIM_NAME" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-            if [ "$phase" = "Succeeded" ]; then
-                print_ok "VM $VM Migration 완료 → ${NODE1}"
-                break
-            fi
-            if [ "$phase" = "Failed" ]; then
-                print_warn "VM $VM Migration 실패"
-                break
-            fi
-            printf "  [%d/%d] Migration 진행 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
-            sleep 5
-            i=$((i+1))
-        done
-        echo ""
-
-        # nodeSelector 제거 — descheduler가 vm-1, vm-2를 자유롭게 이동할 수 있도록
-        # vm-fixed는 annotation으로 evict 방지하므로 nodeSelector 불필요
         ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p '{
           "spec": {
@@ -353,7 +198,7 @@ EOF
             }
           }
         }'
-        print_info "  → nodeSelector 제거 (descheduler 자유 대상)"
+        print_ok "  → nodeSelector 제거 완료 (descheduler 자유 대상)"
     done
 }
 
@@ -361,7 +206,7 @@ EOF
 # 3단계: KubeDescheduler 설정 (LifecycleAndUtilization / High / 네임스페이스 한정)
 # =============================================================================
 step_descheduler() {
-    print_step "4/6  KubeDescheduler 설정"
+    print_step "3/5  KubeDescheduler 설정"
 
     cat > kubedescheduler.yaml <<'EOF'
 apiVersion: operator.openshift.io/v1
@@ -437,7 +282,7 @@ EOF
 # 5단계: 노드 리소스 분석 → 트리거 VM 산출 및 배포
 # =============================================================================
 step_trigger_vm() {
-    print_step "5/6  트리거 VM 배포 (노드 임계값 초과)"
+    print_step "4/5  트리거 VM 배포 (노드 임계값 초과)"
 
     print_info "${NODE1} 리소스 현황 분석 중..."
 
@@ -548,10 +393,10 @@ step_trigger_vm() {
 }
 
 # =============================================================================
-# 4단계: ConsoleYAMLSample 등록
+# 5단계: ConsoleYAMLSample 등록
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "6/6  ConsoleYAMLSample 등록"
+    print_step "5/5  ConsoleYAMLSample 등록"
 
     cat > consoleyamlsample-kubedescheduler.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -623,10 +468,9 @@ main() {
     preflight
     step_namespace
     step_vms
-    step_migrate_to_node1
     step_descheduler
-    step_consoleyamlsamples
     step_trigger_vm
+    step_consoleyamlsamples
     print_summary
 }
 
