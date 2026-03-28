@@ -4,10 +4,10 @@
 #
 # Descheduler 실습 환경 구성
 #   1. poc-descheduler 네임스페이스 생성
-#   2. poc 템플릿으로 3개 VM 배포 (nodeSelector 없이 아무 노드에나 기동)
-#      - vm-1, vm-2 : descheduler 대상
+#   2. poc 템플릿으로 3개 VM 배포
+#      - vm-1, vm-2 : nodeSelector로 NODE1에 배치 → Running 후 nodeSelector 제거
 #      - vm-fixed   : annotation으로 descheduler 제외
-#   3. Running 후 3개 VM을 TEST_NODE로 Live Migration (nodeSelector 임시 → 완료 후 제거)
+#   3. vm-fixed를 TEST_NODE로 Live Migration (nodeSelector 임시 → 완료 후 제거)
 #   4. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
 #   5. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
 #   6. 트리거 VM을 TEST_NODE에 배포 → 노드 임계값 초과 → Descheduler 발동
@@ -115,7 +115,7 @@ step_namespace() {
 # 2단계: 3개 VM 배포 (nodeSelector 없이 아무 노드에나 기동)
 # =============================================================================
 step_vms() {
-    print_step "2/6  VM 3개 배포 (nodeSelector 없음 — 아무 노드에나 기동)"
+    print_step "2/6  VM 3개 배포"
 
     # vm-1, vm-2: descheduler 대상 / vm-fixed: annotation으로 descheduler 제외
     for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
@@ -130,45 +130,88 @@ step_vms() {
         echo "생성된 파일: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
-        # CPU/Memory request + LiveMigrate 전략 패치 (nodeSelector 없음)
         ensure_runstrategy "$VM" "$NS"
-        oc patch vm "$VM" -n "$NS" --type=merge -p "{
-          \"spec\": {
-            \"template\": {
-              \"spec\": {
-                \"evictionStrategy\": \"LiveMigrate\",
-                \"domain\": {
-                  \"resources\": {
-                    \"requests\": {
-                      \"cpu\": \"${VM_CPU_REQUEST}\",
-                      \"memory\": \"${VM_MEM_REQUEST}\"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }"
 
-        # vm-fixed: descheduler 제외 annotation 추가
-        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
-            ensure_runstrategy "$VM" "$NS"
-            oc patch vm "$VM" -n "$NS" --type=merge -p '{
-              "spec": {
-                "template": {
-                  "metadata": {
-                    "annotations": {
-                      "descheduler.alpha.kubernetes.io/evict": "false"
+        if [ "$VM" != "poc-descheduler-vm-fixed" ]; then
+            # vm-1, vm-2: nodeSelector로 NODE1에 배치
+            oc patch vm "$VM" -n "$NS" --type=merge -p "{
+              \"spec\": {
+                \"template\": {
+                  \"spec\": {
+                    \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
+                    \"evictionStrategy\": \"LiveMigrate\",
+                    \"domain\": {
+                      \"resources\": {
+                        \"requests\": {
+                          \"cpu\": \"${VM_CPU_REQUEST}\",
+                          \"memory\": \"${VM_MEM_REQUEST}\"
+                        }
+                      }
                     }
                   }
                 }
               }
-            }'
+            }"
+            print_info "  → nodeSelector: ${NODE1} 설정"
+        else
+            # vm-fixed: nodeSelector 없이 배포 + descheduler 제외 annotation
+            oc patch vm "$VM" -n "$NS" --type=merge -p "{
+              \"spec\": {
+                \"template\": {
+                  \"metadata\": {
+                    \"annotations\": {
+                      \"descheduler.alpha.kubernetes.io/evict\": \"false\"
+                    }
+                  },
+                  \"spec\": {
+                    \"evictionStrategy\": \"LiveMigrate\",
+                    \"domain\": {
+                      \"resources\": {
+                        \"requests\": {
+                          \"cpu\": \"${VM_CPU_REQUEST}\",
+                          \"memory\": \"${VM_MEM_REQUEST}\"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }"
             print_info "  → descheduler.alpha.kubernetes.io/evict: false 적용"
         fi
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
         print_ok "VM $VM 배포 완료 (cpu: ${VM_CPU_REQUEST})"
+
+        # vm-1, vm-2: Running 대기 후 nodeSelector 제거
+        if [ "$VM" != "poc-descheduler-vm-fixed" ]; then
+            print_info "  → Running 대기 후 nodeSelector 제거..."
+            local retries=36
+            local i=0
+            while [ $i -lt $retries ]; do
+                local phase
+                phase=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+                if [ "$phase" = "Running" ]; then
+                    print_ok "  VMI $VM Running"
+                    break
+                fi
+                printf "  [%d/%d] %s 대기 중... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
+                sleep 5
+                i=$((i+1))
+            done
+            echo ""
+            ensure_runstrategy "$VM" "$NS"
+            oc patch vm "$VM" -n "$NS" --type=merge -p '{
+              "spec": {
+                "template": {
+                  "spec": {
+                    "nodeSelector": null
+                  }
+                }
+              }
+            }'
+            print_ok "  → nodeSelector 제거 완료 (descheduler 자유 대상)"
+        fi
     done
 }
 
@@ -176,11 +219,11 @@ step_vms() {
 # 3단계: 3개 VM을 NODE1으로 Live Migration
 # =============================================================================
 step_migrate_to_node1() {
-    print_step "3/6  VM Live Migration → ${NODE1}"
+    print_step "3/6  vm-fixed Live Migration → ${NODE1}"
 
-    # Running 상태 대기 (VM당 최대 3분)
+    # Running 상태 대기 (vm-fixed)
     print_info "VM Running 상태 대기 중..."
-    for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
+    for VM in poc-descheduler-vm-fixed; do
         local retries=36
         local i=0
         while [ $i -lt $retries ]; do
@@ -200,8 +243,8 @@ step_migrate_to_node1() {
         fi
     done
 
-    # 각 VM을 NODE1으로 Live Migration
-    for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
+    # vm-fixed를 NODE1으로 Live Migration
+    for VM in poc-descheduler-vm-fixed; do
         # 현재 노드 확인
         local current_node
         current_node=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.nodeName}' 2>/dev/null || true)
