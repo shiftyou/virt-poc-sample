@@ -87,23 +87,40 @@ NMEOF
 step_nncp() {
     print_step "1/4  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
 
-    # 기존 NNCP가 진행 중이면 완료될 때까지 대기 (admission webhook 충돌 방지)
+    # 기존 NNCP가 진행 중이면 포트 이름을 표시하고 완료될 때까지 대기 (admission webhook 충돌 방지)
     if oc get nncp poc-bridge-nncp &>/dev/null; then
         local pre_status
         pre_status=$(oc get nncp poc-bridge-nncp \
             -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
         if [ "$pre_status" != "True" ]; then
-            print_info "기존 NNCP 가 진행 중입니다. 완료 대기 중..."
+            # 현재 NNCP에 설정된 bridge port name 표시
+            local cur_port
+            cur_port=$(oc get nncp poc-bridge-nncp \
+                -o jsonpath='{.spec.desiredState.interfaces[0].bridge.port[0].name}' 2>/dev/null || echo "unknown")
+            local cur_bridge
+            cur_bridge=$(oc get nncp poc-bridge-nncp \
+                -o jsonpath='{.spec.desiredState.interfaces[0].name}' 2>/dev/null || echo "unknown")
+            print_info "기존 NNCP 가 노드에 전파 중입니다. 완료 대기 중..."
+            print_info "  Bridge     : ${cur_bridge}"
+            print_info "  Port (NIC) : ${cur_port}"
             local w=0
             while [ $w -lt 24 ]; do
                 pre_status=$(oc get nncp poc-bridge-nncp \
                     -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
                 [ "$pre_status" = "True" ] && break
-                printf "  [%d/24] 대기 중...\r" "$((w+1))"
+                local reason
+                reason=$(oc get nncp poc-bridge-nncp \
+                    -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null || echo "")
+                printf "  [%d/24] 전파 대기 중... (%s)\r" "$((w+1))" "${reason:-Pending}"
                 sleep 5
                 w=$((w+1))
             done
             echo ""
+            if [ $w -eq 24 ]; then
+                print_warn "대기 시간 초과. oc get nnce 로 노드별 상태를 확인하세요."
+            else
+                print_ok "기존 NNCP 전파 완료 (bridge: ${cur_bridge}, port: ${cur_port})"
+            fi
         fi
     fi
 
