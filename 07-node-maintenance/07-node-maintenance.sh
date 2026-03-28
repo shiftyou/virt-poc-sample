@@ -200,39 +200,8 @@ spec:
   vmiName: ${VM}
 EOF
         echo "생성된 파일: vmim-${VM}.yaml"
-        oc apply -f "vmim-${VM}.yaml"
-
-        local retries=36
-        local i=0
-        while [ $i -lt $retries ]; do
-            local phase
-            phase=$(oc get vmim "$VMIM_NAME" -n "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-            if [ "$phase" = "Succeeded" ]; then
-                print_ok "VM $VM Migration 완료 → ${NODE1}"
-                break
-            fi
-            if [ "$phase" = "Failed" ]; then
-                print_warn "VM $VM Migration 실패"
-                break
-            fi
-            printf "  [%d/%d] Migration 진행 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
-            sleep 5
-            i=$((i+1))
-        done
-        echo ""
-
-        # nodeSelector 제거 — 유지보수 후 자유롭게 재스케줄되도록
-        ensure_runstrategy "$VM" "$NS"
-        oc patch vm "$VM" -n "$NS" --type=merge -p '{
-          "spec": {
-            "template": {
-              "spec": {
-                "nodeSelector": null
-              }
-            }
-          }
-        }'
-        print_info "  → nodeSelector 제거 완료"
+        print_info "  아래 명령으로 직접 적용하세요:"
+        echo -e "    ${CYAN}oc apply -f vmim-${VM}.yaml${NC}"
     done
 
     echo ""
