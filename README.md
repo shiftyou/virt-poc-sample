@@ -64,12 +64,13 @@ cd virt-poc-sample
 | 07 | [07-node-maintenance](07-node-maintenance/07-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
 | 08 | [08-snr](08-snr/08-snr.md) | SNR 실습 — NHC가 비정상 노드 감지 → SelfNodeRemediation으로 노드 자가 재시작 (IPMI 불필요) |
 | 09 | [09-far](09-far/09-far.md) | FAR 실습 — NHC가 비정상 노드 감지 → FenceAgentsRemediation으로 IPMI/BMC 전원 재시작 |
-| 10 | [10-mtv](10-mtv/10-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
+| 10 | [10-liveness-probe](10-liveness-probe/10-liveness-probe.md) | VM Liveness/Readiness Probe 실습 — HTTP(port 1500)·TCP·Exec Probe 설정 및 실패 시 자동 재시작 |
 | 11 | [11-alert](11-alert/11-alert.md) | VM Alert 실습 — PrometheusRule로 VM 상태 알림 (VMNotRunning·VMStuckPending·VMLowMemory) |
 | 12 | [12-node-exporter](12-node-exporter/12-node-exporter.md) | Node Exporter 실습 — 내장 node-exporter 설명 + 커스텀 DaemonSet 추가 |
 | 13 | [13-monitoring](13-monitoring/13-monitoring.md) | 모니터링 실습 — Grafana 배포·Prometheus 연동·Dell/Hitachi 스토리지 모니터링 |
 | 14 | [14-oadp](14-oadp/14-oadp.md) | OADP 실습 — VM 백업/복원 (MinIO S3 backend·DataProtectionApplication·Schedule) |
 | 15 | [15-hyperconverged](15-hyperconverged/15-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
+| 16 | [16-mtv](16-mtv/16-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -137,9 +138,9 @@ virt-poc-sample/
 │   ├── 09-far.md               # 가이드 문서
 │   └── 09-far.sh               # 자동화 스크립트 (NS·VM2개·FARTemplate·NHC, FAR_INSTALLED 필요)
 │
-├── 10-mtv/                     # Migration Toolkit for Virtualization 실습
-│   ├── 10-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
-│   └── 10-mtv.sh               # 자동화 스크립트 (NS 생성·체크리스트 출력, MTV_INSTALLED 필요)
+├── 10-liveness-probe/          # VM Liveness/Readiness Probe 실습
+│   ├── 10-liveness-probe.md    # 가이드 문서 (HTTP·TCP·Exec Probe·자동 재시작)
+│   └── 10-liveness-probe.sh    # 자동화 스크립트 (NS·poc템플릿VM·Probe 설정)
 │
 ├── 11-alert/                   # VM Alert 실습
 │   ├── 11-alert.md             # 가이드 문서 (PrometheusRule·AlertManager)
@@ -160,6 +161,10 @@ virt-poc-sample/
 ├── 15-hyperconverged/          # HyperConverged 설정 실습
 │   ├── 15-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
 │   └── 15-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
+│
+├── 16-mtv/                     # Migration Toolkit for Virtualization 실습
+│   ├── 16-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
+│   └── 16-mtv.sh               # 자동화 스크립트 (NS 생성·체크리스트 출력, MTV_INSTALLED 필요)
 │
 └── disabled/                   # 비활성 항목 (참고용)
 ```

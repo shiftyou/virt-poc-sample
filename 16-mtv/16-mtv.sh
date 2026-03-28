@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# 10-mtv.sh
+# 16-mtv.sh
 #
 # Migration Toolkit for Virtualization (MTV) 실습 환경 구성
 #   1. poc-mtv 네임스페이스 생성
 #   2. MTV 사전 체크리스트 안내
 #
-# 사용법: ./10-mtv.sh
+# 사용법: ./16-mtv.sh
 # =============================================================================
 
 set -euo pipefail
@@ -84,7 +84,7 @@ step_checklist() {
     echo -e "      .vmx: ctkEnabled = TRUE / scsiN:M.ctkEnabled = TRUE"
     echo -e "      활성화 후 스냅샷 생성/삭제 한 번 수행 필요"
     echo ""
-    echo -e "  자세한 내용: ${CYAN}10-mtv.md${NC} 참조"
+    echo -e "  자세한 내용: ${CYAN}16-mtv.md${NC} 참조"
     echo ""
 }
 

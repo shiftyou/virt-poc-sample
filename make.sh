@@ -110,7 +110,8 @@ ns_desc() {
         poc-maintenance)    echo "07 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
         poc-snr)            echo "08 SNR 실습 — NHC 감지 → 노드 자가 재시작 복구" ;;
         poc-far)            echo "09 FAR 실습 — NHC 감지 → IPMI/BMC 전원 재시작 복구" ;;
-        poc-mtv)            echo "10 MTV 실습 — VMware → OpenShift 마이그레이션" ;;
+        poc-liveness-probe) echo "10 Liveness Probe 실습 — HTTP·TCP·Exec Probe 설정 및 자동 재시작" ;;
+        poc-mtv)            echo "16 MTV 실습 — VMware → OpenShift 마이그레이션" ;;
         poc-alert)          echo "11 VM Alert 실습 — PrometheusRule VM 상태 알림" ;;
         poc-node-exporter)  echo "12 Node Exporter 실습 — 커스텀 메트릭 수집" ;;
         poc-monitoring)     echo "13 모니터링 실습 — Grafana·Dell·Hitachi 스토리지" ;;
