@@ -182,7 +182,8 @@ step_vms() {
             continue
         fi
 
-        oc process -n openshift poc -p NAME="$VM" > "${VM}.yaml"
+        oc process -n openshift poc -p NAME="$VM" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
         echo "생성된 파일: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
@@ -225,7 +226,8 @@ step_vms() {
         -o jsonpath='{.status.used.requests\.cpu}' 2>/dev/null || echo '?') / 2"
     print_info "VM $VM3 생성 시도 (requests.cpu ${VM_CPU_REQUEST} 추가 → 초과 예상)"
 
-    oc process -n openshift poc -p NAME="$VM3" > "${VM3}.yaml"
+    oc process -n openshift poc -p NAME="$VM3" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "${VM3}.yaml"
     echo "생성된 파일: ${VM3}.yaml"
 
     # limits 포함 patch yaml 준비 (apply 후 patch 순서이므로 apply 단계에서 거부됨)

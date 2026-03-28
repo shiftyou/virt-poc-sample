@@ -1,0 +1,506 @@
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  virt-poc-sample 전체 실행[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  실행 단계:
+    [1;33m▶[0m 00-operator/00-operator.sh
+    [1;33m▶[0m 01-template/01-template.sh
+    [1;33m▶[0m 02-network/02-network.sh
+    [1;33m▶[0m 03-vm-management/03-vm-management.sh
+    [1;33m▶[0m 04-network-policy/04-network-policy.sh
+    [1;33m▶[0m 05-resource-quota/05-resource-quota.sh
+    [1;33m▶[0m 06-descheduler/06-descheduler.sh
+    [1;33m▶[0m 07-node-maintenance/07-node-maintenance.sh
+    [1;33m▶[0m 08-snr/08-snr.sh
+    [1;33m▶[0m 09-far/09-far.sh
+    [1;33m▶[0m 10-liveness-probe/10-liveness-probe.sh
+    [1;33m▶[0m 11-alert/11-alert.sh
+    [1;33m▶[0m 12-node-exporter/12-node-exporter.sh
+    [1;33m▶[0m 13-monitoring/13-monitoring.sh
+    [1;33m▶[0m 14-oadp/14-oadp.sh
+    [1;33m▶[0m 15-hyperconverged/15-hyperconverged.sh
+    [1;33m▶[0m 16-mtv/16-mtv.sh
+
+
+[0;36m━━━ [1/17] 00-operator ━━━[0m
+[0;31m[make][0m 스크립트를 찾을 수 없습니다: 00-operator/00-operator.sh — 건너뜁니다
+
+[0;36m━━━ [2/17] 01-template ━━━[0m
+[0;36m[make][0m 실행: 01-template/01-template.sh  (생성 파일 → poc-setup/01-template/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  POC Golden Image → Template 등록[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 설정 확인 (STORAGE_CLASS=ocs-external-storagecluster-ceph-rbd)
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m virtctl: 1.3.1
+[0;32m[ OK ][0m 이미지 파일: /Users/jonggkim/Git/shiftyou/virt-poc-sample/01-template/../vm-images/rhel9-poc-golden.qcow2 (1.2G)
+
+[0;36m━━━ 1/3  DataVolume 업로드 (poc-golden) ━━━[0m
+[0;32m[ OK ][0m DataVolume poc-golden 이미 존재합니다 (Succeeded) — 업로드 스킵
+
+[0;36m━━━ 2/3  DataSource 등록 (poc) ━━━[0m
+생성된 파일: datasource-poc.yaml
+datasource.cdi.kubevirt.io/poc unchanged
+[0;32m[ OK ][0m DataSource poc Ready
+
+[0;36m━━━ 3/4  Template 등록 (poc @ openshift) ━━━[0m
+생성된 파일: template-poc.yaml
+template.template.openshift.io/poc unchanged
+[0;32m[ OK ][0m Template poc 등록 완료 (namespace: openshift)
+
+[0;36m━━━ 4/4  ConsoleYAMLSample 등록 ━━━[0m
+생성된 파일: consoleyamlsample-datasource.yaml
+consoleyamlsample.console.openshift.io/poc-datasource unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-datasource 등록 완료
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! POC VM Template 이 등록되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  DataVolume : [0;36moc get dv poc-golden -n openshift-virtualization-os-images[0m
+  DataSource : [0;36moc get datasource poc -n openshift-virtualization-os-images[0m
+  Template   : [0;36moc get template poc -n openshift[0m
+
+  VM 생성:
+  [0;36moc process -n openshift poc | oc apply -n <네임스페이스> -f -[0m
+
+  또는 Console > Virtualization > Catalog > 'POC VM' 선택
+
+[0;32m[make][0m 01-template 완료
+
+[0;36m━━━ [3/17] 02-network ━━━[0m
+[0;36m[make][0m 실행: 02-network/02-network.sh  (생성 파일 → poc-setup/02-network/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  네트워크 구성: NNCP + NAD + VM[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 설정 확인
+[0;34m[INFO][0m   BRIDGE_INTERFACE : enp3s0
+[0;34m[INFO][0m   BRIDGE_NAME      : br1
+[0;34m[INFO][0m   NAD_NAMESPACE    : poc-nad
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m NMState Operator 확인
+[0;32m[ OK ][0m NMState CR 확인
+
+[0;36m━━━ 1/4  NNCP — Linux Bridge 생성 (br1 ← enp3s0) ━━━[0m
+생성된 파일: nncp-poc-bridge.yaml
+nodenetworkconfigurationpolicy.nmstate.io/poc-bridge-nncp unchanged
+[0;34m[INFO][0m NNCP 적용 완료 — 노드 설정 전파 대기 중...
+[0;32m[ OK ][0m NNCP poc-bridge-nncp Available
+
+
+[0;34m[INFO][0m 노드별 적용 상태 (NNCE):
+    worker-cluster-gbj7s-1.poc-bridge-nncp   Available
+    worker-cluster-gbj7s-2.poc-bridge-nncp   Available
+    worker-cluster-gbj7s-3.poc-bridge-nncp   Available
+
+[0;36m━━━ 2/4  NAD — NetworkAttachmentDefinition 등록 (poc-nad) ━━━[0m
+Already on project "poc-nad" on server "https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443".
+[0;32m[ OK ][0m 네임스페이스: poc-nad
+생성된 파일: nad-poc-bridge.yaml
+networkattachmentdefinition.k8s.cni.cncf.io/poc-bridge-nad unchanged
+[0;32m[ OK ][0m NAD poc-bridge-nad 등록 완료
+
+[0;36m━━━ 3/4  VM 생성 (poc 템플릿 + poc-bridge-nad) ━━━[0m
+[0;32m[ OK ][0m VM poc-network-vm 이미 존재 — 스킵
+
+[0;36m━━━ 4/4  ConsoleYAMLSample 등록 ━━━[0m
+생성된 파일: consoleyamlsample-nncp.yaml
+consoleyamlsample.console.openshift.io/poc-bridge-nncp unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-bridge-nncp 등록 완료
+생성된 파일: consoleyamlsample-nad.yaml
+consoleyamlsample.console.openshift.io/poc-bridge-nad unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-bridge-nad 등록 완료
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! NNCP + NAD 구성 및 VM 생성이 완료되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  NNCP 상태 : [0;36moc get nncp[0m
+  NNCE 상태 : [0;36moc get nnce[0m
+  NAD 확인  : [0;36moc get net-attach-def -n poc-nad[0m
+  VM 상태   : [0;36moc get vm,vmi -n poc-nad[0m
+
+[0;32m[make][0m 02-network 완료
+
+[0;36m━━━ [4/17] 03-vm-management ━━━[0m
+[0;36m[make][0m 실행: 03-vm-management/03-vm-management.sh  (생성 파일 → poc-setup/03-vm-management/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  VM 관리 환경 준비: 네임스페이스 + NAD[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 설정 확인
+[0;34m[INFO][0m   VM_NS       : poc-vm-management
+[0;34m[INFO][0m   BRIDGE_NAME : br1
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m NNCP poc-bridge-nncp Available
+
+[0;36m━━━ 1/2  네임스페이스 생성 (poc-vm-management) ━━━[0m
+[0;32m[ OK ][0m 네임스페이스 poc-vm-management 이미 존재합니다 — 스킵
+
+[0;36m━━━ 2/3  NAD — NetworkAttachmentDefinition 등록 (poc-vm-management) ━━━[0m
+생성된 파일: nad-vm-bridge.yaml
+networkattachmentdefinition.k8s.cni.cncf.io/poc-bridge-nad unchanged
+[0;32m[ OK ][0m NAD poc-bridge-nad 등록 완료 (namespace: poc-vm-management)
+
+[0;36m━━━ 3/3  ConsoleYAMLSample 등록 ━━━[0m
+생성된 파일: consoleyamlsample-virtualmachine.yaml
+consoleyamlsample.console.openshift.io/poc-virtualmachine unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-virtualmachine 등록 완료
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! VM 워크로드 환경이 준비되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  네임스페이스 : [0;36moc get namespace poc-vm-management[0m
+  NAD 확인    : [0;36moc get net-attach-def -n poc-vm-management[0m
+
+  다음 단계: 03-vm-management.md 를 참조하세요
+    - poc 템플릿을 이용한 VM 생성
+    - 스토리지 추가
+    - 네트워크 추가
+    - Static IP / Domain / Router 설정
+    - Live Migration
+
+[0;32m[make][0m 03-vm-management 완료
+
+[0;36m━━━ [5/17] 04-network-policy ━━━[0m
+[0;36m[make][0m 실행: 04-network-policy/04-network-policy.sh  (생성 파일 → poc-setup/04-network-policy/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  NetworkPolicy 실습 환경 구성[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m poc Template 확인
+[0;34m[INFO][0m   NS1         : poc-netpol-1
+[0;34m[INFO][0m   NS2         : poc-netpol-2
+[0;34m[INFO][0m   BRIDGE_NAME : br1
+
+[0;36m━━━ 1/6  네임스페이스 생성 ━━━[0m
+[0;32m[ OK ][0m 네임스페이스 poc-netpol-1 이미 존재 — 스킵
+[0;32m[ OK ][0m 네임스페이스 poc-netpol-2 이미 존재 — 스킵
+
+[0;36m━━━ 2/6  NAD 등록 (poc-netpol-1, poc-netpol-2) ━━━[0m
+생성된 파일: nad-poc-netpol-1.yaml
+networkattachmentdefinition.k8s.cni.cncf.io/poc-bridge-nad unchanged
+[0;32m[ OK ][0m NAD 등록 완료 (namespace: poc-netpol-1)
+생성된 파일: nad-poc-netpol-2.yaml
+networkattachmentdefinition.k8s.cni.cncf.io/poc-bridge-nad unchanged
+[0;32m[ OK ][0m NAD 등록 완료 (namespace: poc-netpol-2)
+
+[0;36m━━━ 3/6  NetworkPolicy — Default Deny All ━━━[0m
+생성된 파일: netpol-deny-all-poc-netpol-1.yaml
+networkpolicy.networking.k8s.io/default-deny-all unchanged
+[0;32m[ OK ][0m Default Deny All 적용 완료 (namespace: poc-netpol-1)
+생성된 파일: netpol-deny-all-poc-netpol-2.yaml
+networkpolicy.networking.k8s.io/default-deny-all unchanged
+[0;32m[ OK ][0m Default Deny All 적용 완료 (namespace: poc-netpol-2)
+
+[0;36m━━━ 4/6  NetworkPolicy — Allow Same Namespace ━━━[0m
+생성된 파일: netpol-allow-same-ns-poc-netpol-1.yaml
+networkpolicy.networking.k8s.io/allow-same-namespace unchanged
+[0;32m[ OK ][0m Allow Same Namespace 적용 완료 (namespace: poc-netpol-1)
+생성된 파일: netpol-allow-same-ns-poc-netpol-2.yaml
+networkpolicy.networking.k8s.io/allow-same-namespace unchanged
+[0;32m[ OK ][0m Allow Same Namespace 적용 완료 (namespace: poc-netpol-2)
+
+[0;36m━━━ 6/6  ConsoleYAMLSample 등록 ━━━[0m
+생성된 파일: consoleyamlsample-netpol-deny-all.yaml
+consoleyamlsample.console.openshift.io/poc-netpol-deny-all unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-netpol-deny-all 등록 완료
+생성된 파일: consoleyamlsample-netpol-allow-same-ns.yaml
+consoleyamlsample.console.openshift.io/poc-netpol-allow-same-ns unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-netpol-allow-same-ns 등록 완료
+
+[0;36m━━━ 5/6  VM 배포 (poc 템플릿) ━━━[0m
+[0;32m[ OK ][0m VM poc-vm-1 이미 존재 (namespace: poc-netpol-1) — 스킵
+[0;32m[ OK ][0m VM poc-vm-2 이미 존재 (namespace: poc-netpol-2) — 스킵
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! NetworkPolicy 실습 환경이 준비되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  NetworkPolicy 확인:
+    [0;36moc get networkpolicy -n poc-netpol-1[0m
+    [0;36moc get networkpolicy -n poc-netpol-2[0m
+
+  VM 상태 확인:
+    [0;36moc get vmi -n poc-netpol-1[0m
+    [0;36moc get vmi -n poc-netpol-2[0m
+
+  다음 단계: 04-network-policy.md 참조
+    - VM IP 확인 후 NS1 → NS2 Allow IP 정책 적용
+
+[0;32m[make][0m 04-network-policy 완료
+
+[0;36m━━━ [6/17] 05-resource-quota ━━━[0m
+[0;36m[make][0m 실행: 05-resource-quota/05-resource-quota.sh  (생성 파일 → poc-setup/05-resource-quota/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  ResourceQuota 실습 환경 구성[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m poc Template 확인
+[0;34m[INFO][0m   NS : poc-resource-quota
+
+[0;36m━━━ 1/3  네임스페이스 생성 (poc-resource-quota) ━━━[0m
+[0;32m[ OK ][0m 네임스페이스 poc-resource-quota 이미 존재 — 스킵
+
+[0;36m━━━ 2/4  ResourceQuota 적용 (poc-resource-quota) ━━━[0m
+생성된 파일: resourcequota-poc.yaml
+resourcequota/poc-quota unchanged
+[0;32m[ OK ][0m ResourceQuota poc-quota 적용 완료
+[0;34m[INFO][0m   requests.cpu 한도: 2 core (VM 2개×750m=1500m 통과, 3개=2250m 초과)
+
+[0;36m━━━ 3/4  ConsoleYAMLSample 등록 ━━━[0m
+생성된 파일: consoleyamlsample-resourcequota.yaml
+consoleyamlsample.console.openshift.io/poc-resource-quota unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-resource-quota 등록 완료
+
+[0;36m━━━ 4/4  VM 배포 및 ResourceQuota 초과 실증 ━━━[0m
+[0;32m[ OK ][0m VM poc-quota-vm-1 이미 존재 — 스킵
+[0;32m[ OK ][0m VM poc-quota-vm-2 이미 존재 — 스킵
+[1;33m[WARN][0m VM poc-quota-vm-3 이미 존재 — Quota 초과 실증 스킵
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! ResourceQuota 실습 환경이 준비되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  ResourceQuota 현황:
+    [0;36moc describe resourcequota poc-quota -n poc-resource-quota[0m
+
+  VM 상태:
+    [0;36moc get vm -n poc-resource-quota[0m
+
+  Quota 초과 이벤트 확인:
+    [0;36moc get events -n poc-resource-quota --field-selector reason=FailedCreate[0m
+
+  예상 결과:
+    poc-quota-vm-1  → Running  (cpu request: 750m)
+    poc-quota-vm-2  → Running  (cpu request: 750m)
+    poc-quota-vm-3  → Pending  (virt-launcher Pod Quota 초과 거부)
+
+  자세한 내용: 05-resource-quota.md 참조
+
+[0;32m[make][0m 05-resource-quota 완료
+
+[0;36m━━━ [7/17] 06-descheduler ━━━[0m
+[0;36m[make][0m 실행: 06-descheduler/06-descheduler.sh  (생성 파일 → poc-setup/06-descheduler/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  Descheduler 실습 환경 구성[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m poc Template 확인
+[0;32m[ OK ][0m 대상 노드: worker-cluster-gbj7s-1
+[0;32m[ OK ][0m Kube Descheduler Operator 확인
+[0;34m[INFO][0m   NS    : poc-descheduler
+[0;34m[INFO][0m   NODE1 : worker-cluster-gbj7s-1
+
+[0;36m━━━ 1/5  네임스페이스 생성 (poc-descheduler) ━━━[0m
+[0;32m[ OK ][0m 네임스페이스 poc-descheduler 이미 존재 — 스킵
+
+[0;36m━━━ 2/6  VM 3개 배포 (nodeSelector 없음 — 아무 노드에나 기동) ━━━[0m
+[0;32m[ OK ][0m VM poc-descheduler-vm-1 이미 존재 — 스킵
+[0;32m[ OK ][0m VM poc-descheduler-vm-2 이미 존재 — 스킵
+[0;32m[ OK ][0m VM poc-descheduler-vm-fixed 이미 존재 — 스킵
+
+[0;36m━━━ 3/6  VM Live Migration → worker-cluster-gbj7s-1 ━━━[0m
+[0;34m[INFO][0m VM Running 상태 대기 중...
+[0;32m[ OK ][0m VMI poc-descheduler-vm-1 Running
+
+[0;32m[ OK ][0m VMI poc-descheduler-vm-2 Running
+
+[0;32m[ OK ][0m VMI poc-descheduler-vm-fixed Running
+
+[0;34m[INFO][0m VM poc-descheduler-vm-1 Migration 시작: worker-cluster-gbj7s-3 → worker-cluster-gbj7s-1
+virtualmachine.kubevirt.io/poc-descheduler-vm-1 patched
+생성된 파일: vmim-poc-descheduler-vm-1.yaml
+virtualmachineinstancemigration.kubevirt.io/migrate-poc-descheduler-vm-1-to-node1 created
+  [1/36] Migration 진행 중... (Scheduling)  [2/36] Migration 진행 중... (Scheduling)  [3/36] Migration 진행 중... (Running)[0;32m[ OK ][0m VM poc-descheduler-vm-1 Migration 완료 → worker-cluster-gbj7s-1
+
+virtualmachine.kubevirt.io/poc-descheduler-vm-1 patched
+[0;34m[INFO][0m   → nodeSelector 제거 (descheduler 자유 대상)
+[0;34m[INFO][0m VM poc-descheduler-vm-2 Migration 시작: worker-cluster-gbj7s-3 → worker-cluster-gbj7s-1
+virtualmachine.kubevirt.io/poc-descheduler-vm-2 patched
+생성된 파일: vmim-poc-descheduler-vm-2.yaml
+virtualmachineinstancemigration.kubevirt.io/migrate-poc-descheduler-vm-2-to-node1 created
+  [1/36] Migration 진행 중... (Scheduling)  [2/36] Migration 진행 중... (Running)[0;32m[ OK ][0m VM poc-descheduler-vm-2 Migration 완료 → worker-cluster-gbj7s-1
+
+virtualmachine.kubevirt.io/poc-descheduler-vm-2 patched
+[0;34m[INFO][0m   → nodeSelector 제거 (descheduler 자유 대상)
+[0;34m[INFO][0m VM poc-descheduler-vm-fixed Migration 시작: worker-cluster-gbj7s-3 → worker-cluster-gbj7s-1
+virtualmachine.kubevirt.io/poc-descheduler-vm-fixed patched
+생성된 파일: vmim-poc-descheduler-vm-fixed.yaml
+virtualmachineinstancemigration.kubevirt.io/migrate-poc-descheduler-vm-fixed-to-node1 created
+  [1/36] Migration 진행 중... (Scheduling)  [2/36] Migration 진행 중... (Running)[0;32m[ OK ][0m VM poc-descheduler-vm-fixed Migration 완료 → worker-cluster-gbj7s-1
+
+virtualmachine.kubevirt.io/poc-descheduler-vm-fixed patched
+[0;34m[INFO][0m   → nodeSelector 제거 (descheduler 자유 대상)
+
+[0;36m━━━ 4/6  KubeDescheduler 설정 ━━━[0m
+생성된 파일: kubedescheduler.yaml
+kubedescheduler.operator.openshift.io/cluster unchanged
+[0;34m[INFO][0m KubeDescheduler 상태 확인 중...
+  [1/12] 대기 중...  [2/12] 대기 중...  [3/12] 대기 중...  [4/12] 대기 중...  [5/12] 대기 중...  [6/12] 대기 중...  [7/12] 대기 중...  [8/12] 대기 중...  [9/12] 대기 중...  [10/12] 대기 중...  [11/12] 대기 중...  [12/12] 대기 중...
+
+  TYPE                           STATUS   REASON               MESSAGE
+  ------------------------------ -------- -------------------- -------
+  ResourceSyncControllerDegraded False                         
+  ConfigObservationDegraded      False                         
+  TargetConfigControllerDegraded False                         
+
+[1;33m[WARN][0m KubeDescheduler 준비 시간 초과. 위 상태를 확인하세요.
+[0;34m[INFO][0m   managementState: Managed
+[0;34m[INFO][0m   Profile        : LifecycleAndUtilization
+[0;34m[INFO][0m   Threshold      : High (underutilized <40%, overutilized >60%)
+[0;34m[INFO][0m   Interval       : 60초
+[0;34m[INFO][0m   Namespace      : poc-descheduler
+
+[0;36m━━━ 5/6  ConsoleYAMLSample 등록 ━━━[0m
+생성된 파일: consoleyamlsample-kubedescheduler.yaml
+consoleyamlsample.console.openshift.io/poc-kubedescheduler unchanged
+[0;32m[ OK ][0m ConsoleYAMLSample poc-kubedescheduler 등록 완료
+
+[0;36m━━━ 6/6  트리거 VM 배포 (노드 임계값 초과) ━━━[0m
+[0;34m[INFO][0m worker-cluster-gbj7s-1 리소스 현황 분석 중...
+[0;34m[INFO][0m   Allocatable CPU  : 15500m
+[0;34m[INFO][0m   Allocatable Mem  : 63173Mi
+[0;34m[INFO][0m   Used CPU requests: 10105m  (65%)
+[0;34m[INFO][0m   Used Mem requests: 37697Mi (59%)
+[0;34m[INFO][0m   Descheduler 임계값: overutilized > 60%
+[1;33m[WARN][0m 이미 CPU 61% 초과 상태 — 소규모 트리거 VM 배포
+[0;32m[ OK ][0m 트리거 VM 리소스 산출
+[0;34m[INFO][0m   TRIGGER_CPU : 250m  (노드 worker-cluster-gbj7s-1 CPU를 61% 이상으로)
+[0;34m[INFO][0m   TRIGGER_MEM : 838Mi
+[0;32m[ OK ][0m 트리거 VM 이미 존재 — 스킵
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! Descheduler 실습 환경이 준비되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  VM 노드 배치 확인:
+    [0;36moc get vmi -n poc-descheduler -o wide[0m
+
+  Descheduler 동작 확인 (60초 후):
+    [0;36moc get vmi -n poc-descheduler -o wide --watch[0m
+
+  예상 결과:
+    poc-descheduler-vm-1       → 다른 노드로 Migration
+    poc-descheduler-vm-2       → 다른 노드로 Migration
+    poc-descheduler-vm-fixed   → worker-cluster-gbj7s-1 유지 (annotation 보호)
+    poc-descheduler-vm-trigger → worker-cluster-gbj7s-1 유지 (가장 최근 배포)
+
+  자세한 내용: 06-descheduler.md 참조
+
+[0;32m[make][0m 06-descheduler 완료
+
+[0;36m━━━ [8/17] 07-node-maintenance ━━━[0m
+[0;36m[make][0m 실행: 07-node-maintenance/07-node-maintenance.sh  (생성 파일 → poc-setup/07-node-maintenance/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  Node Maintenance 실습 환경 구성[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m poc Template 확인
+[0;32m[ OK ][0m 대상 노드: worker-cluster-gbj7s-1
+[1;33m[WARN][0m Node Maintenance Operator 미설치 → 건너뜁니다.
+[1;33m[WARN][0m   설치 가이드: 00-operator/node-maintenance-operator.md
+[1;33m[make][0m 07-node-maintenance 건너뜀 (오퍼레이터 미설치)
+
+[0;36m━━━ [9/17] 08-snr ━━━[0m
+[0;36m[make][0m 실행: 08-snr/08-snr.sh  (생성 파일 → poc-setup/08-snr/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  SNR 실습 환경 구성[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m Self Node Remediation Operator 확인
+[0;32m[ OK ][0m Node Health Check Operator 확인
+[0;32m[ OK ][0m poc Template 확인
+[0;32m[ OK ][0m 대상 노드: worker-cluster-gbj7s-1
+
+[0;36m━━━ 1/4  네임스페이스 생성 (poc-snr) ━━━[0m
+[0;32m[ OK ][0m 네임스페이스 poc-snr 이미 존재 — 스킵
+
+[0;36m━━━ 2/4  SelfNodeRemediationTemplate 생성 ━━━[0m
+selfnoderemediationtemplate.self-node-remediation.medik8s.io/poc-snr-template unchanged
+[0;32m[ OK ][0m SelfNodeRemediationTemplate poc-snr-template 생성 완료
+
+[0;36m━━━ 3/4  NodeHealthCheck 생성 (SNR 연동) ━━━[0m
+nodehealthcheck.remediation.medik8s.io/poc-snr-nhc created
+[0;32m[ OK ][0m NodeHealthCheck poc-snr-nhc 생성 완료
+[0;34m[INFO][0m   조건: Ready=False 또는 Unknown 300초 이상 → SNR 발동
+
+[0;36m━━━ 4/4  VM 배포 → worker-cluster-gbj7s-1 ━━━[0m
+virtualmachine.kubevirt.io/poc-snr-vm-1 created
+virtualmachine.kubevirt.io/poc-snr-vm-1 patched
+VM poc-snr-vm-1 was scheduled to start
+[0;32m[ OK ][0m VM poc-snr-vm-1 배포 완료 (노드: worker-cluster-gbj7s-1)
+virtualmachine.kubevirt.io/poc-snr-vm-2 created
+virtualmachine.kubevirt.io/poc-snr-vm-2 patched
+VM poc-snr-vm-2 was scheduled to start
+[0;32m[ OK ][0m VM poc-snr-vm-2 배포 완료 (노드: worker-cluster-gbj7s-1)
+
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m  완료! SNR 실습 환경이 준비되었습니다.[0m
+[0;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+  VM 배치 확인:
+    [0;36moc get vmi -n poc-snr -o wide[0m
+
+  NHC 상태 확인:
+    [0;36moc get nodehealthcheck poc-snr-nhc[0m
+
+  장애 시뮬레이션:
+    [0;36moc debug node/worker-cluster-gbj7s-1 -- chroot /host systemctl stop kubelet[0m
+
+  SNR 발동 확인 (300초 후):
+    [0;36moc get selfnoderemediation -A[0m
+    [0;36moc get nodes -w[0m
+
+  자세한 내용: 08-snr.md 참조
+
+[0;32m[make][0m 08-snr 완료
+
+[0;36m━━━ [10/17] 09-far ━━━[0m
+[0;36m[make][0m 실행: 09-far/09-far.sh  (생성 파일 → poc-setup/09-far/)
+
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m  FAR 실습 환경 구성[0m
+[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[0;36m━━━ 사전 확인 ━━━[0m
+[0;32m[ OK ][0m 클러스터 접속: admin @ https://api.cluster-gbj7s.dynamic.redhatworkshops.io:6443
+[0;32m[ OK ][0m Fence Agents Remediation Operator 확인
+[0;32m[ OK ][0m Node Health Check Operator 확인
+[0;32m[ OK ][0m poc Template 확인
+[0;32m[ OK ][0m 대상 노드: worker-cluster-gbj7s-1
+[1;33m[WARN][0m FENCE_AGENT_IP 가 기본값입니다. env.conf 의 FENCE_AGENT_IP 를 실제 BMC IP로 변경하세요.
+[0;34m[INFO][0m   NS    : poc-far
+[0;34m[INFO][0m   NODE1 : worker-cluster-gbj7s-1
+[0;34m[INFO][0m   BMC IP: 192.168.1.100
+
+[0;36m━━━ 1/4  네임스페이스 생성 (poc-far) ━━━[0m
+[0;32m[ OK ][0m 네임스페이스 poc-far 생성 완료
+
+[0;36m━━━ 2/4  FenceAgentsRemediationTemplate 생성 ━━━[0m
+[0;31m[make][0m 09-far 실패 (exit code: 1)

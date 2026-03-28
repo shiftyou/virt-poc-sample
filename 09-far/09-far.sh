@@ -106,35 +106,38 @@ step_namespace() {
 step_far_template() {
     print_step "2/4  FenceAgentsRemediationTemplate 생성"
 
-    # 노드 목록으로 nodeparameters 구성
-    NODE_PARAMS=""
-    for node in $(oc get nodes -l node-role.kubernetes.io/worker \
-        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
-        NODE_PARAMS="${NODE_PARAMS}        --ipport:\n          ${node}: \"623\"\n"
-    done
+    # 워커 노드 목록 수집 → nodeparameters 블록 생성
+    # '--' 로 시작하는 YAML 키는 파서 오류를 일으킬 수 있으므로 따옴표로 감싸서 생성
+    local node_entries=""
+    while IFS= read -r node; do
+        [ -z "$node" ] && continue
+        node_entries="${node_entries}          \"${node}\": \"623\"\n"
+    done < <(oc get nodes -l node-role.kubernetes.io/worker \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || echo "worker-0")
+    [ -z "$node_entries" ] && node_entries='          "worker-0": "623"\n'
 
-    cat > far-template.yaml <<EOF
-apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
-kind: FenceAgentsRemediationTemplate
-metadata:
-  name: poc-far-template
-  namespace: ${REMEDIATION_NS}
-spec:
-  template:
-    spec:
-      agent: fence_ipmilan
-      sharedparameters:
-        --ip: "${FENCE_AGENT_IP:-192.168.1.100}"
-        --username: "${FENCE_AGENT_USER:-admin}"
-        --password: "${FENCE_AGENT_PASS:-password}"
-        --lanplus: ""
-        --action: "reboot"
-      nodeparameters:
-        --ipport:
-$(oc get nodes -l node-role.kubernetes.io/worker \
-    -o jsonpath='{range .items[*]}          {.metadata.name}: "623"\n{end}' 2>/dev/null || \
-    echo '          worker-0: "623"')
-EOF
+    {
+        echo "apiVersion: fence-agents-remediation.medik8s.io/v1alpha1"
+        echo "kind: FenceAgentsRemediationTemplate"
+        echo "metadata:"
+        echo "  name: poc-far-template"
+        echo "  namespace: ${REMEDIATION_NS}"
+        echo "spec:"
+        echo "  template:"
+        echo "    spec:"
+        echo "      agent: fence_ipmilan"
+        echo "      sharedparameters:"
+        echo "        \"--ip\": \"${FENCE_AGENT_IP:-192.168.1.100}\""
+        echo "        \"--username\": \"${FENCE_AGENT_USER:-admin}\""
+        echo "        \"--password\": \"${FENCE_AGENT_PASS:-password}\""
+        echo "        \"--lanplus\": \"\""
+        echo "        \"--action\": \"reboot\""
+        echo "      nodeparameters:"
+        echo "        \"--ipport\":"
+        printf '%b' "$node_entries"
+    } > far-template.yaml
+
+    echo "생성된 파일: far-template.yaml"
     oc apply -f far-template.yaml
     print_ok "FenceAgentsRemediationTemplate poc-far-template 생성 완료"
     print_info "  agent  : fence_ipmilan"
@@ -188,7 +191,8 @@ step_vms() {
             continue
         fi
 
-        oc process -n openshift poc -p NAME="$VM" > "${VM}.yaml"
+        oc process -n openshift poc -p NAME="$VM" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
         oc patch vm "$VM" -n "$NS" --type=merge -p "{

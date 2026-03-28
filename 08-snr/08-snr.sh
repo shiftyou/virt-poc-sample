@@ -158,7 +158,8 @@ step_vms() {
             continue
         fi
 
-        oc process -n openshift poc -p NAME="$VM" > "${VM}.yaml"
+        oc process -n openshift poc -p NAME="$VM" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
         oc patch vm "$VM" -n "$NS" --type=merge -p "{

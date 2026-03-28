@@ -232,7 +232,7 @@ objects:
               resources:
                 requests:
                   storage: 30Gi
-      running: false
+      runStrategy: Halted
       template:
         metadata:
           annotations:

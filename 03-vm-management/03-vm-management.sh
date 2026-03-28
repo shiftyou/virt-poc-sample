@@ -133,7 +133,7 @@ spec:
       name: poc-vm
       namespace: ${VM_NS}
     spec:
-      running: false
+      runStrategy: Halted
       template:
         spec:
           domain:

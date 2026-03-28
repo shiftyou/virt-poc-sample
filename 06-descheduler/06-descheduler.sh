@@ -109,7 +109,8 @@ step_vms() {
         fi
 
         # poc 템플릿으로 VM 생성
-        oc process -n openshift poc -p NAME="$VM" > "${VM}.yaml"
+        oc process -n openshift poc -p NAME="$VM" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
         echo "생성된 파일: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
@@ -283,17 +284,21 @@ EOF
         exit 1
     fi
 
-    # 적용 후 상태 확인 (최대 60초 대기)
+    # 적용 후 상태 확인 — *Degraded 조건이 모두 False이면 정상
+    # (KubeDescheduler 는 Available 조건 없이 *Degraded 조건만 보고함)
     print_info "KubeDescheduler 상태 확인 중..."
     local retries=12
     local i=0
+    local healthy=false
     while [ $i -lt $retries ]; do
-        local available
-        available=$(oc get kubedescheduler cluster \
+        local degraded_true
+        degraded_true=$(oc get kubedescheduler cluster \
             -n "$DESCHEDULER_NS" \
-            -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
-        if [ "$available" = "True" ]; then
-            print_ok "KubeDescheduler Available"
+            -o jsonpath='{range .status.conditions[*]}{.type}{" "}{.status}{"\n"}{end}' \
+            2>/dev/null | grep -i "Degraded" | grep "True" || true)
+        if [ -z "$degraded_true" ]; then
+            healthy=true
+            print_ok "KubeDescheduler 정상 (Degraded 조건 없음)"
             break
         fi
         printf "  [%d/%d] 대기 중...\r" "$((i+1))" "$retries"
@@ -315,7 +320,7 @@ EOF
         done || true
     echo ""
 
-    if [ $i -eq $retries ]; then
+    if [ "$healthy" != "true" ]; then
         print_warn "KubeDescheduler 준비 시간 초과. 위 상태를 확인하세요."
     fi
 
@@ -408,7 +413,8 @@ step_trigger_vm() {
         return
     fi
 
-    oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" > "poc-descheduler-vm-trigger.yaml"
+    oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "poc-descheduler-vm-trigger.yaml"
     echo "생성된 파일: poc-descheduler-vm-trigger.yaml"
     oc apply -n "$NS" -f "poc-descheduler-vm-trigger.yaml"
 

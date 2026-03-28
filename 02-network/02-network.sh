@@ -230,7 +230,8 @@ step_vm() {
     fi
 
     # poc 템플릿으로 VM 생성
-    oc process -n openshift poc -p NAME="$VM_NAME" > "vm-${VM_NAME}.yaml"
+    oc process -n openshift poc -p NAME="$VM_NAME" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "vm-${VM_NAME}.yaml"
     echo "생성된 파일: vm-${VM_NAME}.yaml"
     oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
 
