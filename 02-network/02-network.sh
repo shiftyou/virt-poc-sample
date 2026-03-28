@@ -87,6 +87,26 @@ NMEOF
 step_nncp() {
     print_step "1/4  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
 
+    # 기존 NNCP가 진행 중이면 완료될 때까지 대기 (admission webhook 충돌 방지)
+    if oc get nncp poc-bridge-nncp &>/dev/null; then
+        local pre_status
+        pre_status=$(oc get nncp poc-bridge-nncp \
+            -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
+        if [ "$pre_status" != "True" ]; then
+            print_info "기존 NNCP 가 진행 중입니다. 완료 대기 중..."
+            local w=0
+            while [ $w -lt 24 ]; do
+                pre_status=$(oc get nncp poc-bridge-nncp \
+                    -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
+                [ "$pre_status" = "True" ] && break
+                printf "  [%d/24] 대기 중...\r" "$((w+1))"
+                sleep 5
+                w=$((w+1))
+            done
+            echo ""
+        fi
+    fi
+
     cat > nncp-poc-bridge.yaml <<EOF
 apiVersion: nmstate.io/v1
 kind: NodeNetworkConfigurationPolicy
