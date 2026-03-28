@@ -89,7 +89,7 @@ step_namespace() {
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"
     else
-        oc new-project "$NS"
+        oc new-project "$NS" > /dev/null
         print_ok "네임스페이스 $NS 생성 완료"
     fi
 }
