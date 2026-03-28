@@ -108,7 +108,9 @@ step_vms() {
         fi
 
         # poc 템플릿으로 VM 생성
-        oc process -n openshift poc -p NAME="$VM" | oc apply -n "$NS" -f -
+        oc process -n openshift poc -p NAME="$VM" > "${VM}.yaml"
+        echo "생성된 파일: ${VM}.yaml"
+        oc apply -n "$NS" -f "${VM}.yaml"
 
         # nodeSelector + CPU/Memory request + LiveMigrate 전략 패치
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
@@ -264,7 +266,9 @@ step_trigger_vm() {
         return
     fi
 
-    oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" | oc apply -n "$NS" -f -
+    oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" > "poc-descheduler-vm-trigger.yaml"
+    echo "생성된 파일: poc-descheduler-vm-trigger.yaml"
+    oc apply -n "$NS" -f "poc-descheduler-vm-trigger.yaml"
 
     oc patch vm poc-descheduler-vm-trigger -n "$NS" --type=merge -p "{
       \"spec\": {
