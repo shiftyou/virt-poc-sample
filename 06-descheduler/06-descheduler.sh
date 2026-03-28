@@ -225,8 +225,47 @@ step_migrate_to_node1() {
           }
         }"
 
-        # VMIM 생성
+        # 기존 in-flight VMIM 대기/정리
         local VMIM_NAME="migrate-${VM}-to-node1"
+        local existing_phase
+        existing_phase=$(oc get vmim "$VMIM_NAME" -n "$NS" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        if [ -n "$existing_phase" ]; then
+            if [ "$existing_phase" = "Succeeded" ] || [ "$existing_phase" = "Failed" ]; then
+                oc delete vmim "$VMIM_NAME" -n "$NS" --ignore-not-found &>/dev/null || true
+                print_info "  → 이전 VMIM ($existing_phase) 삭제"
+            else
+                # 이미 진행 중 → 완료까지 대기
+                print_info "  → 기존 VMIM 진행 중 ($existing_phase), 완료 대기..."
+                local w=0
+                while [ $w -lt 36 ]; do
+                    existing_phase=$(oc get vmim "$VMIM_NAME" -n "$NS" \
+                        -o jsonpath='{.status.phase}' 2>/dev/null || true)
+                    [ "$existing_phase" = "Succeeded" ] || [ "$existing_phase" = "Failed" ] && break
+                    printf "  [%d/36] 대기 중... (%s)\r" "$((w+1))" "$existing_phase"
+                    sleep 5
+                    w=$((w+1))
+                done
+                echo ""
+                oc delete vmim "$VMIM_NAME" -n "$NS" --ignore-not-found &>/dev/null || true
+            fi
+        fi
+
+        # VMI에 다른 in-flight 마이그레이션이 있으면 대기
+        local w=0
+        while [ $w -lt 12 ]; do
+            local inflight
+            inflight=$(oc get vmim -n "$NS" \
+                -o jsonpath='{range .items[?(@.spec.vmiName=="'"$VM"'")]}{.status.phase}{"\n"}{end}' \
+                2>/dev/null | grep -vE "^(Succeeded|Failed|)$" || true)
+            [ -z "$inflight" ] && break
+            printf "  [%d/12] 이전 마이그레이션 완료 대기... (%s)\r" "$((w+1))" "$inflight"
+            sleep 5
+            w=$((w+1))
+        done
+        echo ""
+
+        # VMIM 생성
         cat > "vmim-${VM}.yaml" <<EOF
 apiVersion: kubevirt.io/v1
 kind: VirtualMachineInstanceMigration
