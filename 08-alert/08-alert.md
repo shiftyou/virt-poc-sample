@@ -19,6 +19,21 @@ Prometheus (OpenShift Monitoring)
 
 ---
 
+## VM 생성 (Alert 테스트용)
+
+`08-alert.sh` 실행 시 poc 템플릿으로 `poc-alert-vm`을 자동 생성합니다.
+생성된 VM을 이용해 각 Alert 조건을 직접 유발하고 동작을 확인합니다.
+
+```bash
+# VM 상태 확인
+oc get vm,vmi -n poc-alert
+
+# VM 콘솔 접속
+virtctl console poc-alert-vm -n poc-alert
+```
+
+---
+
 ## User-defined Project Monitoring 활성화
 
 사용자 네임스페이스(poc-alert 등)에 PrometheusRule을 적용하려면 활성화 필요합니다.
@@ -113,6 +128,133 @@ spec:
           annotations:
             summary: "VM 메모리가 부족합니다"
             description: "VM {{ $labels.name }} (네임스페이스: {{ $labels.namespace }})의 사용 가능 메모리가 {{ $value | humanize }}입니다."
+```
+
+---
+
+## Alert 유발 방법
+
+각 Alert 조건을 실제로 만들어 동작을 확인합니다.
+
+---
+
+### 1. VMNotRunning — VM을 Failed 상태로 유발
+
+존재하지 않는 노드를 `nodeSelector`로 지정하면 VMI가 스케줄되지 못하고 **Failed** 상태가 됩니다.
+`for: 2m` 조건이 충족되면 Alert이 발생합니다.
+
+```bash
+# 1) 존재하지 않는 노드 지정으로 패치
+oc patch vm poc-alert-vm -n poc-alert --type=merge -p \
+  '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"nonexistent-node"}}}}}'
+
+# 2) VM 재시작 → VMI가 Pending→Failed 전환
+virtctl restart poc-alert-vm -n poc-alert
+
+# 3) VMI 상태 확인 (Failed 확인)
+oc get vmi -n poc-alert
+
+# 4) 2분 후 OpenShift Console → Observe → Alerting 에서 VMNotRunning 확인
+```
+
+**복구:**
+
+```bash
+oc patch vm poc-alert-vm -n poc-alert --type=json \
+  -p '[{"op":"remove","path":"/spec/template/spec/nodeSelector"}]'
+virtctl start poc-alert-vm -n poc-alert
+```
+
+---
+
+### 2. VMStuckPending — VM을 Pending 상태로 유발
+
+리소스(CPU/메모리) 요청량을 클러스터 용량보다 크게 설정하면 VMI가 **Pending** 상태에 머뭅니다.
+`for: 5m` 조건이 충족되면 Alert이 발생합니다.
+
+```bash
+# 1) 과도한 메모리 요청으로 패치 (예: 9999Gi)
+oc patch vm poc-alert-vm -n poc-alert --type=merge -p \
+  '{"spec":{"template":{"spec":{"domain":{"resources":{"requests":{"memory":"9999Gi"}}}}}}}'
+
+# 2) VM 재시작 → VMI가 Pending 상태에 머뭄
+virtctl restart poc-alert-vm -n poc-alert
+
+# 3) VMI 상태 확인 (Pending 확인)
+oc get vmi -n poc-alert
+
+# 4) 5분 후 Console → Observe → Alerting 에서 VMStuckPending 확인
+```
+
+**복구:**
+
+```bash
+oc patch vm poc-alert-vm -n poc-alert --type=merge -p \
+  '{"spec":{"template":{"spec":{"domain":{"resources":{"requests":{"memory":"2Gi"}}}}}}}'
+virtctl start poc-alert-vm -n poc-alert
+```
+
+---
+
+### 3. VMLiveMigrationFailed — Live Migration 실패 유발
+
+Migration 대상 노드가 없거나 리소스가 부족한 상태에서 강제로 Migration을 시도합니다.
+
+```bash
+# 1) VM이 Running 상태인지 확인
+oc get vmi poc-alert-vm -n poc-alert
+
+# 2) 모든 워커 노드에 taint 추가 (Migration 대상 없음)
+for node in $(oc get nodes -l node-role.kubernetes.io/worker -o name); do
+  oc adm taint node "${node#node/}" migration-test=blocked:NoSchedule --overwrite
+done
+
+# 3) Live Migration 시작 → Failed 전환
+virtctl migrate poc-alert-vm -n poc-alert
+
+# 4) Migration 상태 확인
+oc get vmim -n poc-alert
+
+# 5) 10분 이내 Console → Observe → Alerting 에서 VMLiveMigrationFailed 확인
+```
+
+**복구:**
+
+```bash
+for node in $(oc get nodes -l node-role.kubernetes.io/worker -o name); do
+  oc adm taint node "${node#node/}" migration-test=blocked:NoSchedule-
+done
+```
+
+---
+
+### 4. VMLowMemory — VM 메모리 부족 유발
+
+VM 내부에서 `stress` 도구로 메모리를 고갈시킵니다.
+`kubevirt_vmi_memory_available_bytes < 100MiB` 상태가 `for: 5m` 지속되면 Alert이 발생합니다.
+
+```bash
+# 1) VM 콘솔 접속
+virtctl console poc-alert-vm -n poc-alert
+
+# 2) VM 내부에서 stress 설치 및 실행 (RHEL/CentOS)
+sudo dnf install -y stress-ng
+# VM에 할당된 메모리 - 100MiB 이상을 점유 (예: 1.8Gi VM이면 1700m 사용)
+stress-ng --vm 1 --vm-bytes 1700m --timeout 600s &
+
+# 3) 사용 가능 메모리 확인
+free -m
+
+# 4) 5분 후 Console → Observe → Alerting 에서 VMLowMemory 확인
+```
+
+**복구 (VM 내부):**
+
+```bash
+# stress-ng 종료
+kill %1
+# 또는
+killall stress-ng
 ```
 
 ---

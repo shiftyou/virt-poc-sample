@@ -20,6 +20,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 NS="poc-alert"
+VM_NAME="poc-alert-vm"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -42,10 +43,20 @@ preflight() {
         exit 1
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        print_warn "VIRT_INSTALLED=false — VM 생성 단계는 스킵됩니다."
+    else
+        if ! oc get template poc -n openshift &>/dev/null; then
+            print_warn "poc Template 없음 — VM 생성 스킵 (01-template 먼저 실행)"
+        else
+            print_ok "poc Template 확인"
+        fi
+    fi
 }
 
 step_namespace() {
-    print_step "1/3  네임스페이스 생성 (${NS})"
+    print_step "1/4  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"
@@ -56,7 +67,7 @@ step_namespace() {
 }
 
 step_user_workload_monitoring() {
-    print_step "2/3  User-defined Project Monitoring 활성화"
+    print_step "2/4  User-defined Project Monitoring 활성화"
 
     local current
     current=$(oc get configmap cluster-monitoring-config \
@@ -101,7 +112,7 @@ EOF
 }
 
 step_prometheus_rule() {
-    print_step "3/3  PrometheusRule 배포 (VM 알림 규칙)"
+    print_step "3/4  PrometheusRule 배포 (VM 알림 규칙)"
 
     cat > poc-vm-alerts.yaml <<EOF
 apiVersion: monitoring.coreos.com/v1
@@ -159,6 +170,32 @@ EOF
     print_ok "PrometheusRule poc-vm-alerts 배포 완료"
 }
 
+step_vm() {
+    print_step "4/4  VM 생성 (poc 템플릿 — Alert 유발 테스트용)"
+
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        print_warn "VIRT_INSTALLED=false — VM 생성 스킵"
+        return
+    fi
+
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_warn "poc Template 없음 — VM 생성 스킵 (01-template 먼저 실행)"
+        return
+    fi
+
+    if oc get vm "$VM_NAME" -n "$NS" &>/dev/null; then
+        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+    else
+        oc process -n openshift poc -p NAME="$VM_NAME" | \
+            sed 's/  running: false/  runStrategy: Halted/' | \
+            oc apply -n "$NS" -f -
+        print_ok "VM $VM_NAME 생성 완료"
+    fi
+
+    virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
+    print_ok "VM $VM_NAME 시작 — Running 상태 대기 후 Alert 유발 테스트 가능"
+}
+
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -168,10 +205,22 @@ print_summary() {
     echo -e "  PrometheusRule 확인:"
     echo -e "    ${CYAN}oc get prometheusrule -n ${NS}${NC}"
     echo ""
+    echo -e "  VM 상태 확인:"
+    echo -e "    ${CYAN}oc get vm,vmi -n ${NS}${NC}"
+    echo ""
     echo -e "  Alert 상태 확인:"
     echo -e "    ${CYAN}OpenShift Console → Observe → Alerting → Alert Rules${NC}"
     echo ""
-    echo -e "  자세한 내용: 11-alert.md 참조"
+    echo -e "  Alert 유발 테스트 (예시):"
+    echo -e "    ${CYAN}# VMNotRunning — VM을 강제로 Failed 상태로 유발${NC}"
+    echo -e "    ${CYAN}oc patch vm ${VM_NAME} -n ${NS} --type=merge -p '{\"spec\":{\"template\":{\"spec\":{\"nodeSelector\":{\"kubernetes.io/hostname\":\"nonexistent-node\"}}}}}'${NC}"
+    echo -e "    ${CYAN}virtctl restart ${VM_NAME} -n ${NS}${NC}"
+    echo ""
+    echo -e "    ${CYAN}# 복구${NC}"
+    echo -e "    ${CYAN}oc patch vm ${VM_NAME} -n ${NS} --type=json -p '[{\"op\":\"remove\",\"path\":\"/spec/template/spec/nodeSelector\"}]'${NC}"
+    echo -e "    ${CYAN}virtctl start ${VM_NAME} -n ${NS}${NC}"
+    echo ""
+    echo -e "  자세한 내용: 08-alert.md 참조"
     echo ""
 }
 
@@ -185,6 +234,7 @@ main() {
     step_namespace
     step_user_workload_monitoring
     step_prometheus_rule
+    step_vm
     print_summary
 }
 
