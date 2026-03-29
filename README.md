@@ -48,6 +48,7 @@ cd virt-poc-sample
 | Node Health Check | [nhc-operator.md](00-operator/nhc-operator.md) | 노드 헬스체크 사용 시 |
 | Node Maintenance | [node-maintenance-operator.md](00-operator/node-maintenance-operator.md) | 노드 유지보수 사용 시 |
 | Grafana | [grafana-operator.md](00-operator/grafana-operator.md) | 모니터링 대시보드 사용 시 |
+| Cluster Observability Operator (COO) | OperatorHub → "Cluster Observability Operator" | 네임스페이스 독립 모니터링 사용 시 |
 
 ---
 
@@ -63,8 +64,8 @@ cd virt-poc-sample
 | 06 | [06-descheduler](06-descheduler/06-descheduler.md) | Descheduler 실습 — VM 3개를 Live Migration으로 TEST_NODE에 집중 후 트리거 VM으로 과부하 유발 → 자동 재배치 |
 | 07 | [07-liveness-probe](07-liveness-probe/07-liveness-probe.md) | VM Liveness/Readiness Probe 실습 — HTTP(port 1500)·TCP·Exec Probe 설정 및 실패 시 자동 재시작 |
 | 08 | [08-alert](08-alert/08-alert.md) | VM Alert 실습 — PrometheusRule로 VM 상태 알림 (VMNotRunning·VMStuckPending·VMLowMemory) |
-| 09 | [09-node-exporter](09-node-exporter/09-node-exporter.md) | Node Exporter 실습 — 내장 node-exporter 설명 + 커스텀 DaemonSet 추가 |
-| 10 | [10-monitoring](10-monitoring/10-monitoring.md) | 모니터링 실습 — Grafana 배포·Prometheus 연동·Dell/Hitachi 스토리지 모니터링 |
+| 09 | [09-node-exporter](09-node-exporter/09-node-exporter.md) | Node Exporter 실습 — poc 템플릿 VM 생성 + node-exporter Service + ServiceMonitor 등록 |
+| 10 | [10-monitoring](10-monitoring/10-monitoring.md) | 모니터링 실습 — OpenShift Console·COO MonitoringStack·Grafana·Dell/Hitachi 스토리지 모니터링 |
 | 11 | [11-mtv](11-mtv/11-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
 | 12 | [12-oadp](12-oadp/12-oadp.md) | OADP 실습 — VM 백업/복원 (MinIO S3 backend·DataProtectionApplication·Schedule) |
 | 13 | [13-node-maintenance](13-node-maintenance/13-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
@@ -135,12 +136,14 @@ virt-poc-sample/
 │   └── 08-alert.sh             # 자동화 스크립트 (NS·UserWorkloadMonitoring·PrometheusRule)
 │
 ├── 09-node-exporter/           # Node Exporter 실습
-│   ├── 09-node-exporter.md     # 가이드 문서 (내장 node-exporter·커스텀 DaemonSet·textfile)
-│   └── 09-node-exporter.sh     # 자동화 스크립트 (NS·SA·DaemonSet·ServiceMonitor)
+│   ├── 09-node-exporter.md     # 가이드 문서 (VM node-exporter·Service·ServiceMonitor)
+│   ├── 09-node-exporter.sh     # 자동화 스크립트 (NS·poc템플릿VM·Service·ServiceMonitor)
+│   ├── node-exporter-install.sh  # VM 내부 node_exporter 설치 스크립트
+│   └── node-exporter-service.yaml  # node-exporter ClusterIP Service
 │
-├── 10-monitoring/              # 모니터링 실습 (Grafana·Dell·Hitachi)
+├── 10-monitoring/              # 모니터링 실습 (OpenShift Console·COO·Grafana·Dell·Hitachi)
 │   ├── 10-monitoring.md        # 가이드 문서
-│   └── 10-monitoring.sh        # 자동화 스크립트 (NS·Grafana·DataSource, GRAFANA_INSTALLED 필요)
+│   └── 10-monitoring.sh        # 자동화 스크립트 (NS·VM·COO MonitoringStack·ServiceMonitor·Grafana)
 │
 ├── 11-mtv/                     # Migration Toolkit for Virtualization 실습
 │   ├── 11-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
@@ -166,7 +169,12 @@ virt-poc-sample/
 │   ├── 16-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
 │   └── 16-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
 │
-└── disabled/                   # 비활성 항목 (참고용)
+└── poc-setup/                  # 스크립트 실행 중 생성된 YAML 파일 저장소
+    ├── 01-template/            # datasource·template·consoleyamlsample YAML
+    ├── 02-network/             # NNCP·NAD·VM YAML
+    ├── 06-descheduler/         # KubeDescheduler·VM YAML
+    ├── 09-node-exporter/       # VM·ServiceMonitor YAML
+    └── ...                     # 각 단계별 생성 YAML
 ```
 
 ---
