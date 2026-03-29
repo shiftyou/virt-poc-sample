@@ -4,9 +4,10 @@
 #
 # OADP 실습 환경 구성
 #   1. poc-oadp 네임스페이스 생성
-#   2. S3 자격증명 Secret 생성 (MinIO 또는 ODF MCG)
-#   3. DataProtectionApplication 배포
-#   4. BackupStorageLocation 확인
+#   2. cloud-credentials Secret 생성 (DPA 네임스페이스 = poc-oadp)
+#   3. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
+#   4. DataProtectionApplication 배포 (poc-oadp)
+#   5. BackupStorageLocation 확인
 #
 # 실행 조건:
 #   - OADP Operator 설치 필수
@@ -58,7 +59,7 @@ preflight() {
         print_warn "  설치 가이드: 00-operator/oadp-operator.md"
         exit 77
     fi
-    print_ok "OADP Operator 확인"
+    print_ok "OADP Operator 확인 (ns: ${OADP_NS})"
 
     # 백엔드 결정: MinIO 우선, 없으면 ODF
     local minio_ok=false
@@ -88,8 +89,11 @@ preflight() {
     fi
 }
 
+# =============================================================================
+# 1단계: 네임스페이스 생성
+# =============================================================================
 step_namespace() {
-    print_step "1/4  네임스페이스 생성 (${NS})"
+    print_step "1/5  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 이미 존재 — 스킵"
@@ -99,8 +103,11 @@ step_namespace() {
     fi
 }
 
+# =============================================================================
+# 2단계: cloud-credentials Secret 생성 (DPA 와 동일 네임스페이스: poc-oadp)
+# =============================================================================
 step_credentials() {
-    print_step "2/4  S3 자격증명 Secret 생성 (백엔드: ${BACKEND}, ns: ${OADP_NS})"
+    print_step "2/5  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
 
     if [ "$BACKEND" = "minio" ]; then
         local ak="${MINIO_ACCESS_KEY:-minio}"
@@ -110,22 +117,62 @@ step_credentials() {
         local sk="${ODF_S3_SECRET_KEY:-}"
     fi
 
-    cat > cloud-credentials.txt <<EOF
-[default]
-aws_access_key_id=${ak}
-aws_secret_access_key=${sk}
+    cat > cloud-credentials-secret.yaml <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-credentials
+  namespace: ${NS}
+stringData:
+  cloud: |
+    [default]
+    aws_access_key_id=${ak}
+    aws_secret_access_key=${sk}
 EOF
-
-    oc create secret generic cloud-credentials \
-        -n "$OADP_NS" \
-        --from-file=cloud=cloud-credentials.txt \
-        --dry-run=client -o yaml | oc apply -f -
-    rm -f cloud-credentials.txt
-    print_ok "cloud-credentials Secret 생성 완료 → ns: ${OADP_NS}"
+    echo "생성된 파일: cloud-credentials-secret.yaml"
+    oc apply -f cloud-credentials-secret.yaml
+    print_ok "cloud-credentials Secret 생성 완료 → ns: ${NS}"
 }
 
+# =============================================================================
+# 3단계: VolumeSnapshotClass YAML 생성 (CSI 스냅샷용)
+# =============================================================================
+step_volumesnapshotclass() {
+    print_step "3/5  VolumeSnapshotClass YAML 생성"
+
+    # 클러스터의 CSI 드라이버 자동 감지
+    local csi_driver
+    csi_driver=$(oc get csidrivers -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+        tr ' ' '\n' | grep -v "^kubernetes\|^csi-snapshot\|^file" | head -1 || true)
+
+    if [ -z "$csi_driver" ]; then
+        csi_driver="your.csi.driver.com"
+        print_warn "CSI 드라이버 자동 감지 실패 → 기본값: ${csi_driver}"
+        print_warn "  실제 드라이버명으로 수정 후 적용하세요: oc get csidrivers"
+    else
+        print_info "CSI 드라이버 감지: ${csi_driver}"
+    fi
+
+    cat > volumesnapshotclass.yaml <<EOF
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: poc-volumesnapshotclass
+  labels:
+    velero.io/csi-volumesnapshot-class: "true"
+driver: ${csi_driver}
+deletionPolicy: Delete
+EOF
+    echo "생성된 파일: volumesnapshotclass.yaml"
+    print_info "CSI 스냅샷 사용 시 아래 명령으로 적용하세요:"
+    echo -e "    ${CYAN}oc apply -f volumesnapshotclass.yaml${NC}"
+}
+
+# =============================================================================
+# 4단계: DataProtectionApplication 배포 (poc-oadp)
+# =============================================================================
 step_dpa() {
-    print_step "3/4  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
+    print_step "4/5  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
 
     if oc get dpa poc-dpa -n "$NS" &>/dev/null; then
         print_ok "DataProtectionApplication poc-dpa 이미 존재 — 스킵"
@@ -155,18 +202,20 @@ spec:
         - openshift
         - aws
         - kubevirt
+        - csi
+      disableFsBackup: false
       resourceTimeout: 10m
     nodeAgent:
       enable: true
-      uploaderType: kopia
+      uploaderType: restic
+  logFormat: text
   backupLocations:
-    - name: default
-      velero:
+    - velero:
         provider: aws
         default: true
         objectStorage:
           bucket: ${bucket}
-          prefix: velero
+          prefix: oadp
         config:
           region: ${region}
           s3ForcePathStyle: "true"
@@ -175,29 +224,25 @@ spec:
         credential:
           key: cloud
           name: cloud-credentials
-  snapshotLocations:
-    - name: default
-      velero:
-        provider: aws
-        config:
-          region: ${region}
 EOF
     echo "생성된 파일: poc-dpa.yaml"
-    oc apply -n "$NS" -f poc-dpa.yaml
-    print_ok "DataProtectionApplication poc-dpa 배포 완료 (ns: ${NS})"
+    oc apply -f poc-dpa.yaml
+    print_ok "DataProtectionApplication poc-dpa 배포 완료 → ns: ${NS}"
 }
 
+# =============================================================================
+# 5단계: BackupStorageLocation 확인
+# =============================================================================
 step_verify() {
-    print_step "4/4  BackupStorageLocation 확인 (ns: ${NS})"
+    print_step "5/5  BackupStorageLocation 확인 (ns: ${NS})"
 
     print_info "BackupStorageLocation 준비 대기 중..."
     local retries=12
     local i=0
     while [ $i -lt $retries ]; do
         local phase
-        phase=$(oc get backupstoragelocation default \
-            -n "$NS" \
-            -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        phase=$(oc get backupstoragelocation -n "$NS" \
+            -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
         if [ "$phase" = "Available" ]; then
             print_ok "BackupStorageLocation 상태: Available"
             break
@@ -210,7 +255,7 @@ step_verify() {
 
     if [ $i -eq $retries ]; then
         print_warn "BackupStorageLocation 준비 시간 초과. 백엔드 연결을 확인하세요."
-        print_info "  oc describe backupstoragelocation default -n ${NS}"
+        print_info "  oc describe backupstoragelocation -n ${NS}"
     fi
 }
 
@@ -235,7 +280,7 @@ print_summary() {
     echo -e "    ${CYAN}spec:${NC}"
     echo -e "    ${CYAN}  includedNamespaces: [${NS}]${NC}"
     echo -e "    ${CYAN}  storageLocation: default${NC}"
-    echo -e "    ${CYAN}  snapshotMoveData: true${NC}"
+    echo -e "    ${CYAN}  snapshotVolumes: true${NC}"
     echo -e "    ${CYAN}EOF${NC}"
     echo ""
     echo -e "  VM 복원 실행 (ns: ${NS}):"
@@ -263,6 +308,7 @@ main() {
     preflight
     step_namespace
     step_credentials
+    step_volumesnapshotclass
     step_dpa
     step_verify
     print_summary
