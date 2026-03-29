@@ -270,6 +270,44 @@ print_progress() {
     echo ""
 }
 
+# =============================================================================
+# oc patch wrapper — patch 실행 후 최종 YAML 을 poc-setup/<step>/ 에 저장
+# =============================================================================
+_OC_WRAP_DIR=""
+if command -v oc &>/dev/null; then
+    _OC_REAL=$(command -v oc)
+    _OC_WRAP_DIR=$(mktemp -d)
+    echo "${_OC_REAL}" > "${_OC_WRAP_DIR}/.oc_real"
+    cat > "${_OC_WRAP_DIR}/oc" <<'OC_WRAPPER_EOF'
+#!/bin/bash
+# oc wrapper: 'oc patch' 실행 후 최종 YAML 을 POC_PATCH_SAVE_DIR 에 저장
+_R=$(cat "$(dirname "${BASH_SOURCE[0]}")/.oc_real")
+"$_R" "$@"
+_X=$?
+if [ "${1:-}" = "patch" ] && [ "$_X" -eq 0 ] && [ -n "${POC_PATCH_SAVE_DIR:-}" ]; then
+    _K="${2:-}"; _N="${3:-}"; _NS=""; _P=""
+    for _A in "$@"; do
+        { [ "$_P" = "-n" ] || [ "$_P" = "--namespace" ]; } && _NS="$_A"
+        case "$_A" in --namespace=*) _NS="${_A#--namespace=}" ;; esac
+        _P="$_A"
+    done
+    if [ -n "$_K" ] && [ -n "$_N" ]; then
+        _FNAME=$(echo "${_K}-${_N}" | tr '/' '-')
+        _OUT="${POC_PATCH_SAVE_DIR}/${_FNAME}-patched.yaml"
+        if [ -n "$_NS" ]; then
+            "$_R" get "$_K" "$_N" -n "$_NS" -o yaml > "$_OUT" 2>/dev/null && \
+                echo -e "\033[0;34m[patch-save]\033[0m ${_FNAME}-patched.yaml" || true
+        else
+            "$_R" get "$_K" "$_N" -o yaml > "$_OUT" 2>/dev/null && \
+                echo -e "\033[0;34m[patch-save]\033[0m ${_FNAME}-patched.yaml" || true
+        fi
+    fi
+fi
+exit "$_X"
+OC_WRAPPER_EOF
+    chmod +x "${_OC_WRAP_DIR}/oc"
+fi
+
 # 시작 헤더
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -304,7 +342,11 @@ for dir in "${STEPS[@]}"; do
 
     print_info "실행: ${dir}/${dir}.sh  (생성 파일 → poc-setup/${dir}/)"
     set +e
-    (cd "$OUT_DIR" && bash "$SH_FILE")
+    if [ -n "${_OC_WRAP_DIR:-}" ]; then
+        (cd "$OUT_DIR" && PATH="${_OC_WRAP_DIR}:${PATH}" POC_PATCH_SAVE_DIR="$OUT_DIR" bash "$SH_FILE")
+    else
+        (cd "$OUT_DIR" && bash "$SH_FILE")
+    fi
     EXIT_CODE=$?
     set -e
 
@@ -323,6 +365,11 @@ for dir in "${STEPS[@]}"; do
 
     print_progress
 done
+
+# oc wrapper 정리
+if [ -n "${_OC_WRAP_DIR:-}" ]; then
+    rm -rf "${_OC_WRAP_DIR}"
+fi
 
 if [ "$MODE" != "only" ]; then
 echo ""
