@@ -97,8 +97,24 @@ if [ "$ARG1" = "clean" ]; then
     done
 
     echo ""
-    print_info "네임스페이스 삭제가 백그라운드에서 진행됩니다."
-    print_info "상태 확인: oc get namespace | grep poc-"
+    print_info "네임스페이스 삭제 완료를 기다리는 중..."
+    echo ""
+    while true; do
+        REMAINING=$(oc get namespace --no-headers \
+            -o custom-columns=NAME:.metadata.name 2>/dev/null | grep '^poc-' || true)
+        if [ -z "$REMAINING" ]; then
+            break
+        fi
+        echo -e "  ${YELLOW}남은 네임스페이스:${NC}"
+        echo "$REMAINING" | while read -r ns; do
+            echo -e "    ${YELLOW}●${NC} ${ns}"
+        done
+        sleep 5
+        echo ""
+    done
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}  모든 poc- 네임스페이스 삭제 완료!${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     exit 0
 fi
