@@ -259,23 +259,120 @@ killall stress-ng
 
 ---
 
-## Alert 적용 확인
+## Alert 발생 확인 방법
+
+Alert은 **Inactive → Pending → Firing** 3단계로 전환됩니다.
+
+| 상태 | 의미 |
+|------|------|
+| Inactive | 조건 미충족 (정상) |
+| Pending | 조건 충족됨, `for:` 대기 중 |
+| Firing | `for:` 조건까지 지속 → 실제 알림 발송 |
+
+---
+
+### 방법 1. OpenShift Console (가장 빠름)
+
+```
+OpenShift Console
+  → Observe
+    → Alerting
+      → Alert Rules   ← PrometheusRule 등록 확인 (Inactive/Pending/Firing)
+      → Alerts        ← 현재 Firing 중인 Alert 목록
+```
+
+- **Alert Rules** 탭: `poc-vm-alerts` 규칙과 각 Alert의 현재 상태 확인
+- **Alerts** 탭: Firing 상태 Alert만 필터링해서 표시
+
+> ⚠️ User-defined project monitoring 활성화 후 Pod 기동에 1~2분 소요됩니다.
+> Console에 표시되지 않으면 잠시 후 새로 고침하세요.
+
+---
+
+### 방법 2. CLI — Prometheus API 직접 조회
+
+User Workload Monitoring의 Prometheus에 직접 API 요청으로 Alert 상태를 조회합니다.
 
 ```bash
-# PrometheusRule 확인
-oc get prometheusrule -n poc-alert
+# 현재 모든 Alert 상태 조회 (Pending/Firing 포함)
+oc exec -n openshift-user-workload-monitoring \
+  prometheus-user-workload-0 -- \
+  curl -s http://localhost:9090/api/v1/alerts \
+  | python3 -m json.tool
 
-# Alert 상태 확인 (Prometheus UI)
-# OpenShift Console → Observe → Alerting → Alert Rules
-
-# 활성 Alert 확인
-oc get -n openshift-monitoring prometheusrule -A | grep poc
-
-# CLI로 활성 Alert 조회
-oc exec -n openshift-monitoring prometheus-k8s-0 -- \
-  curl -s http://localhost:9090/api/v1/alerts | \
-  python3 -m json.tool | grep -A5 "VMNotRunning"
+# 특정 Alert만 필터링
+oc exec -n openshift-user-workload-monitoring \
+  prometheus-user-workload-0 -- \
+  curl -s http://localhost:9090/api/v1/alerts \
+  | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for a in data['data']['alerts']:
+    if 'VM' in a['labels'].get('alertname',''):
+        print(a['labels']['alertname'], '->', a['state'])
+        print('  labels:', a['labels'])
+        print('  annotations:', a['annotations'])
+"
 ```
+
+출력 예시:
+```
+VMNotRunning -> firing
+  labels: {'alertname': 'VMNotRunning', 'namespace': 'poc-alert', 'phase': 'Failed', 'severity': 'critical'}
+  annotations: {'description': '네임스페이스 poc-alert에서 Failed 상태의 VM이 1개 감지되었습니다.', ...}
+```
+
+---
+
+### 방법 3. CLI — PrometheusRule 로드 확인
+
+Prometheus가 PrometheusRule을 실제로 로드했는지 확인합니다.
+
+```bash
+# Rule 로드 여부 확인
+oc exec -n openshift-user-workload-monitoring \
+  prometheus-user-workload-0 -- \
+  curl -s http://localhost:9090/api/v1/rules \
+  | python3 -m json.tool | grep -A2 '"name": "VMNotRunning"'
+
+# PrometheusRule 리소스 확인
+oc get prometheusrule -n poc-alert
+oc describe prometheusrule poc-vm-alerts -n poc-alert
+```
+
+---
+
+### 방법 4. CLI — AlertManager 수신 확인
+
+AlertManager가 Alert을 수신했는지 확인합니다 (Firing 단계에서만 전달됨).
+
+```bash
+# AlertManager Pod 확인
+oc get pods -n openshift-monitoring | grep alertmanager
+
+# AlertManager API로 현재 활성 Alert 조회
+oc exec -n openshift-monitoring alertmanager-main-0 -- \
+  curl -s http://localhost:9093/api/v2/alerts \
+  | python3 -m json.tool | grep -A5 "alertname"
+```
+
+---
+
+### 방법 5. Port-forward로 Prometheus/AlertManager UI 직접 접속
+
+```bash
+# Prometheus UI (포트 포워딩)
+oc port-forward -n openshift-user-workload-monitoring \
+  prometheus-user-workload-0 9090:9090 &
+# 브라우저: http://localhost:9090/alerts
+
+# AlertManager UI (포트 포워딩)
+oc port-forward -n openshift-monitoring \
+  alertmanager-main-0 9093:9093 &
+# 브라우저: http://localhost:9093
+```
+
+Prometheus UI → **Alerts** 메뉴에서 각 Alert의 Pending/Firing 상태와 `for:` 남은 시간을 실시간으로 확인할 수 있습니다.
 
 ---
 
