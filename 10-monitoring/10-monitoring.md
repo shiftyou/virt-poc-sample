@@ -349,22 +349,97 @@ EOF
 
 ---
 
-### 2-6. COO Prometheus 접근
+### 2-6. COO 메트릭 보기
 
-COO MonitoringStack이 배포한 Prometheus는 클러스터 내부 서비스이므로,
-아래 두 가지 방법으로 직접 조회할 수 있습니다.
-OpenShift Console에서 보는 방법은 **1. OpenShift Console (Observe → Metrics)** 섹션을 참조하세요.
+COO MonitoringStack의 Prometheus는 클러스터 내부 서비스로 OpenShift Console에 직접 통합되지 않습니다.
+대신 **두 가지 경로**로 메트릭을 조회합니다.
 
-#### 방법 1 — Grafana 대시보드
+> **핵심 원리**
+> - OpenShift Console은 `monitoring.coreos.com/v1` ServiceMonitor → **user-workload Prometheus** 경로만 표시
+> - COO Prometheus(`monitoring.rhobs/v1`)는 Console 밖에서 Grafana 또는 port-forward로 접근
+> - 본 POC는 동일 Service에 두 종류 ServiceMonitor를 모두 붙여 **양쪽 동시 수집**
 
-Grafana와 COO를 함께 배포한 경우, COO Prometheus가 DataSource로 등록됩니다.
+```
+[poc-monitoring-node-exporter Service]
+         │
+         ├─ monitoring.coreos.com/v1 ServiceMonitor
+         │        └─ user-workload Prometheus (OpenShift 내장)
+         │                 └─ Console → Observe → Metrics ✔ (Project: poc-monitoring)
+         │
+         └─ monitoring.rhobs/v1 ServiceMonitor
+                  └─ COO Prometheus (prometheus-operated)
+                           ├─ Grafana → COO-Prometheus DataSource ✔
+                           └─ port-forward → http://localhost:9090 ✔
+```
 
-1. Grafana Route로 접속: `oc get route -n poc-monitoring`
-2. **Explore** → DataSource: `COO-Prometheus` 선택
-3. PromQL 입력 후 쿼리
+---
+
+#### 방법 1 — OpenShift Console (Observe → Metrics)
+
+COO Prometheus가 아닌 **user-workload Prometheus**를 통해 동일 메트릭을 콘솔에서 조회합니다.
+`monitoring.coreos.com/v1` ServiceMonitor(`poc-vm-node-exporter-console`)가 이미 등록되어 있으면
+아래 절차만 따르면 됩니다.
+
+**조회 절차:**
+
+1. OpenShift Console 접속
+2. 상단 **Project** 드롭다운 → `poc-monitoring` 선택
+3. 좌측 메뉴 → **Observe → Metrics**
+4. PromQL 입력창에 쿼리 입력 후 **Run queries**:
+
+```promql
+# VM 메모리 여유량
+node_memory_MemAvailable_bytes{job="poc-monitoring-vm"}
+
+# VM CPU 사용률
+rate(node_cpu_seconds_total{job="poc-monitoring-vm",mode!="idle"}[5m])
+
+# VM 디스크 읽기 속도
+rate(node_disk_read_bytes_total{job="poc-monitoring-vm"}[5m])
+```
+
+**알림 규칙 확인:**
+
+- **Observe → Alerting** → `poc-monitoring` 프로젝트
+- `VMNotRunning`, `VMHighMemoryUsage` 알림 상태 확인
+
+**사전 조건 확인:**
 
 ```bash
-# Grafana DataSource 등록 (COO Prometheus)
+# 네임스페이스 레이블 확인
+oc get namespace poc-monitoring --show-labels | grep cluster-monitoring
+
+# ServiceMonitor 등록 확인
+oc get servicemonitor.monitoring.coreos.com poc-vm-node-exporter-console -n poc-monitoring
+
+# Endpoints 활성화 확인 (VM node_exporter가 실행 중이어야 함)
+oc get endpoints poc-monitoring-node-exporter -n poc-monitoring
+```
+
+> **메트릭이 안 보일 때**
+> - Endpoints가 비어 있으면 VM 내 node_exporter가 미실행 → `09-node-exporter/node-exporter-install.sh` 실행
+> - user-workload-monitoring이 비활성화된 경우:
+>   ```bash
+>   oc get configmap cluster-monitoring-config -n openshift-monitoring -o yaml | grep enableUserWorkload
+>   # enableUserWorkload: true 가 없으면 활성화 필요
+>   ```
+
+---
+
+#### 방법 2 — Grafana (COO Prometheus DataSource)
+
+COO Prometheus에 직접 연결된 DataSource를 통해 Grafana에서 조회합니다.
+`10-monitoring.sh` 실행 시 `coo-prometheus-datasource`가 자동 등록됩니다.
+
+**DataSource 등록 확인:**
+
+```bash
+oc get grafanadatasource coo-prometheus-datasource -n poc-monitoring
+```
+
+**등록이 필요한 경우 수동 생성:**
+
+```bash
 oc apply -f - <<'EOF'
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -386,22 +461,39 @@ spec:
 EOF
 ```
 
-#### 방법 2 — Port-forward (COO Prometheus 직접 접근)
+**Grafana 접속 및 조회 절차:**
 
 ```bash
-# Prometheus UI
-oc port-forward svc/prometheus-operated 9090:9090 -n poc-monitoring
-# 브라우저: http://localhost:9090
-
-# Alertmanager UI
-oc port-forward svc/alertmanager-operated 9093:9093 -n poc-monitoring
-# 브라우저: http://localhost:9093
+# Grafana Route 확인
+oc get route -n poc-monitoring -l app=grafana -o jsonpath='{.items[0].spec.host}'
 ```
 
-Prometheus UI에서:
-- **Graph** → PromQL 직접 쿼리
-- **Targets** → ServiceMonitor가 등록한 scrape 대상 확인
-- **Alerts** → PrometheusRule로 정의한 알림 상태 확인
+1. `https://<grafana-route>` 접속 → `admin` / `grafana123`(또는 env.conf 값)
+2. 좌측 메뉴 → **Explore**
+3. 상단 DataSource 드롭다운 → **COO-Prometheus** 선택
+4. **Metrics browser** 또는 PromQL 직접 입력:
+
+```promql
+# node_exporter 메트릭 (COO Prometheus 수집분)
+node_memory_MemAvailable_bytes{job="poc-monitoring-vm"}
+rate(node_cpu_seconds_total{job="poc-monitoring-vm",mode!="idle"}[5m])
+```
+
+> **DataSource 연결 실패 시**
+> COO Prometheus Pod가 아직 기동 중일 수 있습니다.
+> ```bash
+> oc get pods -n poc-monitoring -l app.kubernetes.io/name=prometheus
+> # STATUS가 Running이어야 Grafana에서 정상 조회 가능
+> ```
+
+**참고 — Port-forward로 COO Prometheus 직접 접근:**
+
+```bash
+oc port-forward svc/prometheus-operated 9090:9090 -n poc-monitoring
+# 브라우저: http://localhost:9090
+# Targets 탭 → poc-vm-node-exporter ServiceMonitor 수집 대상 확인
+# Alerts 탭 → VMNotRunning, VMHighMemoryUsage 알림 상태 확인
+```
 
 ---
 
