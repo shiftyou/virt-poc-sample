@@ -4,10 +4,11 @@
 #
 # OADP 실습 환경 구성
 #   1. OADP Operator 네임스페이스 확인 (기본: openshift-adp)
-#   2. cloud-credentials Secret 생성
-#   3. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
-#   4. DataProtectionApplication 배포
-#   5. BackupStorageLocation 확인
+#   2. ObjectBucketClaim 생성 및 버킷 정보 취득 (ODF 백엔드 시)
+#   3. cloud-credentials Secret 생성
+#   4. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
+#   5. DataProtectionApplication 배포
+#   6. BackupStorageLocation 확인
 #
 # 실행 조건:
 #   - OADP Operator 설치 필수 (기본 네임스페이스: openshift-adp)
@@ -113,7 +114,7 @@ preflight() {
 # 1단계: 네임스페이스 확인 (OADP Operator 설치 네임스페이스)
 # =============================================================================
 step_namespace() {
-    print_step "1/5  네임스페이스 확인 (${NS})"
+    print_step "1/6  네임스페이스 확인 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         print_ok "네임스페이스 $NS 확인 완료"
@@ -125,10 +126,101 @@ step_namespace() {
 }
 
 # =============================================================================
-# 2단계: cloud-credentials Secret 생성 (OADP Operator 네임스페이스)
+# 2단계: ObjectBucketClaim 생성 및 버킷 정보 취득 (ODF 백엔드 전용)
+# =============================================================================
+step_obc() {
+    if [ "$BACKEND" != "odf" ]; then
+        print_step "2/6  OBC — MinIO 백엔드이므로 스킵"
+        return
+    fi
+
+    print_step "2/6  ObjectBucketClaim 생성 (ns: ${NS})"
+
+    # NooBaa StorageClass 자동 감지
+    local obc_sc
+    obc_sc=$(oc get storageclass -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+        tr ' ' '\n' | grep -i "noobaa" | head -1 || true)
+    if [ -z "$obc_sc" ]; then
+        obc_sc="openshift-storage.noobaa.io"
+        print_warn "NooBaa StorageClass 자동 감지 실패 → 기본값: ${obc_sc}"
+    else
+        print_info "OBC StorageClass: ${obc_sc}"
+    fi
+
+    if oc get obc obc-backups -n "$NS" &>/dev/null; then
+        print_ok "ObjectBucketClaim obc-backups 이미 존재 — 스킵"
+    else
+        cat > obc-backups.yaml <<EOF
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: obc-backups
+  namespace: ${NS}
+spec:
+  generateBucketName: backups
+  storageClassName: ${obc_sc}
+EOF
+        echo "생성된 파일: obc-backups.yaml"
+        oc apply -f obc-backups.yaml
+        print_ok "ObjectBucketClaim obc-backups 생성 완료 → ns: ${NS}"
+    fi
+
+    # Bound 대기
+    print_info "OBC Bound 대기 중..."
+    local retries=12
+    local i=0
+    while [ $i -lt $retries ]; do
+        local phase
+        phase=$(oc get obc obc-backups -n "$NS" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        if [ "$phase" = "Bound" ]; then
+            print_ok "OBC 상태: Bound"
+            break
+        fi
+        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
+        sleep 5
+        i=$((i+1))
+    done
+    echo ""
+
+    if [ $i -eq $retries ]; then
+        print_error "OBC Bound 시간 초과. ODF/NooBaa 상태를 확인하세요."
+        exit 1
+    fi
+
+    # ConfigMap 에서 버킷명·엔드포인트 취득
+    S3_BUCKET=$(oc get cm obc-backups -n "$NS" \
+        -o jsonpath='{.data.BUCKET_NAME}' 2>/dev/null || true)
+    local bucket_host bucket_port
+    bucket_host=$(oc get cm obc-backups -n "$NS" \
+        -o jsonpath='{.data.BUCKET_HOST}' 2>/dev/null || true)
+    bucket_port=$(oc get cm obc-backups -n "$NS" \
+        -o jsonpath='{.data.BUCKET_PORT}' 2>/dev/null || echo "80")
+
+    if [ -n "$bucket_host" ]; then
+        if [ "$bucket_port" = "80" ] || [ -z "$bucket_port" ]; then
+            S3_ENDPOINT="http://${bucket_host}"
+        else
+            S3_ENDPOINT="http://${bucket_host}:${bucket_port}"
+        fi
+    fi
+
+    # Secret 에서 자격증명 취득
+    S3_ACCESS_KEY=$(oc get secret obc-backups -n "$NS" \
+        -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d || true)
+    S3_SECRET_KEY=$(oc get secret obc-backups -n "$NS" \
+        -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d || true)
+
+    print_ok "OBC 버킷 정보 취득 완료"
+    print_info "  Bucket  : ${S3_BUCKET}"
+    print_info "  Endpoint: ${S3_ENDPOINT}"
+}
+
+# =============================================================================
+# 3단계: cloud-credentials Secret 생성 (OADP Operator 네임스페이스)
 # =============================================================================
 step_credentials() {
-    print_step "2/5  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
+    print_step "3/6  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
 
     cat > cloud-credentials-secret.yaml <<EOF
 apiVersion: v1
@@ -151,7 +243,7 @@ EOF
 # 3단계: VolumeSnapshotClass YAML 생성 (CSI 스냅샷용)
 # =============================================================================
 step_volumesnapshotclass() {
-    print_step "3/5  VolumeSnapshotClass YAML 생성"
+    print_step "4/6  VolumeSnapshotClass YAML 생성"
 
     # 클러스터의 CSI 드라이버 자동 감지
     local csi_driver
@@ -185,7 +277,7 @@ EOF
 # 4단계: DataProtectionApplication 배포 (OADP Operator 네임스페이스)
 # =============================================================================
 step_dpa() {
-    print_step "4/5  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
+    print_step "5/6  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
 
     if oc get dpa poc-dpa -n "$NS" &>/dev/null; then
         print_ok "DataProtectionApplication poc-dpa 이미 존재 — 스킵"
@@ -236,7 +328,7 @@ EOF
 # 5단계: BackupStorageLocation 확인
 # =============================================================================
 step_verify() {
-    print_step "5/5  BackupStorageLocation 확인 (ns: ${NS})"
+    print_step "6/6  BackupStorageLocation 확인 (ns: ${NS})"
 
     print_info "BackupStorageLocation 준비 대기 중..."
     local retries=12
@@ -309,6 +401,7 @@ main() {
 
     preflight
     step_namespace
+    step_obc
     step_credentials
     step_volumesnapshotclass
     step_dpa
