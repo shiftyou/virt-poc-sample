@@ -100,7 +100,6 @@ check_operators() {
     GRAFANA_INSTALLED=false
     COO_INSTALLED=false
     ODF_INSTALLED=false
-    MINIO_INSTALLED=false
 
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
@@ -120,7 +119,6 @@ check_operators() {
         grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         grep -qi "cluster-observability-operator" /tmp/_poc_csv.txt 2>/dev/null && COO_INSTALLED=true
         grep -qi "odf-operator\|ocs-operator" /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
-        grep -qi "minio-operator\|operator\.min\.io" /tmp/_poc_csv.txt 2>/dev/null && MINIO_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
         # Check NMState CR instance separately
         NMSTATE_CR_EXISTS=false
@@ -167,11 +165,6 @@ check_operators() {
         echo -e "  $ok ODF Operator                       → OpenShift Data Foundation ready"
     else
         echo -e "  $ng ODF Operator                       → Not installed"
-    fi
-    if [ "$MINIO_INSTALLED" = "true" ]; then
-        echo -e "  $ok MinIO Operator                     → MinIO ready (OADP backend 사용 가능)"
-    else
-        echo -e "  $ng MinIO Operator                     → Not installed"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
         echo -e "  $ok OADP Operator                      → Backup/Restore ready  (ns: ${OADP_NS})"
@@ -499,16 +492,8 @@ fi
 # =============================================================================
 # 8. OADP backend 자동 감지 (MinIO / ODF)
 # =============================================================================
-if [ "${MINIO_INSTALLED:-false}" = "true" ]; then
-    print_header "8. MinIO 자동 감지 (OADP backend)"
-    auto_detect_minio
-else
-    print_info "8. MinIO — MinIO Operator 미설치, 기본값 설정."
-    MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
-    MINIO_BUCKET="velero"
-    MINIO_ACCESS_KEY="minio"
-    MINIO_SECRET_KEY="minio123"
-fi
+print_header "8. MinIO 자동 감지 (OADP backend)"
+auto_detect_minio
 
 if [ "${ODF_INSTALLED:-false}" = "true" ]; then
     print_header "8-1. ODF 자동 감지 (OADP backend)"
@@ -592,7 +577,6 @@ NMO_INSTALLED=${NMO_INSTALLED:-false}
 NHC_INSTALLED=${NHC_INSTALLED:-false}
 SNR_INSTALLED=${SNR_INSTALLED:-false}
 ODF_INSTALLED=${ODF_INSTALLED:-false}
-MINIO_INSTALLED=${MINIO_INSTALLED:-false}
 EOF
 
 print_ok "env.conf created: $ENV_FILE"
