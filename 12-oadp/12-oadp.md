@@ -8,7 +8,7 @@ VM (poc-oadp 네임스페이스)
   ▼
 OADP (Velero)
   └─ VM 스냅샷 + PVC 데이터
-       │  S3 (MinIO) 저장
+       │  S3 (MinIO 또는 ODF MCG) 저장
        ▼
   Backup 완료
 
@@ -21,51 +21,73 @@ OADP (Velero)
 ## 사전 조건
 
 - OADP Operator 설치 (`00-operator/oadp-operator.md` 참조)
-- MinIO 또는 S3 호환 스토리지 준비
-- `env.conf`에 `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_ENDPOINT`, `MINIO_BUCKET` 설정
-- `14-oadp.sh` 실행 완료
+- S3 백엔드: **MinIO Operator** 또는 **ODF Operator** 중 하나 설치
+- `setup.sh` 실행 완료 (MinIO/ODF 자동 감지 및 `env.conf` 저장)
+- `12-oadp.sh` 실행 완료
 
 ---
 
 ## 구성 개요
 
+| 항목 | 값 |
+|------|-----|
+| DPA 네임스페이스 | `poc-oadp` |
+| cloud-credentials Secret | `poc-oadp` |
+| BackupStorageLocation | `poc-oadp` |
+| Backup / Restore | `poc-oadp` |
+| S3 백엔드 | MinIO 우선, 없으면 ODF MCG |
+
 ```
-DataProtectionApplication (OADP 설정)
-  └─ BackupStorageLocation (MinIO S3)
-  └─ VolumeSnapshotLocation (CSI)
-       │
-       ├─ Backup CR → 네임스페이스 전체 백업
-       └─ Restore CR → 백업에서 복원
+cloud-credentials Secret (poc-oadp)
+  └─ DataProtectionApplication poc-dpa (poc-oadp)
+       └─ BackupStorageLocation default
+            │
+            ├─ Backup CR   → S3 버킷에 저장
+            └─ Restore CR  → S3 버킷에서 복원
 ```
+
+---
+
+## 백엔드별 S3 변수
+
+`setup.sh` 실행 시 MinIO/ODF 자동 감지 후 `env.conf`에 저장됩니다.
+
+| 변수 | MinIO | ODF (NooBaa MCG) |
+|------|-------|-----------------|
+| `S3_ENDPOINT` | MinIO 서비스 URL | NooBaa MCG S3 URL |
+| `S3_BUCKET` | `MINIO_BUCKET` | `ODF_S3_BUCKET` |
+| `S3_ACCESS_KEY` | `MINIO_ACCESS_KEY` | noobaa-admin secret |
+| `S3_SECRET_KEY` | `MINIO_SECRET_KEY` | noobaa-admin secret |
+| `S3_REGION` | `minio` | `noobaa` |
 
 ---
 
 ## DataProtectionApplication 설정
 
+`12-oadp.sh`가 자동으로 생성·적용합니다. 수동 적용 시 아래를 참고하세요.
+
 ```bash
-source env.conf
+# 1. cloud-credentials Secret 생성 (poc-oadp)
+oc apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-credentials
+  namespace: poc-oadp
+stringData:
+  cloud: |
+    [default]
+    aws_access_key_id=${S3_ACCESS_KEY}
+    aws_secret_access_key=${S3_SECRET_KEY}
+EOF
 
-# MinIO 자격증명 Secret 생성
-oc create secret generic cloud-credentials \
-  -n openshift-adp \
-  --from-literal=cloud="[default]
-aws_access_key_id=${MINIO_ACCESS_KEY}
-aws_secret_access_key=${MINIO_SECRET_KEY}
-" 2>/dev/null || \
-oc create secret generic cloud-credentials \
-  -n openshift-adp \
-  --from-literal=cloud="[default]
-aws_access_key_id=${MINIO_ACCESS_KEY}
-aws_secret_access_key=${MINIO_SECRET_KEY}
-" --dry-run=client -o yaml | oc apply -f -
-
-# DataProtectionApplication 생성
+# 2. DataProtectionApplication 생성 (poc-oadp)
 oc apply -f - <<EOF
 apiVersion: oadp.openshift.io/v1alpha1
 kind: DataProtectionApplication
 metadata:
   name: poc-dpa
-  namespace: openshift-adp
+  namespace: poc-oadp
 spec:
   configuration:
     velero:
@@ -73,40 +95,49 @@ spec:
         - openshift
         - aws
         - kubevirt
+        - csi
+      disableFsBackup: false
       resourceTimeout: 10m
     nodeAgent:
       enable: true
-      uploaderType: kopia
+      uploaderType: restic
+  logFormat: text
   backupLocations:
-    - name: default
-      velero:
+    - velero:
         provider: aws
         default: true
         objectStorage:
-          bucket: ${MINIO_BUCKET}
-          prefix: velero
+          bucket: ${S3_BUCKET}
+          prefix: oadp
         config:
-          region: minio
+          region: ${S3_REGION}
           s3ForcePathStyle: "true"
-          s3Url: ${MINIO_ENDPOINT}
+          s3Url: ${S3_ENDPOINT}
           insecureSkipTLSVerify: "true"
         credential:
           key: cloud
           name: cloud-credentials
-  snapshotLocations:
-    - name: default
-      velero:
-        provider: aws
-        config:
-          region: minio
 EOF
 ```
 
 ---
 
-## VM 백업
+## VolumeSnapshotClass (CSI 스냅샷)
 
-### 네임스페이스 전체 백업
+`12-oadp.sh`가 클러스터의 CSI 드라이버를 자동 감지하여 `volumesnapshotclass.yaml`을 생성합니다.
+CSI 스냅샷을 사용하는 경우 직접 적용하세요.
+
+```bash
+# 생성된 파일 확인 후 적용
+oc apply -f volumesnapshotclass.yaml
+
+# CSI 드라이버 목록 확인
+oc get csidrivers
+```
+
+---
+
+## VM 백업
 
 ```bash
 # poc-oadp 네임스페이스의 모든 VM 백업
@@ -114,28 +145,21 @@ oc apply -f - <<EOF
 apiVersion: velero.io/v1
 kind: Backup
 metadata:
-  name: poc-vm-backup-$(date +%Y%m%d-%H%M)
-  namespace: openshift-adp
+  name: poc-vm-backup
+  namespace: poc-oadp
 spec:
   includedNamespaces:
     - poc-oadp
   storageLocation: default
   ttl: 720h0m0s
-  snapshotMoveData: true
+  snapshotVolumes: true
 EOF
-```
 
-### 백업 상태 확인
-
-```bash
-# 백업 목록 확인
-oc get backup -n openshift-adp
+# 백업 상태 확인
+oc get backup -n poc-oadp
 
 # 백업 상세 확인
-oc describe backup poc-vm-backup -n openshift-adp
-
-# 백업 로그 확인
-oc logs -n openshift-adp deployment/openshift-adp-velero --tail=50
+oc describe backup poc-vm-backup -n poc-oadp
 ```
 
 ---
@@ -148,17 +172,17 @@ oc apply -f - <<EOF
 apiVersion: velero.io/v1
 kind: Restore
 metadata:
-  name: poc-vm-restore-$(date +%Y%m%d-%H%M)
-  namespace: openshift-adp
+  name: poc-vm-restore
+  namespace: poc-oadp
 spec:
-  backupName: <백업_이름>
+  backupName: poc-vm-backup
   includedNamespaces:
     - poc-oadp
   restorePVs: true
 EOF
 
 # 복원 상태 확인
-oc get restore -n openshift-adp
+oc get restore -n poc-oadp
 
 # 복원된 VM 확인
 oc get vm -n poc-oadp
@@ -170,11 +194,10 @@ oc get vm -n poc-oadp
 
 ```bash
 # BackupStorageLocation 상태 (Available 여야 함)
-oc get backupstoragelocation -n openshift-adp
+oc get backupstoragelocation -n poc-oadp
 
-# MinIO 연결 테스트
-oc exec -n openshift-adp deployment/openshift-adp-velero -- \
-  velero backup-location get
+# 상세 확인
+oc describe backupstoragelocation -n poc-oadp
 ```
 
 ---
@@ -188,7 +211,7 @@ apiVersion: velero.io/v1
 kind: Schedule
 metadata:
   name: poc-daily-backup
-  namespace: openshift-adp
+  namespace: poc-oadp
 spec:
   schedule: "0 2 * * *"
   template:
@@ -196,11 +219,11 @@ spec:
       - poc-oadp
     storageLocation: default
     ttl: 168h0m0s
-    snapshotMoveData: true
+    snapshotVolumes: true
 EOF
 
 # Schedule 확인
-oc get schedule -n openshift-adp
+oc get schedule -n poc-oadp
 ```
 
 ---
@@ -208,18 +231,17 @@ oc get schedule -n openshift-adp
 ## 트러블슈팅
 
 ```bash
-# OADP Controller 로그
-oc logs -n openshift-adp deployment/openshift-adp-velero --tail=50
+# Velero Pod 로그
+oc logs -n poc-oadp -l app.kubernetes.io/name=velero --tail=50
 
 # NodeAgent 로그 (PVC 백업/복원)
-oc logs -n openshift-adp daemonset/node-agent --tail=30
+oc logs -n poc-oadp daemonset/node-agent --tail=30
 
 # BackupStorageLocation 상세
-oc describe backupstoragelocation default -n openshift-adp
+oc describe backupstoragelocation -n poc-oadp
 
-# Velero CLI (Pod 내부에서)
-oc exec -n openshift-adp deployment/openshift-adp-velero -- \
-  velero backup describe <백업_이름> --details
+# DPA 상태 확인
+oc get dpa poc-dpa -n poc-oadp -o yaml
 ```
 
 ---
@@ -228,10 +250,10 @@ oc exec -n openshift-adp deployment/openshift-adp-velero -- \
 
 ```bash
 # Schedule 삭제
-oc delete schedule poc-daily-backup -n openshift-adp
+oc delete schedule poc-daily-backup -n poc-oadp
 
 # DataProtectionApplication 삭제
-oc delete dpa poc-dpa -n openshift-adp
+oc delete dpa poc-dpa -n poc-oadp
 
 # 네임스페이스 삭제
 oc delete namespace poc-oadp
