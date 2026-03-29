@@ -22,7 +22,7 @@ OpenShift Virtualization
 - MTV Operator 설치 (`00-operator/mtv-operator.md` 참조)
 - vSphere 접근 정보 (vCenter URL, 사용자/비밀번호)
 - VMware VDDK 이미지 (`env.conf`의 `VDDK_IMAGE`)
-- `16-mtv.sh` 실행 완료
+- `11-mtv.sh` 실행 완료
 
 ---
 

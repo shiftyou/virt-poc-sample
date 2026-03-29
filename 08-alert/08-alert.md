@@ -15,7 +15,7 @@ Prometheus (OpenShift Monitoring)
 
 - OpenShift Monitoring 활성화 (기본 포함)
 - User-defined project monitoring 활성화 (사용자 네임스페이스 Alert 사용 시)
-- `11-alert.sh` 실행 완료
+- `08-alert.sh` 실행 완료
 
 ---
 

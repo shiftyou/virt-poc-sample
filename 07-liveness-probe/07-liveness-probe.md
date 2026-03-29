@@ -37,7 +37,7 @@ VMI(VirtualMachineInstance) 내부 IP로 직접 연결합니다.
 ## 사전 조건
 
 - `01-template` 완료 — poc Template 및 DataSource 등록
-- `10-liveness-probe.sh` 실행 완료
+- `07-liveness-probe.sh` 실행 완료
 
 ```bash
 oc get template poc -n openshift

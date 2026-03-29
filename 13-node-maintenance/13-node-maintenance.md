@@ -36,7 +36,7 @@ VM이 Live Migration으로 다른 노드로 자동 이동하는 과정을 실습
 - `01-template` 완료 — `poc` Template 및 DataSource 등록
 - Node Maintenance Operator 설치 (`00-operator/node-maintenance-operator.md` 참조)
 - 워커 노드 2개 이상
-- `07-node-maintenance.sh` 실행 완료
+- `13-node-maintenance.sh` 실행 완료
 
 ---
 

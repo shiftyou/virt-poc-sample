@@ -40,7 +40,7 @@ NHC (감지) → FenceAgentsRemediationTemplate (IPMI fencing)
 - Node Health Check Operator 설치 (`00-operator/nhc-operator.md` 참조)
 - 워커 노드에 IPMI/BMC 접근 가능
 - `env.conf`에 `FENCE_AGENT_IP`, `FENCE_AGENT_USER`, `FENCE_AGENT_PASS` 설정
-- `09-far.sh` 실행 완료
+- `15-far.sh` 실행 완료
 
 ---
 

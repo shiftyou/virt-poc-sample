@@ -39,7 +39,7 @@ NHC (감지) → SelfNodeRemediationTemplate (복구 실행)
 - Self Node Remediation Operator 설치 (`00-operator/snr-operator.md` 참조)
 - Node Health Check Operator 설치 (`00-operator/nhc-operator.md` 참조)
 - 워커 노드 2개 이상
-- `08-snr.sh` 실행 완료
+- `14-snr.sh` 실행 완료
 
 ---
 
