@@ -31,6 +31,13 @@ OADP_NS="openshift-adp"
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
 
+# 통합 S3 변수 (preflight 에서 백엔드에 따라 설정)
+S3_ENDPOINT=""
+S3_BUCKET=""
+S3_ACCESS_KEY=""
+S3_SECRET_KEY=""
+S3_REGION=""
+
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
@@ -77,16 +84,25 @@ preflight() {
 
     if [ "$minio_ok" = "true" ]; then
         BACKEND="minio"
-        print_ok "백엔드: MinIO"
-        print_info "  Endpoint : ${MINIO_ENDPOINT}"
-        print_info "  Bucket   : ${MINIO_BUCKET:-velero}"
-        print_info "  AccessKey: ${MINIO_ACCESS_KEY:-minio}"
+        S3_ENDPOINT="${MINIO_ENDPOINT}"
+        S3_BUCKET="${MINIO_BUCKET:-velero}"
+        S3_ACCESS_KEY="${MINIO_ACCESS_KEY:-minio}"
+        S3_SECRET_KEY="${MINIO_SECRET_KEY:-minio123}"
+        S3_REGION="minio"
     else
         BACKEND="odf"
-        print_ok "백엔드: ODF (NooBaa MCG)"
-        print_info "  Endpoint : ${ODF_S3_ENDPOINT}"
-        print_info "  Bucket   : ${ODF_S3_BUCKET:-velero}"
+        S3_ENDPOINT="${ODF_S3_ENDPOINT}"
+        S3_BUCKET="${ODF_S3_BUCKET:-velero}"
+        S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
+        S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
+        S3_REGION="noobaa"
     fi
+
+    print_ok "백엔드: ${BACKEND}"
+    print_info "  S3 Endpoint : ${S3_ENDPOINT}"
+    print_info "  S3 Bucket   : ${S3_BUCKET}"
+    print_info "  S3 Region   : ${S3_REGION}"
+    print_info "  S3 AccessKey: ${S3_ACCESS_KEY}"
 }
 
 # =============================================================================
@@ -109,14 +125,6 @@ step_namespace() {
 step_credentials() {
     print_step "2/5  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
 
-    if [ "$BACKEND" = "minio" ]; then
-        local ak="${MINIO_ACCESS_KEY:-minio}"
-        local sk="${MINIO_SECRET_KEY:-minio123}"
-    else
-        local ak="${ODF_S3_ACCESS_KEY:-}"
-        local sk="${ODF_S3_SECRET_KEY:-}"
-    fi
-
     cat > cloud-credentials-secret.yaml <<EOF
 apiVersion: v1
 kind: Secret
@@ -126,8 +134,8 @@ metadata:
 stringData:
   cloud: |
     [default]
-    aws_access_key_id=${ak}
-    aws_secret_access_key=${sk}
+    aws_access_key_id=${S3_ACCESS_KEY}
+    aws_secret_access_key=${S3_SECRET_KEY}
 EOF
     echo "생성된 파일: cloud-credentials-secret.yaml"
     oc apply -f cloud-credentials-secret.yaml
@@ -179,16 +187,6 @@ step_dpa() {
         return
     fi
 
-    if [ "$BACKEND" = "minio" ]; then
-        local s3_url="${MINIO_ENDPOINT:-http://minio.poc-minio.svc.cluster.local:9000}"
-        local bucket="${MINIO_BUCKET:-velero}"
-        local region="minio"
-    else
-        local s3_url="${ODF_S3_ENDPOINT:-http://s3.openshift-storage.svc.cluster.local}"
-        local bucket="${ODF_S3_BUCKET:-velero}"
-        local region="noobaa"
-    fi
-
     cat > poc-dpa.yaml <<EOF
 apiVersion: oadp.openshift.io/v1alpha1
 kind: DataProtectionApplication
@@ -214,12 +212,12 @@ spec:
         provider: aws
         default: true
         objectStorage:
-          bucket: ${bucket}
+          bucket: ${S3_BUCKET}
           prefix: oadp
         config:
-          region: ${region}
+          region: ${S3_REGION}
           s3ForcePathStyle: "true"
-          s3Url: ${s3_url}
+          s3Url: ${S3_ENDPOINT}
           insecureSkipTLSVerify: "true"
         credential:
           key: cloud
