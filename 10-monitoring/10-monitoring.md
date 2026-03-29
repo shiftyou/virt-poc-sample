@@ -4,6 +4,49 @@ OpenShift Virtualization 환경의 통합 모니터링 구성입니다.
 
 ---
 
+## OpenShift Monitoring vs Cluster Observability Operator (COO)
+
+OpenShift에는 두 가지 독립적인 Prometheus 기반 모니터링 스택이 존재합니다.
+
+| 항목 | OpenShift Monitoring | COO (MonitoringStack) |
+|------|----------------------|----------------------|
+| **운영 주체** | OpenShift 플랫폼 내장 | 별도 Operator 설치 필요 |
+| **범위** | 클러스터 전체 (+ user-workload) | 네임스페이스 단위 |
+| **API** | `monitoring.coreos.com/v1` | `monitoring.rhobs/v1` |
+| **설정 방법** | ConfigMap (`cluster-monitoring-config`) | `MonitoringStack` CR |
+| **콘솔 통합** | Console → Observe → Metrics 직접 표시 | 미지원 (port-forward 또는 Grafana) |
+| **데이터 격리** | user-workload는 네임스페이스별 분리 가능 | MonitoringStack 단위로 완전 격리 |
+| **보존 기간** | 클러스터 설정 공유 | MonitoringStack별 독립 설정 |
+| **멀티테넌시** | RBAC으로 조회 권한만 분리 | Prometheus 인스턴스 자체를 분리 |
+| **주요 사용처** | 플랫폼·앱 공통 모니터링 | 팀/프로젝트별 독립 모니터링 |
+
+### 어떤 것을 선택할까?
+
+- **OpenShift Monitoring (user-workload)** — 추가 인프라 없이 OpenShift Console에서 바로 확인.
+  단일 클러스터, 중앙 집중식 모니터링에 적합.
+
+- **COO MonitoringStack** — 네임스페이스 단위로 Prometheus를 독립 배포.
+  팀별 메트릭 격리, 보존 정책 분리, 클러스터 Prometheus 부하 분산이 필요할 때 적합.
+
+- **두 스택 병행 사용** (본 POC 구성) — `monitoring.coreos.com/v1` ServiceMonitor로 OpenShift Console
+  가시성을 확보하면서, `monitoring.rhobs/v1` ServiceMonitor로 COO Prometheus에도 동시에 수집.
+
+```
+[VM node_exporter]
+      │
+      ├─ Service (poc-monitoring-node-exporter)
+      │       │
+      │       ├─ ServiceMonitor (monitoring.coreos.com/v1)
+      │       │       └─ OpenShift user-workload Prometheus
+      │       │               └─ Console → Observe → Metrics
+      │       │
+      │       └─ ServiceMonitor (monitoring.rhobs/v1)
+      │               └─ COO Prometheus (poc-monitoring-stack)
+      │                       └─ Grafana / port-forward
+```
+
+---
+
 ## 1. OpenShift Console (Observe → Metrics)
 
 OpenShift 내장 Prometheus(user-workload)를 통해 별도 툴 없이 콘솔에서 바로 VM 메트릭을 조회합니다.
