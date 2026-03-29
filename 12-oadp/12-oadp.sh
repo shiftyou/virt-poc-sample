@@ -240,52 +240,22 @@ step_verify() {
     local retries=12
     local i=0
     while [ $i -lt $retries ]; do
-        local phase message
+        local phase
         phase=$(oc get backupstoragelocation -n "$NS" \
             -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
-        message=$(oc get backupstoragelocation -n "$NS" \
-            -o jsonpath='{.items[0].status.message}' 2>/dev/null || true)
         if [ "$phase" = "Available" ]; then
             print_ok "BackupStorageLocation 상태: Available"
             break
         fi
-        echo ""
-        printf "  [%d/%d] 상태: %s\n" "$((i+1))" "$retries" "${phase:-Pending}"
-        [ -n "$message" ] && printf "  메시지: %s\n" "$message"
+        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
         sleep 10
         i=$((i+1))
     done
     echo ""
 
     if [ $i -eq $retries ]; then
-        print_warn "BackupStorageLocation 준비 시간 초과."
-        echo ""
-
-        # DPA 상태
-        print_info "── DataProtectionApplication 상태 ──"
-        oc get dpa -n "$NS" 2>/dev/null || true
-        echo ""
-        oc get dpa poc-dpa -n "$NS" \
-            -o jsonpath='{range .status.conditions[*]}  {.type}: {.status}  {.message}{"\n"}{end}' \
-            2>/dev/null || true
-        echo ""
-
-        # BSL 상세
-        print_info "── BackupStorageLocation 상세 ──"
-        oc describe backupstoragelocation -n "$NS" 2>/dev/null || true
-        echo ""
-
-        # Velero Pod 로그 (최근 20줄)
-        print_info "── Velero Pod 로그 (최근 20줄) ──"
-        local velero_pod
-        velero_pod=$(oc get pod -n "$NS" -l app.kubernetes.io/name=velero \
-            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-        if [ -n "$velero_pod" ]; then
-            oc logs "$velero_pod" -n "$NS" --tail=20 2>/dev/null || true
-        else
-            print_warn "Velero Pod 를 찾을 수 없습니다."
-            oc get pod -n "$NS" 2>/dev/null || true
-        fi
+        print_warn "BackupStorageLocation 준비 시간 초과. 백엔드 연결을 확인하세요."
+        print_info "  oc describe backupstoragelocation -n ${NS}"
     fi
 }
 
