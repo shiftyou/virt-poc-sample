@@ -9,6 +9,9 @@
 #   4. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
 #   5. DataProtectionApplication 배포
 #   6. BackupStorageLocation 확인
+#   7. poc-oadp 네임스페이스 생성
+#   8. poc-oadp VM 생성 (poc DataSource 사용)
+#   9. Backup CR 생성 (poc-oadp 백업) + Restore YAML 생성 (미적용)
 #
 # 실행 조건:
 #   - OADP Operator 설치 필수 (기본 네임스페이스: openshift-adp)
@@ -343,6 +346,136 @@ step_verify() {
     fi
 }
 
+# =============================================================================
+# 7단계: poc-oadp 네임스페이스 생성 (백업 대상)
+# =============================================================================
+VM_NS="poc-oadp"
+
+step_vm_namespace() {
+    print_step "7/9  백업 대상 네임스페이스 생성 (${VM_NS})"
+
+    if oc get namespace "$VM_NS" &>/dev/null; then
+        print_ok "네임스페이스 $VM_NS 이미 존재 — 스킵"
+    else
+        oc new-project "$VM_NS" > /dev/null
+        print_ok "네임스페이스 $VM_NS 생성 완료"
+    fi
+}
+
+# =============================================================================
+# 8단계: VM 생성 (poc-oadp, poc DataSource 사용)
+# =============================================================================
+step_vm() {
+    print_step "8/9  VM 생성 (ns: ${VM_NS})"
+
+    if oc get vm poc-oadp-vm -n "$VM_NS" &>/dev/null; then
+        print_ok "VM poc-oadp-vm 이미 존재 — 스킵"
+        return
+    fi
+
+    local sc="${STORAGE_CLASS:-}"
+    if [ -z "$sc" ]; then
+        sc=$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null || true)
+    fi
+
+    cat > poc-oadp-vm.yaml <<EOF
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: poc-oadp-vm
+  namespace: ${VM_NS}
+spec:
+  runStrategy: Always
+  template:
+    spec:
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - disk:
+                bus: virtio
+              name: rootdisk
+          interfaces:
+            - masquerade: {}
+              model: virtio
+              name: default
+        memory:
+          guest: 2Gi
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - dataVolume:
+            name: poc-oadp-vm
+          name: rootdisk
+  dataVolumeTemplates:
+    - metadata:
+        name: poc-oadp-vm
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: poc
+          namespace: openshift-virtualization-os-images
+        storage:
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: ${sc}
+EOF
+    echo "생성된 파일: poc-oadp-vm.yaml"
+    oc apply -f poc-oadp-vm.yaml
+    print_ok "VM poc-oadp-vm 생성 완료 → ns: ${VM_NS}"
+    print_info "  VM 상태 확인: oc get vm -n ${VM_NS}"
+}
+
+# =============================================================================
+# 9단계: Backup CR 생성 + Restore YAML 생성 (미적용)
+# =============================================================================
+step_backup() {
+    print_step "9/9  Backup CR 생성 (대상: ${VM_NS}, ns: ${NS})"
+
+    if oc get backup poc-oadp-backup -n "$NS" &>/dev/null; then
+        print_ok "Backup poc-oadp-backup 이미 존재 — 스킵"
+    else
+        cat > poc-oadp-backup.yaml <<EOF
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  name: poc-oadp-backup
+  namespace: ${NS}
+spec:
+  includedNamespaces:
+    - ${VM_NS}
+  storageLocation: default
+  ttl: 720h0m0s
+  snapshotVolumes: true
+EOF
+        echo "생성된 파일: poc-oadp-backup.yaml"
+        oc apply -f poc-oadp-backup.yaml
+        print_ok "Backup poc-oadp-backup 생성 완료 → ns: ${NS}"
+    fi
+
+    # Restore YAML 생성 (적용 안 함)
+    cat > poc-oadp-restore.yaml <<EOF
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: poc-oadp-restore
+  namespace: ${NS}
+spec:
+  backupName: poc-oadp-backup
+  includedNamespaces:
+    - ${VM_NS}
+  restorePVs: true
+EOF
+    echo "생성된 파일: poc-oadp-restore.yaml"
+    print_info "복원 시 아래 명령으로 적용하세요:"
+    echo -e "    ${CYAN}oc apply -f poc-oadp-restore.yaml${NC}"
+}
+
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -354,30 +487,14 @@ print_summary() {
     echo -e "  BackupStorageLocation 확인:"
     echo -e "    ${CYAN}oc get backupstoragelocation -n ${NS}${NC}"
     echo ""
-    echo -e "  VM 백업 실행 (ns: ${NS}):"
-    echo -e "    ${CYAN}oc create -f - <<EOF${NC}"
-    echo -e "    ${CYAN}apiVersion: velero.io/v1${NC}"
-    echo -e "    ${CYAN}kind: Backup${NC}"
-    echo -e "    ${CYAN}metadata:${NC}"
-    echo -e "    ${CYAN}  name: poc-vm-backup${NC}"
-    echo -e "    ${CYAN}  namespace: ${NS}${NC}"
-    echo -e "    ${CYAN}spec:${NC}"
-    echo -e "    ${CYAN}  includedNamespaces: [${NS}]${NC}"
-    echo -e "    ${CYAN}  storageLocation: default${NC}"
-    echo -e "    ${CYAN}  snapshotVolumes: true${NC}"
-    echo -e "    ${CYAN}EOF${NC}"
+    echo -e "  VM 상태 확인 (백업 대상):"
+    echo -e "    ${CYAN}oc get vm -n ${VM_NS}${NC}"
     echo ""
-    echo -e "  VM 복원 실행 (ns: ${NS}):"
-    echo -e "    ${CYAN}oc create -f - <<EOF${NC}"
-    echo -e "    ${CYAN}apiVersion: velero.io/v1${NC}"
-    echo -e "    ${CYAN}kind: Restore${NC}"
-    echo -e "    ${CYAN}metadata:${NC}"
-    echo -e "    ${CYAN}  name: poc-vm-restore${NC}"
-    echo -e "    ${CYAN}  namespace: ${NS}${NC}"
-    echo -e "    ${CYAN}spec:${NC}"
-    echo -e "    ${CYAN}  backupName: poc-vm-backup${NC}"
-    echo -e "    ${CYAN}  includedNamespaces: [${NS}]${NC}"
-    echo -e "    ${CYAN}EOF${NC}"
+    echo -e "  Backup 상태 확인:"
+    echo -e "    ${CYAN}oc get backup poc-oadp-backup -n ${NS}${NC}"
+    echo ""
+    echo -e "  복원 실행 (백업 완료 후):"
+    echo -e "    ${CYAN}oc apply -f poc-oadp-restore.yaml${NC}"
     echo ""
     echo -e "  자세한 내용: 12-oadp.md 참조"
     echo ""
@@ -396,6 +513,9 @@ main() {
     step_volumesnapshotclass
     step_dpa
     step_verify
+    step_vm_namespace
+    step_vm
+    step_backup
     print_summary
 }
 
