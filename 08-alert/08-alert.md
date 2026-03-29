@@ -329,7 +329,7 @@ VMNotRunning -> firing
 Prometheus가 PrometheusRule을 실제로 로드했는지 확인합니다.
 
 ```bash
-# Rule 로드 여부 확인
+# Rule 로드 여부 확인 — 아무것도 출력되지 않으면 로드 실패
 oc exec -n openshift-user-workload-monitoring \
   prometheus-user-workload-0 -- \
   curl -s http://localhost:9090/api/v1/rules \
@@ -338,6 +338,63 @@ oc exec -n openshift-user-workload-monitoring \
 # PrometheusRule 리소스 확인
 oc get prometheusrule -n poc-alert
 oc describe prometheusrule poc-vm-alerts -n poc-alert
+```
+
+#### 아무것도 출력되지 않을 때 — 단계별 진단
+
+**1단계: PrometheusRule 리소스 자체가 있는지 확인**
+
+```bash
+oc get prometheusrule -n poc-alert
+```
+
+없다면 `08-alert.sh`를 다시 실행하거나 수동으로 apply합니다.
+
+---
+
+**2단계: User Workload Monitoring Pod가 모두 Running인지 확인**
+
+```bash
+oc get pods -n openshift-user-workload-monitoring
+```
+
+`prometheus-user-workload-0`, `prometheus-operator-*` 등이 Running이어야 합니다.
+Pod가 없으면 `enableUserWorkload: true` ConfigMap이 적용되지 않은 것입니다.
+
+```bash
+oc get configmap cluster-monitoring-config -n openshift-monitoring \
+  -o jsonpath='{.data.config\.yaml}'
+```
+
+---
+
+**3단계: Prometheus 로그에서 Rule 로드 오류 확인**
+
+```bash
+oc logs -n openshift-user-workload-monitoring prometheus-user-workload-0 \
+  -c prometheus --tail=50 | grep -i "rule\|error\|poc-alert"
+```
+
+`error loading rules` 또는 `parse error` 메시지가 있으면 PrometheusRule YAML 문법 오류입니다.
+
+---
+
+**4단계: 전체 rule 목록을 출력해서 그룹 이름으로 확인**
+
+```bash
+oc exec -n openshift-user-workload-monitoring \
+  prometheus-user-workload-0 -- \
+  curl -s http://localhost:9090/api/v1/rules \
+  | python3 -m json.tool | grep '"name"'
+```
+
+`poc-vm-availability` 또는 `poc-vm-resources` 그룹이 보이면 로드된 것입니다.
+아무 그룹도 없다면 Prometheus가 해당 네임스페이스를 아직 스캔하지 않은 것으로,
+**1~2분 후 재시도**하거나 Pod를 재시작합니다.
+
+```bash
+# Prometheus 재시작 (최후 수단)
+oc delete pod prometheus-user-workload-0 -n openshift-user-workload-monitoring
 ```
 
 ---
@@ -407,18 +464,35 @@ stringData:
 
 ## 트러블슈팅
 
+| 증상 | 확인 명령 | 원인 |
+|------|-----------|------|
+| Console에 Alert Rules 없음 | `oc get prometheusrule -n poc-alert` | PrometheusRule 미배포 |
+| rules API에 그룹이 없음 | `oc get pods -n openshift-user-workload-monitoring` | User Workload Monitoring 미활성화 |
+| 그룹은 있으나 Alert 없음 | Prometheus 로그 확인 | PrometheusRule YAML 문법 오류 |
+| Pending에서 Firing 미전환 | `oc exec alertmanager-main-0 -- curl .../api/v2/alerts` | AlertManager 설정 오류 |
+
 ```bash
-# PrometheusRule 문법 오류 확인
+# 1. PrometheusRule 리소스 및 문법 확인
+oc get prometheusrule -n poc-alert
 oc describe prometheusrule poc-vm-alerts -n poc-alert
 
-# User Workload Monitoring 상태 확인
+# 2. User Workload Monitoring Pod 상태 확인
 oc get pods -n openshift-user-workload-monitoring
 
-# Prometheus가 Rule을 로드했는지 확인
-oc exec -n openshift-user-workload-monitoring prometheus-user-workload-0 -- \
-  curl -s http://localhost:9090/api/v1/rules | python3 -m json.tool | grep VMNotRunning
+# 3. enableUserWorkload 설정 확인
+oc get configmap cluster-monitoring-config -n openshift-monitoring \
+  -o jsonpath='{.data.config\.yaml}'
 
-# AlertManager 상태 확인
+# 4. Prometheus 로그에서 Rule 로드 오류 확인
+oc logs -n openshift-user-workload-monitoring prometheus-user-workload-0 \
+  -c prometheus --tail=50 | grep -i "rule\|error\|poc"
+
+# 5. 로드된 Rule 그룹 전체 목록 확인
+oc exec -n openshift-user-workload-monitoring prometheus-user-workload-0 -- \
+  curl -s http://localhost:9090/api/v1/rules \
+  | python3 -m json.tool | grep '"name"'
+
+# 6. AlertManager 상태 확인
 oc get pods -n openshift-monitoring | grep alertmanager
 ```
 
