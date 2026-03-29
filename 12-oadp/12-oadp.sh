@@ -25,7 +25,12 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-NS="openshift-adp"
+# openshift-adp 가 있으면 우선 사용, 없으면 setup.sh 에서 감지한 OADP_NS 사용
+if oc get namespace "openshift-adp" &>/dev/null 2>&1; then
+    NS="openshift-adp"
+else
+    NS="${OADP_NS:-openshift-adp}"
+fi
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
