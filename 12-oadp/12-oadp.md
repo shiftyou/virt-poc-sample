@@ -3,10 +3,10 @@
 OADP를 사용하여 VM을 백업하고 복원하는 실습입니다.
 
 ```
-VM (openshift-adp 네임스페이스)
+VM (백업 대상 네임스페이스)
   │  Backup CR 생성
   ▼
-OADP (Velero)
+OADP (Velero) — openshift-adp 네임스페이스
   └─ VM 스냅샷 + PVC 데이터
        │  S3 (MinIO 또는 ODF MCG) 저장
        ▼
@@ -31,19 +31,20 @@ OADP (Velero)
 
 | 항목 | 값 |
 |------|-----|
-| DPA 네임스페이스 | `openshift-adp` |
+| OADP / DPA 네임스페이스 | `openshift-adp` (없으면 `OADP_NS` 감지값) |
 | cloud-credentials Secret | `openshift-adp` |
 | BackupStorageLocation | `openshift-adp` |
 | Backup / Restore | `openshift-adp` |
 | S3 백엔드 | MinIO 우선, 없으면 ODF MCG |
 
 ```
-cloud-credentials Secret (openshift-adp)
-  └─ DataProtectionApplication poc-dpa (openshift-adp)
-       └─ BackupStorageLocation default
-            │
-            ├─ Backup CR   → S3 버킷에 저장
-            └─ Restore CR  → S3 버킷에서 복원
+OBC obc-backups (openshift-adp) — ODF 백엔드 시 자동 생성
+  └─ cloud-credentials Secret (openshift-adp)
+       └─ DataProtectionApplication poc-dpa (openshift-adp)
+            └─ BackupStorageLocation default
+                 │
+                 ├─ Backup CR   → S3 버킷에 저장
+                 └─ Restore CR  → S3 버킷에서 복원
 ```
 
 ---
@@ -51,14 +52,51 @@ cloud-credentials Secret (openshift-adp)
 ## 백엔드별 S3 변수
 
 `setup.sh` 실행 시 MinIO/ODF 자동 감지 후 `env.conf`에 저장됩니다.
+ODF 백엔드는 버킷명과 자격증명을 OBC(ObjectBucketClaim)에서 추가로 취득합니다.
 
 | 변수 | MinIO | ODF (NooBaa MCG) |
 |------|-------|-----------------|
-| `S3_ENDPOINT` | MinIO 서비스 URL | NooBaa MCG S3 URL |
-| `S3_BUCKET` | `MINIO_BUCKET` | `ODF_S3_BUCKET` |
-| `S3_ACCESS_KEY` | `MINIO_ACCESS_KEY` | noobaa-admin secret |
-| `S3_SECRET_KEY` | `MINIO_SECRET_KEY` | noobaa-admin secret |
-| `S3_REGION` | `minio` | `localstorage` |
+| `S3_ENDPOINT` | `MINIO_ENDPOINT` (env.conf) | `ODF_S3_ENDPOINT` (env.conf) |
+| `S3_BUCKET` | `MINIO_BUCKET` (env.conf) | OBC ConfigMap `BUCKET_NAME` |
+| `S3_ACCESS_KEY` | `MINIO_ACCESS_KEY` (env.conf) | OBC Secret `AWS_ACCESS_KEY_ID` |
+| `S3_SECRET_KEY` | `MINIO_SECRET_KEY` (env.conf) | OBC Secret `AWS_SECRET_ACCESS_KEY` |
+| `S3_REGION` | `minio` (고정) | `ODF_S3_REGION` (env.conf, 기본: `localstorage`) |
+
+---
+
+## ObjectBucketClaim (ODF 백엔드 전용)
+
+`12-oadp.sh`가 ODF 백엔드 감지 시 자동으로 OBC를 생성합니다.
+OBC가 Bound 되면 버킷명과 per-bucket 자격증명을 읽어 DPA에 등록합니다.
+
+```bash
+# OBC 상태 확인
+oc get obc obc-backups -n openshift-adp
+
+# OBC ConfigMap 에서 버킷명 확인
+oc get cm obc-backups -n openshift-adp -o jsonpath='{.data.BUCKET_NAME}'
+
+# OBC Secret 에서 자격증명 확인
+oc get secret obc-backups -n openshift-adp -o go-template='{{.data.AWS_ACCESS_KEY_ID | base64decode}}'
+```
+
+수동으로 생성할 경우:
+
+```bash
+# NooBaa StorageClass 확인
+oc get storageclass | grep noobaa
+
+oc apply -f - <<EOF
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: obc-backups
+  namespace: openshift-adp
+spec:
+  generateBucketName: backups
+  storageClassName: openshift-storage.noobaa.io
+EOF
+```
 
 ---
 
@@ -139,7 +177,7 @@ oc get csidrivers
 ## VM 백업
 
 ```bash
-# OADP Operator 네임스페이스의 VM 백업 (백업 대상 네임스페이스는 includedNamespaces 에 지정)
+# 백업 대상 네임스페이스의 VM 백업
 oc apply -f - <<EOF
 apiVersion: velero.io/v1
 kind: Backup
@@ -241,6 +279,10 @@ oc describe backupstoragelocation -n openshift-adp
 
 # DPA 상태 확인
 oc get dpa poc-dpa -n openshift-adp -o yaml
+
+# OBC 상태 확인 (ODF 백엔드)
+oc get obc obc-backups -n openshift-adp
+oc describe obc obc-backups -n openshift-adp
 ```
 
 ---
@@ -256,4 +298,7 @@ oc delete dpa poc-dpa -n openshift-adp
 
 # cloud-credentials Secret 삭제
 oc delete secret cloud-credentials -n openshift-adp
+
+# OBC 삭제 (ODF 백엔드)
+oc delete obc obc-backups -n openshift-adp
 ```
