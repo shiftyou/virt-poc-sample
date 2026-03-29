@@ -25,8 +25,7 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-# OADP Operator 네임스페이스 (setup.sh 자동 감지값, 기본: openshift-adp)
-NS="${OADP_NS:-openshift-adp}"
+NS="openshift-adp"
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
