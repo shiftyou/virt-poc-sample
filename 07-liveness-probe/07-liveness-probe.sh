@@ -111,7 +111,7 @@ step_vm() {
           "spec": {
             "readinessProbe": {
               "httpGet": {
-                "port": 1500
+                "port": 80
               },
               "initialDelaySeconds": 120,
               "periodSeconds": 20,
@@ -121,7 +121,7 @@ step_vm() {
             },
             "livenessProbe": {
               "httpGet": {
-                "port": 1500
+                "port": 80
               },
               "initialDelaySeconds": 120,
               "periodSeconds": 20,
@@ -132,7 +132,7 @@ step_vm() {
         }
       }
     }'
-    print_ok "Liveness/Readiness Probe 설정 완료 (port 1500)"
+    print_ok "Liveness/Readiness Probe 설정 완료 (port 80)"
     print_info "  initialDelaySeconds: 120  (VM 부팅 시간 확보)"
     print_info "  periodSeconds      : 20"
     print_info "  failureThreshold   : 3    (3회 실패 시 VM 재시작)"
@@ -147,19 +147,16 @@ step_vm() {
 step_service() {
     print_step "3/3  VM 내부 httpd 포트 안내"
 
-    print_info "poc 황금 이미지에는 httpd(port 80)가 설치되어 있습니다."
     print_info "KubeVirt Probe는 virt-probe가 VMI 내부 IP로 직접 접속합니다."
     print_info "httpGet.port 는 VM 내부 포트를 지정합니다 (Service 불필요)."
-    print_info ""
-    print_info "port 1500 을 사용하는 이유:"
-    print_info "  KubeVirt liveness probe 는 virt-probe 가 VMI 내부로 직접 연결하며"
-    print_info "  pod network masquerade 환경에서는 port 80 이 제한될 수 있어"
-    print_info "  VM 내부에서 1500 포트로 간이 HTTP 서버를 띄워 probe 를 구성합니다."
     echo ""
-    print_info "VM 접속 후 1500 포트 HTTP 서버 실행:"
+    print_info "VM 내부에서 port 80 HTTP 서버가 실행 중이어야 Probe가 성공합니다."
+    print_info "poc 황금 이미지에 httpd 가 설치되어 있으면 자동으로 통과됩니다."
+    echo ""
+    print_info "httpd 미설치 시 VM 접속 후 간이 서버 실행:"
     echo -e "    ${CYAN}virtctl console $VM_NAME -n $NS${NC}"
     echo -e "    ${CYAN}# VM 내부에서:${NC}"
-    echo -e "    ${CYAN}python3 -m http.server 1500 &${NC}"
+    echo -e "    ${CYAN}python3 -m http.server 80 &${NC}"
 }
 
 # =============================================================================
