@@ -3,7 +3,7 @@
 OADP를 사용하여 VM을 백업하고 복원하는 실습입니다.
 
 ```
-VM (OADP Operator 네임스페이스)
+VM (poc-oadp 네임스페이스)
   │  Backup CR 생성
   ▼
 OADP (Velero)
@@ -20,29 +20,26 @@ OADP (Velero)
 
 ## 사전 조건
 
-- OADP Operator 설치 (`00-operator/oadp-operator.md` 참조)
+- OADP Operator 설치 (`00-operator/oadp-operator.md` 참조) — **`poc-oadp` 네임스페이스에 설치**
 - S3 백엔드: **MinIO Operator** 또는 **ODF Operator** 중 하나 설치
-- `setup.sh` 실행 완료 (OADP 오퍼레이터 네임스페이스 자동 감지 → `OADP_NS` 저장)
+- `setup.sh` 실행 완료 (MinIO/ODF 자동 감지 및 `env.conf` 저장)
 - `12-oadp.sh` 실행 완료
 
 ---
 
 ## 구성 개요
 
-DPA, Secret, Backup, Restore 는 모두 **OADP Operator 가 설치된 네임스페이스**(`OADP_NS`)에 배포됩니다.
-`setup.sh` 가 오퍼레이터 네임스페이스를 자동 감지하여 `env.conf`의 `OADP_NS` 에 저장합니다.
-
 | 항목 | 값 |
 |------|-----|
-| DPA 네임스페이스 | `$OADP_NS` (예: `oadp-user1`, `openshift-adp`) |
-| cloud-credentials Secret | `$OADP_NS` |
-| BackupStorageLocation | `$OADP_NS` |
-| Backup / Restore | `$OADP_NS` |
+| DPA 네임스페이스 | `poc-oadp` |
+| cloud-credentials Secret | `poc-oadp` |
+| BackupStorageLocation | `poc-oadp` |
+| Backup / Restore | `poc-oadp` |
 | S3 백엔드 | MinIO 우선, 없으면 ODF MCG |
 
 ```
-cloud-credentials Secret ($OADP_NS)
-  └─ DataProtectionApplication poc-dpa ($OADP_NS)
+cloud-credentials Secret (poc-oadp)
+  └─ DataProtectionApplication poc-dpa (poc-oadp)
        └─ BackupStorageLocation default
             │
             ├─ Backup CR   → S3 버킷에 저장
@@ -70,16 +67,13 @@ cloud-credentials Secret ($OADP_NS)
 `12-oadp.sh`가 자동으로 생성·적용합니다. 수동 적용 시 아래를 참고하세요.
 
 ```bash
-# OADP_NS: setup.sh 자동 감지값 (예: oadp-user1, openshift-adp)
-OADP_NS=$(oc get csv -A | grep -i oadp-operator | awk '{print $1}' | head -1)
-
-# 1. cloud-credentials Secret 생성
+# 1. cloud-credentials Secret 생성 (poc-oadp)
 oc apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
   name: cloud-credentials
-  namespace: ${OADP_NS}
+  namespace: poc-oadp
 stringData:
   cloud: |
     [default]
@@ -93,7 +87,7 @@ apiVersion: oadp.openshift.io/v1alpha1
 kind: DataProtectionApplication
 metadata:
   name: poc-dpa
-  namespace: ${OADP_NS}
+  namespace: poc-oadp
 spec:
   configuration:
     velero:
@@ -151,7 +145,7 @@ apiVersion: velero.io/v1
 kind: Backup
 metadata:
   name: poc-vm-backup
-  namespace: ${OADP_NS}
+  namespace: poc-oadp
 spec:
   includedNamespaces:
     - <백업할 VM 네임스페이스>
@@ -161,10 +155,10 @@ spec:
 EOF
 
 # 백업 상태 확인
-oc get backup -n ${OADP_NS}
+oc get backup -n poc-oadp
 
 # 백업 상세 확인
-oc describe backup poc-vm-backup -n ${OADP_NS}
+oc describe backup poc-vm-backup -n poc-oadp
 ```
 
 ---
@@ -178,7 +172,7 @@ apiVersion: velero.io/v1
 kind: Restore
 metadata:
   name: poc-vm-restore
-  namespace: ${OADP_NS}
+  namespace: poc-oadp
 spec:
   backupName: poc-vm-backup
   includedNamespaces:
@@ -187,7 +181,7 @@ spec:
 EOF
 
 # 복원 상태 확인
-oc get restore -n ${OADP_NS}
+oc get restore -n poc-oadp
 
 # 복원된 VM 확인 (복원 대상 네임스페이스 지정)
 oc get vm -n <복원할 VM 네임스페이스>
@@ -199,10 +193,10 @@ oc get vm -n <복원할 VM 네임스페이스>
 
 ```bash
 # BackupStorageLocation 상태 (Available 여야 함)
-oc get backupstoragelocation -n ${OADP_NS}
+oc get backupstoragelocation -n poc-oadp
 
 # 상세 확인
-oc describe backupstoragelocation -n ${OADP_NS}
+oc describe backupstoragelocation -n poc-oadp
 ```
 
 ---
@@ -216,7 +210,7 @@ apiVersion: velero.io/v1
 kind: Schedule
 metadata:
   name: poc-daily-backup
-  namespace: ${OADP_NS}
+  namespace: poc-oadp
 spec:
   schedule: "0 2 * * *"
   template:
@@ -228,7 +222,7 @@ spec:
 EOF
 
 # Schedule 확인
-oc get schedule -n ${OADP_NS}
+oc get schedule -n poc-oadp
 ```
 
 ---
@@ -237,16 +231,16 @@ oc get schedule -n ${OADP_NS}
 
 ```bash
 # Velero Pod 로그
-oc logs -n ${OADP_NS} -l app.kubernetes.io/name=velero --tail=50
+oc logs -n poc-oadp -l app.kubernetes.io/name=velero --tail=50
 
 # NodeAgent 로그 (PVC 백업/복원)
-oc logs -n ${OADP_NS} daemonset/node-agent --tail=30
+oc logs -n poc-oadp daemonset/node-agent --tail=30
 
 # BackupStorageLocation 상세
-oc describe backupstoragelocation -n ${OADP_NS}
+oc describe backupstoragelocation -n poc-oadp
 
 # DPA 상태 확인
-oc get dpa poc-dpa -n ${OADP_NS} -o yaml
+oc get dpa poc-dpa -n poc-oadp -o yaml
 ```
 
 ---
@@ -255,11 +249,11 @@ oc get dpa poc-dpa -n ${OADP_NS} -o yaml
 
 ```bash
 # Schedule 삭제
-oc delete schedule poc-daily-backup -n ${OADP_NS}
+oc delete schedule poc-daily-backup -n poc-oadp
 
 # DataProtectionApplication 삭제
-oc delete dpa poc-dpa -n ${OADP_NS}
+oc delete dpa poc-dpa -n poc-oadp
 
 # cloud-credentials Secret 삭제
-oc delete secret cloud-credentials -n ${OADP_NS}
+oc delete secret cloud-credentials -n poc-oadp
 ```

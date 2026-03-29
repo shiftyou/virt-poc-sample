@@ -3,14 +3,14 @@
 # 12-oadp.sh
 #
 # OADP 실습 환경 구성
-#   1. OADP Operator 네임스페이스 확인 (setup.sh 에서 감지한 OADP_NS 사용)
-#   2. cloud-credentials Secret 생성 (OADP_NS)
+#   1. poc-oadp 네임스페이스 생성
+#   2. cloud-credentials Secret 생성 (poc-oadp)
 #   3. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
-#   4. DataProtectionApplication 배포 (OADP_NS)
+#   4. DataProtectionApplication 배포 (poc-oadp)
 #   5. BackupStorageLocation 확인
 #
 # 실행 조건:
-#   - OADP Operator 설치 필수 (setup.sh 에서 OADP_NS 자동 감지)
+#   - OADP Operator 설치 필수 (poc-oadp 네임스페이스에 설치)
 #   - 백엔드: MinIO Operator 설치 + 설정 완료, 또는 ODF Operator 설치
 #
 # 사용법: ./12-oadp.sh
@@ -25,9 +25,7 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-# OADP Operator 네임스페이스 (setup.sh 에서 자동 감지, env.conf 에 저장)
-# DPA/BSL/Secret/Backup/Restore 는 모두 OADP Operator 와 동일 네임스페이스에 배포
-NS="${OADP_NS:-openshift-adp}"
+NS="poc-oadp"
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
@@ -107,21 +105,21 @@ preflight() {
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 확인 (OADP Operator 네임스페이스 = 이미 존재)
+# 1단계: 네임스페이스 생성
 # =============================================================================
 step_namespace() {
-    print_step "1/5  네임스페이스 확인 (${NS})"
+    print_step "1/5  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 확인 완료"
+        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
     else
-        print_error "네임스페이스 $NS 없음 — OADP Operator 가 ${NS} 에 설치되어 있는지 확인하세요."
-        exit 1
+        oc new-project "$NS" > /dev/null
+        print_ok "네임스페이스 $NS 생성 완료"
     fi
 }
 
 # =============================================================================
-# 2단계: cloud-credentials Secret 생성 (OADP Operator 네임스페이스)
+# 2단계: cloud-credentials Secret 생성 (poc-oadp)
 # =============================================================================
 step_credentials() {
     print_step "2/5  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
@@ -178,7 +176,7 @@ EOF
 }
 
 # =============================================================================
-# 4단계: DataProtectionApplication 배포 (OADP Operator 네임스페이스)
+# 4단계: DataProtectionApplication 배포 (poc-oadp)
 # =============================================================================
 step_dpa() {
     print_step "4/5  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
