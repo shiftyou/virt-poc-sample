@@ -135,7 +135,7 @@ fi
 ALL_STEPS=()
 while IFS= read -r dir; do
     ALL_STEPS+=("$(basename "$dir")")
-done < <(find "$SCRIPT_DIR" -maxdepth 1 -type d -name '[0-9][0-9]-*' | sort)
+done < <(find "$SCRIPT_DIR" -maxdepth 1 -type d -name '[0-9][0-9]-*' | grep -v '/00-' | sort)
 
 if [ ${#ALL_STEPS[@]} -eq 0 ]; then
     print_error "실행할 단계가 없습니다. 01-, 02-... 디렉토리 없음"
