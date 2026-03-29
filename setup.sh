@@ -201,6 +201,94 @@ check_operators() {
     echo ""
 }
 
+# MinIO 자동 감지
+auto_detect_minio() {
+    MINIO_ENDPOINT=""
+    MINIO_BUCKET="velero"
+    MINIO_ACCESS_KEY="minio"
+    MINIO_SECRET_KEY="minio123"
+
+    # MinIO Operator가 만드는 Tenant CR에서 네임스페이스 탐색
+    local minio_ns
+    minio_ns=$(oc get tenant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
+    # 없으면 minio 레이블 서비스로 탐색
+    if [ -z "$minio_ns" ]; then
+        minio_ns=$(oc get svc -A -l app=minio -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
+    fi
+
+    if [ -n "$minio_ns" ]; then
+        local minio_svc minio_port
+        minio_svc=$(oc get svc -n "$minio_ns" -l app=minio \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || \
+            oc get svc -n "$minio_ns" \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        minio_port=$(oc get svc -n "$minio_ns" "$minio_svc" \
+            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "9000")
+        MINIO_ENDPOINT="http://${minio_svc}.${minio_ns}.svc.cluster.local:${minio_port}"
+
+        # 자격증명 시크릿 탐색 (rootUser/rootPassword 또는 accesskey/secretkey)
+        local secret_name
+        secret_name=$(oc get secret -n "$minio_ns" \
+            -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+            tr ' ' '\n' | grep -iE "minio|root|console" | head -1 || true)
+        if [ -n "$secret_name" ]; then
+            local ak sk
+            ak=$(oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.rootUser}' 2>/dev/null | base64 -d 2>/dev/null || \
+                oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.accesskey}' 2>/dev/null | base64 -d 2>/dev/null || true)
+            sk=$(oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.rootPassword}' 2>/dev/null | base64 -d 2>/dev/null || \
+                oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.secretkey}' 2>/dev/null | base64 -d 2>/dev/null || true)
+            [ -n "$ak" ] && MINIO_ACCESS_KEY="$ak"
+            [ -n "$sk" ] && MINIO_SECRET_KEY="$sk"
+        fi
+
+        print_info "MinIO endpoint : ${MINIO_ENDPOINT}  (ns: ${minio_ns})"
+        print_info "MinIO bucket   : ${MINIO_BUCKET}"
+        print_info "MinIO accessKey: ${MINIO_ACCESS_KEY}"
+    else
+        MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
+        print_warn "MinIO Tenant/Service 감지 실패 → 기본값 사용: ${MINIO_ENDPOINT}"
+    fi
+}
+
+# ODF (NooBaa MCG) 자동 감지
+auto_detect_odf() {
+    ODF_S3_ENDPOINT=""
+    ODF_S3_BUCKET="velero"
+    ODF_S3_ACCESS_KEY=""
+    ODF_S3_SECRET_KEY=""
+
+    local odf_ns="openshift-storage"
+
+    # NooBaa MCG S3 내부 엔드포인트
+    ODF_S3_ENDPOINT=$(oc get noobaa -n "$odf_ns" \
+        -o jsonpath='{.status.services.serviceS3.internalDNS[0]}' 2>/dev/null || true)
+    if [ -z "$ODF_S3_ENDPOINT" ]; then
+        # s3 서비스에서 직접 구성
+        local s3_port
+        s3_port=$(oc get svc s3 -n "$odf_ns" \
+            -o jsonpath='{.spec.ports[?(@.name=="s3")].port}' 2>/dev/null || echo "80")
+        ODF_S3_ENDPOINT="http://s3.${odf_ns}.svc.cluster.local:${s3_port}"
+    fi
+
+    # noobaa-admin 시크릿에서 자격증명 취득
+    ODF_S3_ACCESS_KEY=$(oc get secret noobaa-admin -n "$odf_ns" \
+        -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null || true)
+    ODF_S3_SECRET_KEY=$(oc get secret noobaa-admin -n "$odf_ns" \
+        -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
+
+    if [ -n "$ODF_S3_ACCESS_KEY" ]; then
+        print_info "ODF MCG S3 endpoint : ${ODF_S3_ENDPOINT}"
+        print_info "ODF MCG bucket      : ${ODF_S3_BUCKET}"
+        print_info "ODF MCG credentials : noobaa-admin secret 에서 취득"
+    else
+        print_warn "ODF MCG 자격증명 감지 실패 (noobaa-admin secret 없음)"
+    fi
+}
+
 # Auto-detect cluster information
 auto_detect_cluster() {
     if check_oc; then
@@ -396,21 +484,28 @@ else
 fi
 
 # =============================================================================
-# 8. MinIO (OADP backend)
+# 8. OADP backend 자동 감지 (MinIO / ODF)
 # =============================================================================
 if [ "${MINIO_INSTALLED:-false}" = "true" ]; then
-    print_header "8. MinIO (OADP backend)"
-
-    ask "MinIO endpoint URL" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
-    ask "MinIO bucket name" "velero" MINIO_BUCKET
-    ask "MinIO access key" "minio" MINIO_ACCESS_KEY
-    ask "MinIO secret key" "minio123" MINIO_SECRET_KEY "true"
+    print_header "8. MinIO 자동 감지 (OADP backend)"
+    auto_detect_minio
 else
-    print_info "8. MinIO — MinIO Operator not installed, skipping."
+    print_info "8. MinIO — MinIO Operator 미설치, 기본값 설정."
     MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
     MINIO_BUCKET="velero"
     MINIO_ACCESS_KEY="minio"
     MINIO_SECRET_KEY="minio123"
+fi
+
+if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+    print_header "8-1. ODF 자동 감지 (OADP backend)"
+    auto_detect_odf
+else
+    print_info "8-1. ODF — ODF Operator 미설치, 기본값 설정."
+    ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
+    ODF_S3_BUCKET="velero"
+    ODF_S3_ACCESS_KEY=""
+    ODF_S3_SECRET_KEY=""
 fi
 
 # =============================================================================
@@ -461,6 +556,12 @@ MINIO_ENDPOINT=${MINIO_ENDPOINT}
 MINIO_BUCKET=${MINIO_BUCKET}
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+
+# ODF MCG (OADP backend)
+ODF_S3_ENDPOINT=${ODF_S3_ENDPOINT}
+ODF_S3_BUCKET=${ODF_S3_BUCKET}
+ODF_S3_ACCESS_KEY=${ODF_S3_ACCESS_KEY}
+ODF_S3_SECRET_KEY=${ODF_S3_SECRET_KEY}
 
 # Operator installation status (auto-detected by setup.sh)
 VIRT_INSTALLED=${VIRT_INSTALLED:-false}

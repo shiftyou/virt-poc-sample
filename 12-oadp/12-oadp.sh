@@ -4,11 +4,15 @@
 #
 # OADP 실습 환경 구성
 #   1. poc-oadp 네임스페이스 생성
-#   2. MinIO 자격증명 Secret 생성
+#   2. S3 자격증명 Secret 생성 (MinIO 또는 ODF MCG)
 #   3. DataProtectionApplication 배포
 #   4. BackupStorageLocation 확인
 #
-# 사용법: ./11-oadp.sh
+# 실행 조건:
+#   - OADP Operator 설치 필수
+#   - 백엔드: MinIO Operator 설치 + 설정 완료, 또는 ODF Operator 설치
+#
+# 사용법: ./12-oadp.sh
 # =============================================================================
 
 set -euo pipefail
@@ -22,6 +26,9 @@ fi
 
 NS="poc-oadp"
 OADP_NS="openshift-adp"
+
+# 사용할 백엔드: minio | odf (preflight 에서 결정)
+BACKEND=""
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -45,32 +52,39 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
-    local oadp_ok=false
+    # OADP Operator 필수
+    if [ "${OADP_INSTALLED:-false}" != "true" ]; then
+        print_warn "OADP Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/oadp-operator.md"
+        exit 77
+    fi
+    print_ok "OADP Operator 확인"
+
+    # 백엔드 결정: MinIO 우선, 없으면 ODF
     local minio_ok=false
+    local odf_ok=false
 
-    [ "${OADP_INSTALLED:-false}" = "true" ] && oadp_ok=true
     [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ] && minio_ok=true
+    [ "${ODF_INSTALLED:-false}"   = "true" ] && odf_ok=true
 
-    if [ "$oadp_ok" = "false" ] && [ "$minio_ok" = "false" ]; then
-        print_warn "OADP Operator 미설치이고 MinIO 설정도 없습니다 → 건너뜁니다."
-        print_warn "  OADP 설치 가이드: 00-operator/oadp-operator.md"
-        print_warn "  MinIO 설치 후 setup.sh 를 다시 실행하여 MinIO 설정을 입력하세요."
+    if [ "$minio_ok" = "false" ] && [ "$odf_ok" = "false" ]; then
+        print_warn "MinIO 설정도 없고 ODF Operator 도 미설치 → 건너뜁니다."
+        print_warn "  MinIO : MinIO Operator 설치 후 setup.sh 재실행"
+        print_warn "  ODF   : ODF Operator 설치 후 setup.sh 재실행"
         exit 77
     fi
 
-    if [ "$oadp_ok" = "true" ]; then
-        print_ok "OADP Operator 확인"
-    else
-        print_warn "OADP Operator 미설치 — MinIO 설정으로 진행합니다."
-    fi
-
     if [ "$minio_ok" = "true" ]; then
-        print_ok "MinIO 설정 확인"
-        print_info "  MinIO Endpoint: ${MINIO_ENDPOINT}"
-        print_info "  MinIO Bucket  : ${MINIO_BUCKET:-velero}"
+        BACKEND="minio"
+        print_ok "백엔드: MinIO"
+        print_info "  Endpoint : ${MINIO_ENDPOINT}"
+        print_info "  Bucket   : ${MINIO_BUCKET:-velero}"
+        print_info "  AccessKey: ${MINIO_ACCESS_KEY:-minio}"
     else
-        print_warn "MinIO 미설정 — OADP Operator 만으로 진행합니다."
-        print_warn "  MinIO backend 없이는 BackupStorageLocation 이 Available 되지 않을 수 있습니다."
+        BACKEND="odf"
+        print_ok "백엔드: ODF (NooBaa MCG)"
+        print_info "  Endpoint : ${ODF_S3_ENDPOINT}"
+        print_info "  Bucket   : ${ODF_S3_BUCKET:-velero}"
     fi
 }
 
@@ -86,12 +100,20 @@ step_namespace() {
 }
 
 step_credentials() {
-    print_step "2/4  MinIO 자격증명 Secret 생성"
+    print_step "2/4  S3 자격증명 Secret 생성 (백엔드: ${BACKEND})"
+
+    if [ "$BACKEND" = "minio" ]; then
+        local ak="${MINIO_ACCESS_KEY:-minio}"
+        local sk="${MINIO_SECRET_KEY:-minio123}"
+    else
+        local ak="${ODF_S3_ACCESS_KEY:-}"
+        local sk="${ODF_S3_SECRET_KEY:-}"
+    fi
 
     cat > cloud-credentials.txt <<EOF
 [default]
-aws_access_key_id=${MINIO_ACCESS_KEY:-minio}
-aws_secret_access_key=${MINIO_SECRET_KEY:-minio123}
+aws_access_key_id=${ak}
+aws_secret_access_key=${sk}
 EOF
 
     oc create secret generic cloud-credentials \
@@ -103,11 +125,21 @@ EOF
 }
 
 step_dpa() {
-    print_step "3/4  DataProtectionApplication 배포"
+    print_step "3/4  DataProtectionApplication 배포 (백엔드: ${BACKEND})"
 
     if oc get dpa poc-dpa -n "$OADP_NS" &>/dev/null; then
         print_ok "DataProtectionApplication poc-dpa 이미 존재 — 스킵"
         return
+    fi
+
+    if [ "$BACKEND" = "minio" ]; then
+        local s3_url="${MINIO_ENDPOINT:-http://minio.poc-minio.svc.cluster.local:9000}"
+        local bucket="${MINIO_BUCKET:-velero}"
+        local region="minio"
+    else
+        local s3_url="${ODF_S3_ENDPOINT:-http://s3.openshift-storage.svc.cluster.local}"
+        local bucket="${ODF_S3_BUCKET:-velero}"
+        local region="noobaa"
     fi
 
     cat > poc-dpa.yaml <<EOF
@@ -133,12 +165,12 @@ spec:
         provider: aws
         default: true
         objectStorage:
-          bucket: ${MINIO_BUCKET:-velero}
+          bucket: ${bucket}
           prefix: velero
         config:
-          region: minio
+          region: ${region}
           s3ForcePathStyle: "true"
-          s3Url: ${MINIO_ENDPOINT:-http://minio.poc-minio.svc.cluster.local:9000}
+          s3Url: ${s3_url}
           insecureSkipTLSVerify: "true"
         credential:
           key: cloud
@@ -148,8 +180,9 @@ spec:
       velero:
         provider: aws
         config:
-          region: minio
+          region: ${region}
 EOF
+    echo "생성된 파일: poc-dpa.yaml"
     oc apply -f poc-dpa.yaml
     print_ok "DataProtectionApplication poc-dpa 배포 완료"
 }
@@ -176,8 +209,7 @@ step_verify() {
     echo ""
 
     if [ $i -eq $retries ]; then
-        print_warn "BackupStorageLocation 준비 시간 초과. MinIO 연결을 확인하세요."
-        print_info "  MinIO Endpoint: ${MINIO_ENDPOINT:-미설정}"
+        print_warn "BackupStorageLocation 준비 시간 초과. 백엔드 연결을 확인하세요."
         print_info "  oc describe backupstoragelocation default -n ${OADP_NS}"
     fi
 }
@@ -187,6 +219,8 @@ print_summary() {
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}  완료! OADP 실습 환경이 준비되었습니다.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  백엔드 : ${BACKEND}"
     echo ""
     echo -e "  BackupStorageLocation 확인:"
     echo -e "    ${CYAN}oc get backupstoragelocation -n ${OADP_NS}${NC}"
@@ -204,7 +238,7 @@ print_summary() {
     echo -e "    ${CYAN}  snapshotMoveData: true${NC}"
     echo -e "    ${CYAN}EOF${NC}"
     echo ""
-    echo -e "  자세한 내용: 14-oadp.md 참조"
+    echo -e "  자세한 내용: 12-oadp.md 참조"
     echo ""
 }
 
