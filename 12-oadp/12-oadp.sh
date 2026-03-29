@@ -45,15 +45,33 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
-    if [ "${OADP_INSTALLED:-false}" != "true" ]; then
-        print_warn "OADP Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/oadp-operator.md"
+    local oadp_ok=false
+    local minio_ok=false
+
+    [ "${OADP_INSTALLED:-false}" = "true" ] && oadp_ok=true
+    [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ] && minio_ok=true
+
+    if [ "$oadp_ok" = "false" ] && [ "$minio_ok" = "false" ]; then
+        print_warn "OADP Operator 미설치이고 MinIO 설정도 없습니다 → 건너뜁니다."
+        print_warn "  OADP 설치 가이드: 00-operator/oadp-operator.md"
+        print_warn "  MinIO 설치 후 setup.sh 를 다시 실행하여 MinIO 설정을 입력하세요."
         exit 77
     fi
-    print_ok "OADP Operator 확인"
 
-    print_info "  MinIO Endpoint: ${MINIO_ENDPOINT:-미설정}"
-    print_info "  MinIO Bucket  : ${MINIO_BUCKET:-미설정}"
+    if [ "$oadp_ok" = "true" ]; then
+        print_ok "OADP Operator 확인"
+    else
+        print_warn "OADP Operator 미설치 — MinIO 설정으로 진행합니다."
+    fi
+
+    if [ "$minio_ok" = "true" ]; then
+        print_ok "MinIO 설정 확인"
+        print_info "  MinIO Endpoint: ${MINIO_ENDPOINT}"
+        print_info "  MinIO Bucket  : ${MINIO_BUCKET:-velero}"
+    else
+        print_warn "MinIO 미설정 — OADP Operator 만으로 진행합니다."
+        print_warn "  MinIO backend 없이는 BackupStorageLocation 이 Available 되지 않을 수 있습니다."
+    fi
 }
 
 step_namespace() {

@@ -97,6 +97,8 @@ check_operators() {
     NMSTATE_INSTALLED=false
     OADP_INSTALLED=false
     GRAFANA_INSTALLED=false
+    ODF_INSTALLED=false
+    MINIO_INSTALLED=false
 
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
@@ -111,6 +113,8 @@ check_operators() {
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
         grep -qi "oadp-operator"             /tmp/_poc_csv.txt 2>/dev/null && OADP_INSTALLED=true
         grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
+        grep -qi "odf-operator\|ocs-operator" /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
+        grep -qi "minio-operator\|operator\.min\.io" /tmp/_poc_csv.txt 2>/dev/null && MINIO_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
         # Check NMState CR instance separately
         NMSTATE_CR_EXISTS=false
@@ -152,6 +156,16 @@ check_operators() {
         echo -e "  $ok Kube Descheduler Operator          → Descheduler ready"
     else
         echo -e "  $ng Kube Descheduler Operator          → Skipped  (00-operator/descheduler-operator.md)"
+    fi
+    if [ "$ODF_INSTALLED" = "true" ]; then
+        echo -e "  $ok ODF Operator                       → OpenShift Data Foundation ready"
+    else
+        echo -e "  $ng ODF Operator                       → Not installed"
+    fi
+    if [ "$MINIO_INSTALLED" = "true" ]; then
+        echo -e "  $ok MinIO Operator                     → MinIO ready (OADP backend 사용 가능)"
+    else
+        echo -e "  $ng MinIO Operator                     → Not installed"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
         echo -e "  $ok OADP Operator                      → Backup/Restore ready"
@@ -382,6 +396,24 @@ else
 fi
 
 # =============================================================================
+# 8. MinIO (OADP backend)
+# =============================================================================
+if [ "${MINIO_INSTALLED:-false}" = "true" ]; then
+    print_header "8. MinIO (OADP backend)"
+
+    ask "MinIO endpoint URL" "http://minio.poc-minio.svc.cluster.local:9000" MINIO_ENDPOINT
+    ask "MinIO bucket name" "velero" MINIO_BUCKET
+    ask "MinIO access key" "minio" MINIO_ACCESS_KEY
+    ask "MinIO secret key" "minio123" MINIO_SECRET_KEY "true"
+else
+    print_info "8. MinIO — MinIO Operator not installed, skipping."
+    MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
+    MINIO_BUCKET="velero"
+    MINIO_ACCESS_KEY="minio"
+    MINIO_SECRET_KEY="minio123"
+fi
+
+# =============================================================================
 # Save env.conf
 # =============================================================================
 print_header "Saving env.conf..."
@@ -424,6 +456,12 @@ TEST_NODE=${TEST_NODE}
 # Grafana
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
+# MinIO (OADP backend)
+MINIO_ENDPOINT=${MINIO_ENDPOINT}
+MINIO_BUCKET=${MINIO_BUCKET}
+MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+
 # Operator installation status (auto-detected by setup.sh)
 VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
@@ -435,6 +473,8 @@ FAR_INSTALLED=${FAR_INSTALLED:-false}
 NMO_INSTALLED=${NMO_INSTALLED:-false}
 NHC_INSTALLED=${NHC_INSTALLED:-false}
 SNR_INSTALLED=${SNR_INSTALLED:-false}
+ODF_INSTALLED=${ODF_INSTALLED:-false}
+MINIO_INSTALLED=${MINIO_INSTALLED:-false}
 EOF
 
 print_ok "env.conf created: $ENV_FILE"
