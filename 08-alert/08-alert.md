@@ -76,6 +76,7 @@ metadata:
   namespace: poc-alert
   labels:
     role: alert-rules
+    openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus
 spec:
   groups:
     - name: poc-vm-availability
@@ -364,8 +365,28 @@ oc get prometheus -n openshift-user-workload-monitoring user-workload \
 - 출력이 `{}` 또는 비어 있으면 → **모든 PrometheusRule 자동 감지** (라벨 불필요)
 - `matchLabels`가 있으면 → PrometheusRule에 해당 라벨을 추가해야 함
 
-예시: `ruleSelector: {matchLabels: {role: alert-rules}}` 인 경우
-→ PrometheusRule에 `labels: {role: alert-rules}` 가 있어야 함 (현재 스크립트에 이미 포함됨)
+예시 출력:
+```json
+{"matchExpressions":[
+  {"key":"openshift.io/user-monitoring","operator":"NotIn","values":["false"]},
+  {"key":"openshift.io/prometheus-rule-evaluation-scope","operator":"In","values":["leaf-prometheus"]}
+]}
+```
+→ PrometheusRule에 `openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus` 라벨이 **반드시** 있어야 합니다.
+→ `openshift.io/user-monitoring` 라벨은 없으면 조건 통과 (NotIn 조건)
+
+**이미 배포된 PrometheusRule에 라벨 추가 (즉시 적용):**
+
+```bash
+oc label prometheusrule poc-vm-alerts -n poc-alert \
+  openshift.io/prometheus-rule-evaluation-scope=leaf-prometheus
+
+# 30초~1분 후 로드 확인
+oc exec -n openshift-user-workload-monitoring \
+  prometheus-user-workload-0 -- \
+  curl -s http://localhost:9090/api/v1/rules \
+  | python3 -m json.tool | grep '"name"'
+```
 
 ---
 

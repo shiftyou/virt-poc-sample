@@ -122,6 +122,7 @@ metadata:
   namespace: ${NS}
   labels:
     role: alert-rules
+    openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus
 spec:
   groups:
     - name: poc-vm-availability
