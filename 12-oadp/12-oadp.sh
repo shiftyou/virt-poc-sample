@@ -25,7 +25,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 NS="poc-oadp"
-OADP_NS="poc-oadp"
+OADP_NS="openshift-adp"
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
@@ -147,7 +147,7 @@ apiVersion: oadp.openshift.io/v1alpha1
 kind: DataProtectionApplication
 metadata:
   name: poc-dpa
-  namespace: ${OADP_NS}
+  namespace: ${NS}
 spec:
   configuration:
     velero:
@@ -183,8 +183,8 @@ spec:
           region: ${region}
 EOF
     echo "생성된 파일: poc-dpa.yaml"
-    oc apply -f poc-dpa.yaml
-    print_ok "DataProtectionApplication poc-dpa 배포 완료"
+    oc apply -n "$NS" -f poc-dpa.yaml
+    print_ok "DataProtectionApplication poc-dpa 배포 완료 (ns: ${NS})"
 }
 
 step_verify() {
@@ -196,7 +196,7 @@ step_verify() {
     while [ $i -lt $retries ]; do
         local phase
         phase=$(oc get backupstoragelocation default \
-            -n "$OADP_NS" \
+            -n "$NS" \
             -o jsonpath='{.status.phase}' 2>/dev/null || true)
         if [ "$phase" = "Available" ]; then
             print_ok "BackupStorageLocation 상태: Available"
@@ -223,7 +223,7 @@ print_summary() {
     echo -e "  백엔드 : ${BACKEND}"
     echo ""
     echo -e "  BackupStorageLocation 확인:"
-    echo -e "    ${CYAN}oc get backupstoragelocation -n ${OADP_NS}${NC}"
+    echo -e "    ${CYAN}oc get backupstoragelocation -n ${NS}${NC}"
     echo ""
     echo -e "  VM 백업 실행:"
     echo -e "    ${CYAN}oc create -f - <<EOF${NC}"
