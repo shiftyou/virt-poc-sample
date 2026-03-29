@@ -188,22 +188,9 @@ EOF
         exit 1
     fi
 
-    # ConfigMap 에서 버킷명·엔드포인트 취득
+    # ConfigMap 에서 버킷명 취득 (S3_ENDPOINT 는 preflight 의 ODF_S3_ENDPOINT 유지)
     S3_BUCKET=$(oc get cm obc-backups -n "$NS" \
         -o jsonpath='{.data.BUCKET_NAME}' 2>/dev/null || true)
-    local bucket_host bucket_port
-    bucket_host=$(oc get cm obc-backups -n "$NS" \
-        -o jsonpath='{.data.BUCKET_HOST}' 2>/dev/null || true)
-    bucket_port=$(oc get cm obc-backups -n "$NS" \
-        -o jsonpath='{.data.BUCKET_PORT}' 2>/dev/null || echo "80")
-
-    if [ -n "$bucket_host" ]; then
-        if [ "$bucket_port" = "80" ] || [ -z "$bucket_port" ]; then
-            S3_ENDPOINT="http://${bucket_host}"
-        else
-            S3_ENDPOINT="http://${bucket_host}:${bucket_port}"
-        fi
-    fi
 
     # Secret 에서 자격증명 취득
     S3_ACCESS_KEY=$(oc get secret obc-backups -n "$NS" \
