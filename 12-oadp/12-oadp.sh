@@ -3,14 +3,14 @@
 # 12-oadp.sh
 #
 # OADP 실습 환경 구성
-#   1. poc-oadp 네임스페이스 생성
-#   2. cloud-credentials Secret 생성 (DPA 네임스페이스 = poc-oadp)
+#   1. OADP Operator 네임스페이스 확인 (setup.sh 에서 감지한 OADP_NS 사용)
+#   2. cloud-credentials Secret 생성 (OADP_NS)
 #   3. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
-#   4. DataProtectionApplication 배포 (poc-oadp)
+#   4. DataProtectionApplication 배포 (OADP_NS)
 #   5. BackupStorageLocation 확인
 #
 # 실행 조건:
-#   - OADP Operator 설치 필수
+#   - OADP Operator 설치 필수 (setup.sh 에서 OADP_NS 자동 감지)
 #   - 백엔드: MinIO Operator 설치 + 설정 완료, 또는 ODF Operator 설치
 #
 # 사용법: ./12-oadp.sh
@@ -25,8 +25,9 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-NS="poc-oadp"
-OADP_NS="openshift-adp"
+# OADP Operator 네임스페이스 (setup.sh 에서 자동 감지, env.conf 에 저장)
+# DPA/BSL/Secret/Backup/Restore 는 모두 OADP Operator 와 동일 네임스페이스에 배포
+NS="${OADP_NS:-openshift-adp}"
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
@@ -66,7 +67,7 @@ preflight() {
         print_warn "  설치 가이드: 00-operator/oadp-operator.md"
         exit 77
     fi
-    print_ok "OADP Operator 확인 (ns: ${OADP_NS})"
+    print_ok "OADP Operator 확인 (ns: ${NS})"
 
     # 백엔드 결정: MinIO 우선, 없으면 ODF
     local minio_ok=false
@@ -106,21 +107,21 @@ preflight() {
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# 1단계: 네임스페이스 확인 (OADP Operator 네임스페이스 = 이미 존재)
 # =============================================================================
 step_namespace() {
-    print_step "1/5  네임스페이스 생성 (${NS})"
+    print_step "1/5  네임스페이스 확인 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "네임스페이스 $NS 확인 완료"
     else
-        oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_error "네임스페이스 $NS 없음 — OADP Operator 가 ${NS} 에 설치되어 있는지 확인하세요."
+        exit 1
     fi
 }
 
 # =============================================================================
-# 2단계: cloud-credentials Secret 생성 (DPA 와 동일 네임스페이스: poc-oadp)
+# 2단계: cloud-credentials Secret 생성 (OADP Operator 네임스페이스)
 # =============================================================================
 step_credentials() {
     print_step "2/5  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
@@ -177,7 +178,7 @@ EOF
 }
 
 # =============================================================================
-# 4단계: DataProtectionApplication 배포 (poc-oadp)
+# 4단계: DataProtectionApplication 배포 (OADP Operator 네임스페이스)
 # =============================================================================
 step_dpa() {
     print_step "4/5  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"

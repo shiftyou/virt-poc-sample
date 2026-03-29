@@ -96,6 +96,7 @@ check_operators() {
     SNR_INSTALLED=false
     NMSTATE_INSTALLED=false
     OADP_INSTALLED=false
+    OADP_NS="openshift-adp"
     GRAFANA_INSTALLED=false
     ODF_INSTALLED=false
     MINIO_INSTALLED=false
@@ -111,7 +112,10 @@ check_operators() {
         grep -qi "node-healthcheck"          /tmp/_poc_csv.txt 2>/dev/null && NHC_INSTALLED=true
         grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
-        grep -qi "oadp-operator"             /tmp/_poc_csv.txt 2>/dev/null && OADP_INSTALLED=true
+        if grep -qi "oadp-operator" /tmp/_poc_csv.txt 2>/dev/null; then
+            OADP_INSTALLED=true
+            OADP_NS=$(oc get csv -A 2>/dev/null | grep -i "oadp-operator" | awk '{print $1}' | head -1 || echo "openshift-adp")
+        fi
         grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         grep -qi "odf-operator\|ocs-operator" /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
         grep -qi "minio-operator\|operator\.min\.io" /tmp/_poc_csv.txt 2>/dev/null && MINIO_INSTALLED=true
@@ -168,7 +172,7 @@ check_operators() {
         echo -e "  $ng MinIO Operator                     → Not installed"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
-        echo -e "  $ok OADP Operator                      → Backup/Restore ready"
+        echo -e "  $ok OADP Operator                      → Backup/Restore ready  (ns: ${OADP_NS})"
     else
         echo -e "  $ng OADP Operator                      → Skipped  (00-operator/oadp-operator.md)"
     fi
@@ -568,6 +572,7 @@ VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 OADP_INSTALLED=${OADP_INSTALLED:-false}
+OADP_NS=${OADP_NS:-openshift-adp}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
 FAR_INSTALLED=${FAR_INSTALLED:-false}
