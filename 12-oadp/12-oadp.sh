@@ -25,7 +25,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 NS="poc-oadp"
-OADP_NS="openshift-adp"
+OADP_NS="poc-oadp"
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
