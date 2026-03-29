@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 12-node-exporter.sh
+# 09-node-exporter.sh
 #
 # OpenShift에 node-exporter Service 등록
 #   1. poc 템플릿으로 VM 생성 (monitor=metrics 레이블 포함)
@@ -8,7 +8,7 @@
 #   3. ServiceMonitor 등록 (Prometheus scrape 설정)
 #   4. Endpoints 확인 안내
 #
-# 사용법: ./12-node-exporter.sh
+# 사용법: ./09-node-exporter.sh
 # =============================================================================
 
 set -euo pipefail

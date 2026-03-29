@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# 09-far.sh
+# 16-far.sh
 #
 # Fence Agents Remediation (FAR) 실습 환경 구성
 #   1. poc-far 네임스페이스 생성
 #   2. FenceAgentsRemediationTemplate 생성 (IPMI 설정)
 #   3. NodeHealthCheck CR 생성 (FAR 연동)
 #
-# 사용법: ./09-far.sh
+# 사용법: ./16-far.sh
 # =============================================================================
 
 set -euo pipefail

@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# 10-liveness-probe.sh
+# 07-liveness-probe.sh
 #
 # VM Liveness Probe 실습 환경 구성
 #   1. poc-liveness-probe 네임스페이스 생성
 #   2. poc 템플릿으로 VM 생성
 #   3. VM에 HTTP Liveness Probe (port 80) 설정
 #
-# 사용법: ./10-liveness-probe.sh
+# 사용법: ./07-liveness-probe.sh
 # =============================================================================
 
 set -euo pipefail

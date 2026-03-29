@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# 07-node-maintenance.sh
+# 14-node-maintenance.sh
 #
 # Node Maintenance 실습 환경 구성
 #   1. poc-maintenance 네임스페이스 생성
 #   2. poc 템플릿으로 VM 2개 배포 → TEST_NODE에 Live Migration으로 집중
 #   3. NodeMaintenance 생성 → cordon + drain → VM 자동 Migration 확인
 #
-# 사용법: ./07-node-maintenance.sh
+# 사용법: ./14-node-maintenance.sh
 # =============================================================================
 
 set -euo pipefail

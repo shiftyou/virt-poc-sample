@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# 13-monitoring.sh
+# 10-monitoring.sh
 #
 # 모니터링 실습 환경 구성 (Grafana + 스토리지 모니터링)
 #   1. poc-monitoring 네임스페이스 생성
 #   2. Grafana 인스턴스 배포 (Grafana Operator 필요)
 #   3. Prometheus DataSource 연동
 #
-# 사용법: ./13-monitoring.sh
+# 사용법: ./10-monitoring.sh
 # =============================================================================
 
 set -euo pipefail

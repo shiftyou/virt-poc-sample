@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# 11-alert.sh
+# 08-alert.sh
 #
 # VM Alert 실습 환경 구성
 #   1. poc-alert 네임스페이스 생성
 #   2. User-defined project monitoring 활성화
 #   3. PrometheusRule (VM 알림 규칙) 배포
 #
-# 사용법: ./11-alert.sh
+# 사용법: ./08-alert.sh
 # =============================================================================
 
 set -euo pipefail
