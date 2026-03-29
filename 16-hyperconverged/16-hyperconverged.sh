@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 12-hyperconverged.sh
+# 16-hyperconverged.sh
 #
 # HyperConverged 설정 실습
 #   1. 현재 HyperConverged 설정 출력

@@ -182,11 +182,11 @@ step_desc() {
         09-node-exporter)   echo "Node Exporter — 커스텀 메트릭 수집" ;;
         10-monitoring)      echo "Grafana 모니터링 (Operator 필요)" ;;
         11-mtv)             echo "MTV — VMware → OpenShift 마이그레이션 (Operator 필요)" ;;
-        12-hyperconverged)  echo "HyperConverged — CPU Overcommit 설정" ;;
-        13-oadp)            echo "OADP — VM 백업/복원 (Operator 필요)" ;;
-        14-node-maintenance) echo "Node Maintenance — 노드 유지보수 VM Migration (Operator 필요)" ;;
-        15-snr)             echo "SNR — 노드 자가 재시작 복구 (Operator 필요)" ;;
-        16-far)             echo "FAR — IPMI/BMC 전원 재시작 복구 (Operator 필요)" ;;
+        12-oadp)            echo "OADP — VM 백업/복원 (Operator 필요)" ;;
+        13-node-maintenance) echo "Node Maintenance — 노드 유지보수 VM Migration (Operator 필요)" ;;
+        14-snr)             echo "SNR — 노드 자가 재시작 복구 (Operator 필요)" ;;
+        15-far)             echo "FAR — IPMI/BMC 전원 재시작 복구 (Operator 필요)" ;;
+        16-hyperconverged)  echo "HyperConverged — CPU Overcommit 설정" ;;
         *)                  echo "$1" ;;
     esac
 }
@@ -313,10 +313,10 @@ ns_desc() {
         poc-node-exporter)  echo "09 Node Exporter 실습 — 커스텀 메트릭 수집" ;;
         poc-monitoring)     echo "10 모니터링 실습 — Grafana·Dell·Hitachi 스토리지" ;;
         poc-mtv)            echo "11 MTV 실습 — VMware → OpenShift 마이그레이션" ;;
-        poc-oadp)           echo "13 OADP 실습 — VM 백업/복원" ;;
-        poc-maintenance)    echo "14 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
-        poc-snr)            echo "15 SNR 실습 — NHC 감지 → 노드 자가 재시작 복구" ;;
-        poc-far)            echo "16 FAR 실습 — NHC 감지 → IPMI/BMC 전원 재시작 복구" ;;
+        poc-oadp)           echo "12 OADP 실습 — VM 백업/복원" ;;
+        poc-maintenance)    echo "13 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
+        poc-snr)            echo "14 SNR 실습 — NHC 감지 → 노드 자가 재시작 복구" ;;
+        poc-far)            echo "15 FAR 실습 — NHC 감지 → IPMI/BMC 전원 재시작 복구" ;;
         *)                  echo "" ;;
     esac
 }

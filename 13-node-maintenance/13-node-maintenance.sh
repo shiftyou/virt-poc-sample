@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 14-node-maintenance.sh
+# 13-node-maintenance.sh
 #
 # Node Maintenance 실습 환경 구성
 #   1. poc-maintenance 네임스페이스 생성
