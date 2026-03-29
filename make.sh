@@ -160,6 +160,21 @@ if [ ${#STEPS[@]} -eq 0 ]; then
     exit 1
 fi
 
+# poc-setup 디렉토리 정리
+if [ "$MODE" = "all" ]; then
+    if [ -d "$POC_SETUP_DIR" ]; then
+        print_info "poc-setup 전체 삭제 후 시작..."
+        rm -rf "$POC_SETUP_DIR"
+    fi
+elif [ "$MODE" = "only" ]; then
+    for dir in "${STEPS[@]}"; do
+        if [ -d "${POC_SETUP_DIR}/${dir}" ]; then
+            print_info "poc-setup/${dir} 삭제 후 시작..."
+            rm -rf "${POC_SETUP_DIR:?}/${dir}"
+        fi
+    done
+fi
+
 TOTAL=${#STEPS[@]}
 
 # 각 스텝 상태 배열 (인덱스 대응): pending / ok / skip / fail
