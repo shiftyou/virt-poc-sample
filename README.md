@@ -54,7 +54,7 @@ cd virt-poc-sample
 ## 환경 구성 단계
 
 | 순서 | 디렉토리 | 설명 |
-|-------|----------------------|------|
+|---------|---------------------------|------|
 | 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
 | 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 + poc 템플릿으로 NAD 보조 네트워크 VM 생성 |
 | 03 | [03-vm-management](03-vm-management/03-vm-management.md) | 네임스페이스 + NAD 준비, VM 생성·스토리지·네트워크·Static IP·Live Migration |
