@@ -262,6 +262,7 @@ auto_detect_minio() {
 auto_detect_odf() {
     ODF_S3_ENDPOINT=""
     ODF_S3_BUCKET="velero"
+    ODF_S3_REGION="localstorage"
     ODF_S3_ACCESS_KEY=""
     ODF_S3_SECRET_KEY=""
 
@@ -286,6 +287,7 @@ auto_detect_odf() {
 
     if [ -n "$ODF_S3_ACCESS_KEY" ]; then
         print_info "ODF MCG S3 endpoint : ${ODF_S3_ENDPOINT}"
+        print_info "ODF MCG region      : ${ODF_S3_REGION}"
         print_info "ODF MCG bucket      : ${ODF_S3_BUCKET}"
         print_info "ODF MCG credentials : noobaa-admin secret 에서 취득"
     else
@@ -508,6 +510,7 @@ else
     print_info "8-1. ODF — ODF Operator 미설치, 기본값 설정."
     ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
     ODF_S3_BUCKET="velero"
+    ODF_S3_REGION="localstorage"
     ODF_S3_ACCESS_KEY=""
     ODF_S3_SECRET_KEY=""
 fi
@@ -564,6 +567,7 @@ MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
 # ODF MCG (OADP backend)
 ODF_S3_ENDPOINT=${ODF_S3_ENDPOINT}
 ODF_S3_BUCKET=${ODF_S3_BUCKET}
+ODF_S3_REGION=${ODF_S3_REGION}
 ODF_S3_ACCESS_KEY=${ODF_S3_ACCESS_KEY}
 ODF_S3_SECRET_KEY=${ODF_S3_SECRET_KEY}
 

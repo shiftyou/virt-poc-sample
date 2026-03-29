@@ -100,7 +100,7 @@ preflight() {
         S3_BUCKET="${ODF_S3_BUCKET:-velero}"
         S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
         S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
-        S3_REGION="localstorage"
+        S3_REGION="${ODF_S3_REGION:-localstorage}"
     fi
 
     print_ok "백엔드: ${BACKEND}"
