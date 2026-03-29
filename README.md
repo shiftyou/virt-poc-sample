@@ -65,9 +65,9 @@ cd virt-poc-sample
 | 08 | [08-alert](08-alert/08-alert.md) | VM Alert 실습 — PrometheusRule로 VM 상태 알림 (VMNotRunning·VMStuckPending·VMLowMemory) |
 | 09 | [09-node-exporter](09-node-exporter/09-node-exporter.md) | Node Exporter 실습 — 내장 node-exporter 설명 + 커스텀 DaemonSet 추가 |
 | 10 | [10-monitoring](10-monitoring/10-monitoring.md) | 모니터링 실습 — Grafana 배포·Prometheus 연동·Dell/Hitachi 스토리지 모니터링 |
-| 11 | [11-oadp](11-oadp/11-oadp.md) | OADP 실습 — VM 백업/복원 (MinIO S3 backend·DataProtectionApplication·Schedule) |
+| 11 | [11-mtv](11-mtv/11-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
 | 12 | [12-hyperconverged](12-hyperconverged/12-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
-| 13 | [13-mtv](13-mtv/13-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
+| 13 | [13-oadp](13-oadp/13-oadp.md) | OADP 실습 — VM 백업/복원 (MinIO S3 backend·DataProtectionApplication·Schedule) |
 | 14 | [14-node-maintenance](14-node-maintenance/14-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
 | 15 | [15-snr](15-snr/15-snr.md) | SNR 실습 — NHC가 비정상 노드 감지 → SelfNodeRemediation으로 노드 자가 재시작 (IPMI 불필요) |
 | 16 | [16-far](16-far/16-far.md) | FAR 실습 — NHC가 비정상 노드 감지 → FenceAgentsRemediation으로 IPMI/BMC 전원 재시작 |
@@ -142,17 +142,17 @@ virt-poc-sample/
 │   ├── 10-monitoring.md        # 가이드 문서
 │   └── 10-monitoring.sh        # 자동화 스크립트 (NS·Grafana·DataSource, GRAFANA_INSTALLED 필요)
 │
-├── 11-oadp/                    # OADP 백업/복원 실습
-│   ├── 11-oadp.md              # 가이드 문서 (DPA·Backup·Restore·Schedule)
-│   └── 11-oadp.sh              # 자동화 스크립트 (NS·Secret·DPA·BSL 확인, OADP_INSTALLED 필요)
+├── 11-mtv/                     # Migration Toolkit for Virtualization 실습
+│   ├── 11-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
+│   └── 11-mtv.sh               # 자동화 스크립트 (NS 생성·체크리스트 출력, MTV_INSTALLED 필요)
 │
 ├── 12-hyperconverged/          # HyperConverged 설정 실습
 │   ├── 12-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
 │   └── 12-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
 │
-├── 13-mtv/                     # Migration Toolkit for Virtualization 실습
-│   ├── 13-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
-│   └── 13-mtv.sh               # 자동화 스크립트 (NS 생성·체크리스트 출력, MTV_INSTALLED 필요)
+├── 13-oadp/                    # OADP 백업/복원 실습
+│   ├── 13-oadp.md              # 가이드 문서 (DPA·Backup·Restore·Schedule)
+│   └── 13-oadp.sh              # 자동화 스크립트 (NS·Secret·DPA·BSL 확인, OADP_INSTALLED 필요)
 │
 ├── 14-node-maintenance/        # Node Maintenance 실습
 │   ├── 14-node-maintenance.md  # 가이드 문서

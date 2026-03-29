@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 13-mtv.sh
+# 11-mtv.sh
 #
 # Migration Toolkit for Virtualization (MTV) 실습 환경 구성
 #   1. poc-mtv 네임스페이스 생성
