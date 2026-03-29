@@ -206,8 +206,8 @@ EOF
 step_nad() {
     print_step "2/4  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
 
-    oc new-project "${NAD_NAMESPACE}" 2>/dev/null || \
-        oc project "${NAD_NAMESPACE}" 2>/dev/null || true
+    oc new-project "${NAD_NAMESPACE}" >/dev/null || \
+        oc project "${NAD_NAMESPACE}" >/dev/null || true
     print_ok "네임스페이스: ${NAD_NAMESPACE}"
 
     cat > nad-poc-bridge.yaml <<EOF

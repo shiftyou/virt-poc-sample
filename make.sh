@@ -47,7 +47,7 @@ if [ -z "$ARG1" ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  사용법:"
-    echo -e "    ${CYAN}./make.sh start${NC}       전체 실행"
+    echo -e "    ${CYAN}./make.sh start${NC}        전체 실행"
     echo -e "    ${CYAN}./make.sh 7${NC}            07 단계만 실행"
     echo -e "    ${CYAN}./make.sh from 7${NC}       07 단계부터 끝까지 실행"
     echo -e "    ${CYAN}./make.sh clean${NC}        poc- 네임스페이스 전체 삭제"
