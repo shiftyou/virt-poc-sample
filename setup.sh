@@ -98,6 +98,7 @@ check_operators() {
     OADP_INSTALLED=false
     OADP_NS="openshift-adp"
     GRAFANA_INSTALLED=false
+    COO_INSTALLED=false
     ODF_INSTALLED=false
     MINIO_INSTALLED=false
 
@@ -117,6 +118,7 @@ check_operators() {
             OADP_NS=$(oc get csv -A 2>/dev/null | grep -i "oadp-operator" | awk '{print $1}' | head -1 || echo "openshift-adp")
         fi
         grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
+        grep -qi "cluster-observability-operator" /tmp/_poc_csv.txt 2>/dev/null && COO_INSTALLED=true
         grep -qi "odf-operator\|ocs-operator" /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
         grep -qi "minio-operator\|operator\.min\.io" /tmp/_poc_csv.txt 2>/dev/null && MINIO_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
@@ -180,6 +182,11 @@ check_operators() {
         echo -e "  $ok Grafana Operator                   → Grafana dashboard ready"
     else
         echo -e "  $ng Grafana Operator                   → Skipped  (00-operator/grafana-operator.md)"
+    fi
+    if [ "$COO_INSTALLED" = "true" ]; then
+        echo -e "  $ok Cluster Observability Operator     → MonitoringStack ready"
+    else
+        echo -e "  $ng Cluster Observability Operator     → Skipped  (00-operator/coo-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR ready"
@@ -578,6 +585,7 @@ NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 OADP_INSTALLED=${OADP_INSTALLED:-false}
 OADP_NS=${OADP_NS:-openshift-adp}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
+COO_INSTALLED=${COO_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
 FAR_INSTALLED=${FAR_INSTALLED:-false}
 NMO_INSTALLED=${NMO_INSTALLED:-false}

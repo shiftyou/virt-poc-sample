@@ -177,6 +177,9 @@ oc get csidrivers
 ## VM 백업
 
 ```bash
+# BSL 이름 확인 (OADP가 DPA 이름 기반으로 자동 생성, 예: poc-dpa-1)
+BSL=$(oc get backupstoragelocation -n openshift-adp -o jsonpath='{.items[0].metadata.name}')
+
 # 백업 대상 네임스페이스의 VM 백업
 oc apply -f - <<EOF
 apiVersion: velero.io/v1
@@ -187,7 +190,7 @@ metadata:
 spec:
   includedNamespaces:
     - <백업할 VM 네임스페이스>
-  storageLocation: default
+  storageLocation: ${BSL}
   ttl: 720h0m0s
   snapshotVolumes: true
 EOF

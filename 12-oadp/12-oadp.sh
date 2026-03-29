@@ -437,6 +437,12 @@ EOF
 step_backup() {
     print_step "9/9  Backup CR 생성 (대상: ${VM_NS}, ns: ${NS})"
 
+    # BSL 이름 동적 감지 (OADP Operator가 DPA 이름 기반으로 자동 생성, 예: poc-dpa-1)
+    local bsl_name
+    bsl_name=$(oc get backupstoragelocation -n "$NS" \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "default")
+    print_info "BackupStorageLocation: ${bsl_name}"
+
     if oc get backup poc-oadp-backup -n "$NS" &>/dev/null; then
         print_ok "Backup poc-oadp-backup 이미 존재 — 스킵"
     else
@@ -449,7 +455,7 @@ metadata:
 spec:
   includedNamespaces:
     - ${VM_NS}
-  storageLocation: default
+  storageLocation: ${bsl_name}
   ttl: 720h0m0s
   snapshotVolumes: true
 EOF
