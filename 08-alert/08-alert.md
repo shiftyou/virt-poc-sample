@@ -340,6 +340,35 @@ oc get prometheusrule -n poc-alert
 oc describe prometheusrule poc-vm-alerts -n poc-alert
 ```
 
+#### 라벨·RBAC·네임스페이스 라벨 필요 여부
+
+| 항목 | 필요 여부 | 설명 |
+|------|-----------|------|
+| 네임스페이스 라벨 | ❌ 불필요 | PrometheusRule은 네임스페이스 라벨 없어도 자동 감지됨. `openshift.io/cluster-monitoring` 라벨은 ServiceMonitor 전용 |
+| PrometheusRule 라벨 | **조건부** | `prometheus-user-workload`의 `ruleSelector`가 특정 라벨을 요구하는 경우에만 필요 |
+| `monitoring-edit` RBAC | ❌ 불필요 | cluster-admin 권한으로 실행하면 해당 없음. 일반 사용자가 직접 PrometheusRule을 생성·수정할 때만 필요 |
+| `monitoring-rules-edit` RBAC | ❌ 불필요 | 동상 |
+
+**가장 흔한 원인 — `ruleSelector` 불일치**
+
+`prometheus-user-workload`에 `ruleSelector`가 설정되어 있으면 그 조건에 맞는 라벨이 PrometheusRule에 있어야만 로드됩니다.
+
+```bash
+# ruleSelector / ruleNamespaceSelector 확인
+oc get prometheus -n openshift-user-workload-monitoring user-workload \
+  -o jsonpath='{.spec.ruleSelector}' && echo ""
+oc get prometheus -n openshift-user-workload-monitoring user-workload \
+  -o jsonpath='{.spec.ruleNamespaceSelector}' && echo ""
+```
+
+- 출력이 `{}` 또는 비어 있으면 → **모든 PrometheusRule 자동 감지** (라벨 불필요)
+- `matchLabels`가 있으면 → PrometheusRule에 해당 라벨을 추가해야 함
+
+예시: `ruleSelector: {matchLabels: {role: alert-rules}}` 인 경우
+→ PrometheusRule에 `labels: {role: alert-rules}` 가 있어야 함 (현재 스크립트에 이미 포함됨)
+
+---
+
 #### 아무것도 출력되지 않을 때 — 단계별 진단
 
 **1단계: PrometheusRule 리소스 자체가 있는지 확인**
