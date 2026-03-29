@@ -57,7 +57,7 @@ EOF
 
 | 메트릭 | 설명 |
 |--------|------|
-| `kubevirt_vmi_phase_count` | VMI 단계별 개수 (Running/Pending/Failed 등) |
+| `kubevirt_vmi_phase_count` | VMI 단계별 개수 — phase 값: `Pending` / `Scheduling` / `Scheduled` / `Running` / `Succeeded` |
 | `kubevirt_vmi_vcpu_seconds_total` | vCPU 사용 시간 |
 | `kubevirt_vmi_network_traffic_bytes_total` | VM 네트워크 트래픽 |
 | `kubevirt_vmi_storage_iops_total` | VM 스토리지 IOPS |
@@ -83,16 +83,18 @@ spec:
       interval: 30s
       rules:
 
-        # VM이 Running 상태가 아닌 경우 (Failed/Unknown)
-        - alert: VMNotRunning
+        # VM이 중지된 경우 (Succeeded = graceful stop)
+        # KubeVirt phase: Pending / Scheduling / Scheduled / Running / Succeeded
+        # Failed / Unknown 은 이 환경에서 메트릭에 나타나지 않으므로 Succeeded로 감지
+        - alert: VMStopped
           expr: |
-            kubevirt_vmi_phase_count{phase=~"Failed|Unknown"} > 0
+            kubevirt_vmi_phase_count{phase="Succeeded"} > 0
           for: 2m
           labels:
             severity: critical
           annotations:
-            summary: "VM이 비정상 상태입니다"
-            description: "네임스페이스 {{ $labels.namespace }}에서 {{ $labels.phase }} 상태의 VM이 {{ $value }}개 감지되었습니다."
+            summary: "VM이 중지되었습니다"
+            description: "네임스페이스 {{ $labels.namespace }}에서 Succeeded(중지) 상태의 VM이 {{ $value }}개 감지되었습니다."
 
         # VM이 Pending 상태로 5분 이상 대기 중
         - alert: VMStuckPending
@@ -104,6 +106,17 @@ spec:
           annotations:
             summary: "VM이 Pending 상태로 대기 중입니다"
             description: "네임스페이스 {{ $labels.namespace }}에서 Pending 상태의 VM이 {{ $value }}개 있습니다."
+
+        # VM이 Scheduling/Scheduled 단계에서 10분 이상 진행 안 됨
+        - alert: VMStuckStarting
+          expr: |
+            kubevirt_vmi_phase_count{phase=~"Scheduling|Scheduled"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "VM이 시작 중 멈춰 있습니다"
+            description: "네임스페이스 {{ $labels.namespace }}에서 {{ $labels.phase }} 상태의 VM이 10분 이상 지속되고 있습니다."
 
         # Live Migration 실패
         - alert: VMLiveMigrationFailed
@@ -139,30 +152,27 @@ spec:
 
 ---
 
-### 1. VMNotRunning — VM을 Failed 상태로 유발
+### 1. VMStopped — VM을 정지시켜 Succeeded 상태로 유발
 
-존재하지 않는 노드를 `nodeSelector`로 지정하면 VMI가 스케줄되지 못하고 **Failed** 상태가 됩니다.
+> KubeVirt의 실제 phase 값: `Pending` / `Scheduling` / `Scheduled` / `Running` / `Succeeded`
+> `Failed` / `Unknown`은 메트릭에 나타나지 않으므로 **Succeeded(정상 종료)** 상태로 중지를 감지합니다.
+
+`virtctl stop`으로 VM을 정지하면 VMI phase가 **Succeeded**로 전환됩니다.
 `for: 2m` 조건이 충족되면 Alert이 발생합니다.
 
 ```bash
-# 1) 존재하지 않는 노드 지정으로 패치
-oc patch vm poc-alert-vm -n poc-alert --type=merge -p \
-  '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"nonexistent-node"}}}}}'
+# 1) VM 정지
+virtctl stop poc-alert-vm -n poc-alert
 
-# 2) VM 재시작 → VMI가 Pending→Failed 전환
-virtctl restart poc-alert-vm -n poc-alert
-
-# 3) VMI 상태 확인 (Failed 확인)
+# 2) VMI phase 확인 (Succeeded)
 oc get vmi -n poc-alert
 
-# 4) 2분 후 OpenShift Console → Observe → Alerting 에서 VMNotRunning 확인
+# 3) 2분 후 Console → Observe → Alerting 에서 VMStopped 확인
 ```
 
 **복구:**
 
 ```bash
-oc patch vm poc-alert-vm -n poc-alert --type=json \
-  -p '[{"op":"remove","path":"/spec/template/spec/nodeSelector"}]'
 virtctl start poc-alert-vm -n poc-alert
 ```
 
@@ -197,7 +207,37 @@ virtctl start poc-alert-vm -n poc-alert
 
 ---
 
-### 3. VMLiveMigrationFailed — Live Migration 실패 유발
+### 3. VMStuckStarting — VM을 Scheduling/Scheduled 상태에서 멈추도록 유발
+
+존재하지 않는 노드를 `nodeSelector`로 지정하면 VMI가 스케줄러에 의해 배치되지 못하고
+**Scheduling** 또는 **Scheduled** 상태에 멈춥니다.
+`for: 10m` 조건이 충족되면 Alert이 발생합니다.
+
+```bash
+# 1) 존재하지 않는 노드 지정으로 패치
+oc patch vm poc-alert-vm -n poc-alert --type=merge -p \
+  '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"nonexistent-node"}}}}}'
+
+# 2) VM 재시작
+virtctl restart poc-alert-vm -n poc-alert
+
+# 3) VMI phase 확인 (Scheduling 또는 Scheduled)
+oc get vmi -n poc-alert
+
+# 4) 10분 후 Console → Observe → Alerting 에서 VMStuckStarting 확인
+```
+
+**복구:**
+
+```bash
+oc patch vm poc-alert-vm -n poc-alert --type=json \
+  -p '[{"op":"remove","path":"/spec/template/spec/nodeSelector"}]'
+virtctl start poc-alert-vm -n poc-alert
+```
+
+---
+
+### 5. VMLiveMigrationFailed — Live Migration 실패 유발
 
 Migration 대상 노드가 없거나 리소스가 부족한 상태에서 강제로 Migration을 시도합니다.
 
@@ -229,7 +269,7 @@ done
 
 ---
 
-### 4. VMLowMemory — VM 메모리 부족 유발
+### 6. VMLowMemory — VM 메모리 부족 유발
 
 VM 내부에서 `stress` 도구로 메모리를 고갈시킵니다.
 `kubevirt_vmi_memory_available_bytes < 100MiB` 상태가 `for: 5m` 지속되면 Alert이 발생합니다.

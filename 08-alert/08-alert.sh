@@ -128,15 +128,15 @@ spec:
     - name: poc-vm-availability
       interval: 30s
       rules:
-        - alert: VMNotRunning
+        - alert: VMStopped
           expr: |
-            kubevirt_vmi_phase_count{phase=~"Failed|Unknown"} > 0
+            kubevirt_vmi_phase_count{phase="Succeeded"} > 0
           for: 2m
           labels:
             severity: critical
           annotations:
-            summary: "VM이 비정상 상태입니다"
-            description: "네임스페이스 {{ \$labels.namespace }}에서 {{ \$labels.phase }} 상태의 VM이 {{ \$value }}개 감지되었습니다."
+            summary: "VM이 중지되었습니다"
+            description: "네임스페이스 {{ \$labels.namespace }}에서 Succeeded(중지) 상태의 VM이 {{ \$value }}개 감지되었습니다."
         - alert: VMStuckPending
           expr: |
             kubevirt_vmi_phase_count{phase="Pending"} > 0
@@ -146,6 +146,15 @@ spec:
           annotations:
             summary: "VM이 Pending 상태로 대기 중입니다"
             description: "네임스페이스 {{ \$labels.namespace }}에서 Pending 상태의 VM이 {{ \$value }}개 있습니다."
+        - alert: VMStuckStarting
+          expr: |
+            kubevirt_vmi_phase_count{phase=~"Scheduling|Scheduled"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "VM이 시작 중 멈춰 있습니다"
+            description: "네임스페이스 {{ \$labels.namespace }}에서 {{ \$labels.phase }} 상태의 VM이 10분 이상 지속되고 있습니다."
         - alert: VMLiveMigrationFailed
           expr: |
             increase(kubevirt_vmi_migration_phase_transition_time_seconds_count{phase="Failed"}[10m]) > 0
@@ -213,12 +222,10 @@ print_summary() {
     echo -e "    ${CYAN}OpenShift Console → Observe → Alerting → Alert Rules${NC}"
     echo ""
     echo -e "  Alert 유발 테스트 (예시):"
-    echo -e "    ${CYAN}# VMNotRunning — VM을 강제로 Failed 상태로 유발${NC}"
-    echo -e "    ${CYAN}oc patch vm ${VM_NAME} -n ${NS} --type=merge -p '{\"spec\":{\"template\":{\"spec\":{\"nodeSelector\":{\"kubernetes.io/hostname\":\"nonexistent-node\"}}}}}'${NC}"
-    echo -e "    ${CYAN}virtctl restart ${VM_NAME} -n ${NS}${NC}"
+    echo -e "    ${CYAN}# VMStopped — VM을 정지시켜 Succeeded 상태로 유발${NC}"
+    echo -e "    ${CYAN}virtctl stop ${VM_NAME} -n ${NS}${NC}"
     echo ""
     echo -e "    ${CYAN}# 복구${NC}"
-    echo -e "    ${CYAN}oc patch vm ${VM_NAME} -n ${NS} --type=json -p '[{\"op\":\"remove\",\"path\":\"/spec/template/spec/nodeSelector\"}]'${NC}"
     echo -e "    ${CYAN}virtctl start ${VM_NAME} -n ${NS}${NC}"
     echo ""
     echo -e "  자세한 내용: 08-alert.md 참조"
