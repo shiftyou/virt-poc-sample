@@ -100,7 +100,7 @@ step_namespace() {
 }
 
 step_credentials() {
-    print_step "2/4  S3 자격증명 Secret 생성 (백엔드: ${BACKEND})"
+    print_step "2/4  S3 자격증명 Secret 생성 (백엔드: ${BACKEND}, ns: ${OADP_NS})"
 
     if [ "$BACKEND" = "minio" ]; then
         local ak="${MINIO_ACCESS_KEY:-minio}"
@@ -121,13 +121,13 @@ EOF
         --from-file=cloud=cloud-credentials.txt \
         --dry-run=client -o yaml | oc apply -f -
     rm -f cloud-credentials.txt
-    print_ok "cloud-credentials Secret 생성 완료"
+    print_ok "cloud-credentials Secret 생성 완료 → ns: ${OADP_NS}"
 }
 
 step_dpa() {
-    print_step "3/4  DataProtectionApplication 배포 (백엔드: ${BACKEND})"
+    print_step "3/4  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
 
-    if oc get dpa poc-dpa -n "$OADP_NS" &>/dev/null; then
+    if oc get dpa poc-dpa -n "$NS" &>/dev/null; then
         print_ok "DataProtectionApplication poc-dpa 이미 존재 — 스킵"
         return
     fi
@@ -188,7 +188,7 @@ EOF
 }
 
 step_verify() {
-    print_step "4/4  BackupStorageLocation 확인"
+    print_step "4/4  BackupStorageLocation 확인 (ns: ${NS})"
 
     print_info "BackupStorageLocation 준비 대기 중..."
     local retries=12
@@ -210,7 +210,7 @@ step_verify() {
 
     if [ $i -eq $retries ]; then
         print_warn "BackupStorageLocation 준비 시간 초과. 백엔드 연결을 확인하세요."
-        print_info "  oc describe backupstoragelocation default -n ${OADP_NS}"
+        print_info "  oc describe backupstoragelocation default -n ${NS}"
     fi
 }
 
@@ -225,17 +225,29 @@ print_summary() {
     echo -e "  BackupStorageLocation 확인:"
     echo -e "    ${CYAN}oc get backupstoragelocation -n ${NS}${NC}"
     echo ""
-    echo -e "  VM 백업 실행:"
+    echo -e "  VM 백업 실행 (ns: ${NS}):"
     echo -e "    ${CYAN}oc create -f - <<EOF${NC}"
     echo -e "    ${CYAN}apiVersion: velero.io/v1${NC}"
     echo -e "    ${CYAN}kind: Backup${NC}"
     echo -e "    ${CYAN}metadata:${NC}"
     echo -e "    ${CYAN}  name: poc-vm-backup${NC}"
-    echo -e "    ${CYAN}  namespace: ${OADP_NS}${NC}"
+    echo -e "    ${CYAN}  namespace: ${NS}${NC}"
     echo -e "    ${CYAN}spec:${NC}"
     echo -e "    ${CYAN}  includedNamespaces: [${NS}]${NC}"
     echo -e "    ${CYAN}  storageLocation: default${NC}"
     echo -e "    ${CYAN}  snapshotMoveData: true${NC}"
+    echo -e "    ${CYAN}EOF${NC}"
+    echo ""
+    echo -e "  VM 복원 실행 (ns: ${NS}):"
+    echo -e "    ${CYAN}oc create -f - <<EOF${NC}"
+    echo -e "    ${CYAN}apiVersion: velero.io/v1${NC}"
+    echo -e "    ${CYAN}kind: Restore${NC}"
+    echo -e "    ${CYAN}metadata:${NC}"
+    echo -e "    ${CYAN}  name: poc-vm-restore${NC}"
+    echo -e "    ${CYAN}  namespace: ${NS}${NC}"
+    echo -e "    ${CYAN}spec:${NC}"
+    echo -e "    ${CYAN}  backupName: poc-vm-backup${NC}"
+    echo -e "    ${CYAN}  includedNamespaces: [${NS}]${NC}"
     echo -e "    ${CYAN}EOF${NC}"
     echo ""
     echo -e "  자세한 내용: 12-oadp.md 참조"
