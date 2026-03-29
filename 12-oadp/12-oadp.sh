@@ -95,7 +95,7 @@ preflight() {
         S3_BUCKET="${ODF_S3_BUCKET:-velero}"
         S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
         S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
-        S3_REGION="noobaa"
+        S3_REGION="localstorage"
     fi
 
     print_ok "백엔드: ${BACKEND}"
@@ -197,15 +197,13 @@ spec:
   configuration:
     velero:
       defaultPlugins:
+        - csi
         - openshift
         - aws
         - kubevirt
-        - csi
       disableFsBackup: false
-      resourceTimeout: 10m
-    nodeAgent:
-      enable: true
-      uploaderType: restic
+      featureFlags:
+        - EnableCSI
   logFormat: text
   backupLocations:
     - velero:
@@ -213,12 +211,13 @@ spec:
         default: true
         objectStorage:
           bucket: ${S3_BUCKET}
-          prefix: oadp
+          prefix: velero
         config:
+          profile: default
           region: ${S3_REGION}
           s3ForcePathStyle: "true"
           s3Url: ${S3_ENDPOINT}
-          insecureSkipTLSVerify: "true"
+          checksumAlgorithm: ""
         credential:
           key: cloud
           name: cloud-credentials

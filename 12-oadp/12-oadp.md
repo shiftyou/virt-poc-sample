@@ -58,7 +58,7 @@ cloud-credentials Secret (poc-oadp)
 | `S3_BUCKET` | `MINIO_BUCKET` | `ODF_S3_BUCKET` |
 | `S3_ACCESS_KEY` | `MINIO_ACCESS_KEY` | noobaa-admin secret |
 | `S3_SECRET_KEY` | `MINIO_SECRET_KEY` | noobaa-admin secret |
-| `S3_REGION` | `minio` | `noobaa` |
+| `S3_REGION` | `minio` | `localstorage` |
 
 ---
 
@@ -92,15 +92,13 @@ spec:
   configuration:
     velero:
       defaultPlugins:
+        - csi
         - openshift
         - aws
         - kubevirt
-        - csi
       disableFsBackup: false
-      resourceTimeout: 10m
-    nodeAgent:
-      enable: true
-      uploaderType: restic
+      featureFlags:
+        - EnableCSI
   logFormat: text
   backupLocations:
     - velero:
@@ -108,12 +106,13 @@ spec:
         default: true
         objectStorage:
           bucket: ${S3_BUCKET}
-          prefix: oadp
+          prefix: velero
         config:
+          profile: default
           region: ${S3_REGION}
           s3ForcePathStyle: "true"
           s3Url: ${S3_ENDPOINT}
-          insecureSkipTLSVerify: "true"
+          checksumAlgorithm: ""
         credential:
           key: cloud
           name: cloud-credentials
