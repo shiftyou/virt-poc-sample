@@ -324,7 +324,6 @@ else
 fi
 ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
 ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
-ask "NAD 네임스페이스" "poc-nad" NAD_NAMESPACE
 echo ""
 print_info "VLAN ID는 02-network 방식 3(Linux Bridge + VLAN) 또는 4(OVN Localnet + VLAN) 선택 시 사용됩니다."
 ask "VLAN ID (VLAN filtering / OVN Localnet + VLAN 사용 시)" "100" VLAN_ID
@@ -425,7 +424,6 @@ CLUSTER_API=${CLUSTER_API}
 # 네트워크 설정
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
-NAD_NAMESPACE=${NAD_NAMESPACE}
 VLAN_ID=${VLAN_ID}
 SECONDARY_IP_PREFIX=${SECONDARY_IP_PREFIX}
 

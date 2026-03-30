@@ -89,7 +89,7 @@ choose_mode() {
     echo -e "  현재 설정:"
     echo -e "    BRIDGE_INTERFACE : ${CYAN}${BRIDGE_INTERFACE}${NC}"
     echo -e "    BRIDGE_NAME      : ${CYAN}${BRIDGE_NAME}${NC}"
-    echo -e "    NAD_NAMESPACE    : ${CYAN}${NAD_NAMESPACE}${NC}"
+    echo -e "    네임스페이스      : ${CYAN}${NAD_NAMESPACE}${NC}"
     echo ""
     read -r -p "  선택 [1-4]: " NET_TYPE
 
