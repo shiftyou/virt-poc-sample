@@ -71,7 +71,8 @@ cd virt-poc-sample
 | 13 | [13-node-maintenance](13-node-maintenance/13-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
 | 14 | [14-snr](14-snr/14-snr.md) | SNR 실습 — NHC가 비정상 노드 감지 → SelfNodeRemediation으로 노드 자가 재시작 (IPMI 불필요) |
 | 15 | [15-far](15-far/15-far.md) | FAR 실습 — NHC가 비정상 노드 감지 → FenceAgentsRemediation으로 IPMI/BMC 전원 재시작 |
-| 16 | [16-hyperconverged](16-hyperconverged/16-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
+| 16 | [16-add-node](16-add-node/16-add-node.md) | 워커 노드 제거 후 재조인 — kubelet 중지·노드 오브젝트 삭제·CSR 승인·재조인 확인 |
+| 17 | [17-hyperconverged](17-hyperconverged/17-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -165,9 +166,13 @@ virt-poc-sample/
 │   ├── 15-far.md               # 가이드 문서
 │   └── 15-far.sh               # 자동화 스크립트 (NS·VM2개·FARTemplate·NHC, FAR_INSTALLED 필요)
 │
-├── 16-hyperconverged/          # HyperConverged 설정 실습
-│   ├── 16-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
-│   └── 16-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
+├── 16-add-node/                # 워커 노드 제거 후 재조인 실습
+│   ├── 16-add-node.md          # 가이드 문서 (kubelet 중지·CSR 승인·재조인)
+│   └── 16-add-node.sh          # 자동화 스크립트 (Cordon·Drain·kubelet 안내·CSR 승인)
+│
+├── 17-hyperconverged/          # HyperConverged 설정 실습
+│   ├── 17-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
+│   └── 17-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
 │
 └── poc-setup/                  # 스크립트 실행 중 생성된 YAML 파일 저장소
     ├── 01-template/            # datasource·template·consoleyamlsample YAML
