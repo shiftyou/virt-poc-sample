@@ -28,6 +28,16 @@ print_header() {
     echo ""
 }
 
+print_step_header() {
+    local num="$1"
+    local title="$2"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  ${num}  ${title}${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -276,15 +286,106 @@ EOF"
     fi
 }
 
+# MinIO 자동 감지
+auto_detect_minio() {
+    MINIO_ENDPOINT=""
+    MINIO_BUCKET="velero"
+    MINIO_ACCESS_KEY="minio"
+    MINIO_SECRET_KEY="minio123"
+
+    # MinIO Operator가 만드는 Tenant CR에서 네임스페이스 탐색
+    local minio_ns
+    minio_ns=$(oc get tenant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
+    # 없으면 minio 레이블 서비스로 탐색
+    if [ -z "$minio_ns" ]; then
+        minio_ns=$(oc get svc -A -l app=minio -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
+    fi
+
+    MINIO_FOUND=false
+
+    if [ -n "$minio_ns" ]; then
+        local minio_svc minio_port
+        minio_svc=$(oc get svc -n "$minio_ns" -l app=minio \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || \
+            oc get svc -n "$minio_ns" \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        minio_port=$(oc get svc -n "$minio_ns" "$minio_svc" \
+            -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || echo "9000")
+        MINIO_ENDPOINT="http://${minio_svc}.${minio_ns}.svc.cluster.local:${minio_port}"
+
+        # 자격증명 시크릿 탐색 (rootUser/rootPassword 또는 accesskey/secretkey)
+        local secret_name
+        secret_name=$(oc get secret -n "$minio_ns" \
+            -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+            tr ' ' '\n' | grep -iE "minio|root|console" | head -1 || true)
+        if [ -n "$secret_name" ]; then
+            local ak sk
+            ak=$(oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.rootUser}' 2>/dev/null | base64 -d 2>/dev/null || \
+                oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.accesskey}' 2>/dev/null | base64 -d 2>/dev/null || true)
+            sk=$(oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.rootPassword}' 2>/dev/null | base64 -d 2>/dev/null || \
+                oc get secret -n "$minio_ns" "$secret_name" \
+                -o jsonpath='{.data.secretkey}' 2>/dev/null | base64 -d 2>/dev/null || true)
+            [ -n "$ak" ] && MINIO_ACCESS_KEY="$ak"
+            [ -n "$sk" ] && MINIO_SECRET_KEY="$sk"
+        fi
+
+        MINIO_FOUND=true
+        print_info "MinIO endpoint : ${MINIO_ENDPOINT}  (ns: ${minio_ns})"
+        print_info "MinIO bucket   : ${MINIO_BUCKET}"
+        print_info "MinIO accessKey: ${MINIO_ACCESS_KEY}"
+    else
+        print_warn "MinIO Tenant/Service 감지 실패 → MinIO 설정을 건너뜁니다."
+    fi
+}
+
+# ODF (NooBaa MCG) 자동 감지
+auto_detect_odf() {
+    ODF_S3_ENDPOINT=""
+    ODF_S3_BUCKET="velero"
+    ODF_S3_REGION="localstorage"
+    ODF_S3_ACCESS_KEY=""
+    ODF_S3_SECRET_KEY=""
+
+    local odf_ns="openshift-storage"
+
+    # NooBaa MCG S3 내부 엔드포인트
+    ODF_S3_ENDPOINT=$(oc get noobaa -n "$odf_ns" \
+        -o jsonpath='{.status.services.serviceS3.internalDNS[0]}' 2>/dev/null || true)
+    if [ -z "$ODF_S3_ENDPOINT" ]; then
+        local s3_port
+        s3_port=$(oc get svc s3 -n "$odf_ns" \
+            -o jsonpath='{.spec.ports[?(@.name=="s3")].port}' 2>/dev/null || echo "80")
+        ODF_S3_ENDPOINT="http://s3.${odf_ns}.svc.cluster.local:${s3_port}"
+    fi
+
+    # noobaa-admin 시크릿에서 자격증명 취득
+    ODF_S3_ACCESS_KEY=$(oc get secret noobaa-admin -n "$odf_ns" \
+        -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d 2>/dev/null || true)
+    ODF_S3_SECRET_KEY=$(oc get secret noobaa-admin -n "$odf_ns" \
+        -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
+
+    if [ -n "$ODF_S3_ACCESS_KEY" ]; then
+        print_info "ODF MCG S3 endpoint : ${ODF_S3_ENDPOINT}"
+        print_info "ODF MCG region      : ${ODF_S3_REGION}"
+        print_info "ODF MCG bucket      : ${ODF_S3_BUCKET}"
+        print_info "ODF MCG credentials : noobaa-admin secret 에서 취득"
+    else
+        print_warn "ODF MCG 자격증명 감지 실패 (noobaa-admin secret 없음)"
+    fi
+}
+
 # =============================================================================
 # 메인 실행
 # =============================================================================
 
 echo ""
-echo -e "${GREEN}============================================================${NC}"
-echo -e "${GREEN}  OpenShift Virtualization POC 환경 설정${NC}"
-echo -e "${GREEN}  virt-poc-sample setup.sh${NC}"
-echo -e "${GREEN}============================================================${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}  OpenShift Virtualization POC 환경 설정${NC}"
+echo -e "${CYAN}  virt-poc-sample setup-kr.sh${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
 # 기존 env.conf 확인
@@ -298,24 +399,32 @@ if [ -f "$ENV_FILE" ]; then
     fi
 fi
 
-# 클러스터 자동 감지
+# 클러스터 자동 감지 및 오퍼레이터 확인
 auto_detect_cluster
-
-# 오퍼레이터 설치 확인
 check_operators
 
+CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
+API_ALLOWED_CIDRS="0.0.0.0/0"
+
 # =============================================================================
-# 1. 클러스터 기본 정보
+# [ Cluster ] 클러스터 기본 정보
 # =============================================================================
-print_header "1. 클러스터 기본 정보"
+print_step_header "[ Cluster ]" "클러스터 기본 정보"
 
 ask "클러스터 base domain (예: example.com)" "${DETECTED_DOMAIN:-example.com}" CLUSTER_DOMAIN
 ask "API 서버 URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUSTER_API
 
 # =============================================================================
-# 2. 네트워크 설정 (NNCP / NAD)
+# [01] Template — DataVolume / DataSource / Template 등록
 # =============================================================================
-print_header "2. 네트워크 설정 (NNCP / NAD)"
+print_step_header "[01]" "Template — DataVolume / DataSource / Template 등록"
+
+ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
+
+# =============================================================================
+# [02] Network — NNCP / NAD / VM 생성
+# =============================================================================
+print_step_header "[02]" "Network — NNCP / NAD / VM 생성"
 
 if [ -n "${DETECTED_IFACES:-}" ]; then
     print_info "감지된 인터페이스 목록: $DETECTED_IFACES"
@@ -333,52 +442,83 @@ print_info "  예) 192.168.100 → poc-network-vm: .10/24, NS1 VM: .11/24, NS2 V
 ask "Secondary NIC IP 프리픽스 (cloud-init networkData)" "192.168.100" SECONDARY_IP_PREFIX
 
 # =============================================================================
-# 3. 스토리지클래스
+# [10] Monitoring — Grafana 대시보드
 # =============================================================================
-print_header "3. 스토리지클래스 설정"
-
-ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
+if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[10]" "Monitoring — Grafana 대시보드"
+    ask "Grafana admin 비밀번호" "grafana123" GRAFANA_ADMIN_PASS "true"
+else
+    print_info "[10] Monitoring — Grafana Operator 미설치, 건너뜁니다."
+    GRAFANA_ADMIN_PASS="grafana123"
+fi
 
 # =============================================================================
-# 4. VDDK 이미지
+# [11] MTV — VMware → OpenShift 마이그레이션
 # =============================================================================
 if [ "${MTV_INSTALLED:-false}" = "true" ]; then
-    print_header "4. VDDK 이미지 설정"
-
+    print_step_header "[11]" "MTV — VMware → OpenShift 마이그레이션"
     print_info "VDDK 이미지 경로 (내부 레지스트리에 직접 push 후 입력)"
     ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 else
-    print_info "4. VDDK 이미지 — MTV Operator 미설치, 건너뜁니다."
+    print_info "[11] MTV — MTV Operator 미설치, 건너뜁니다."
     VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
 fi
 
-CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
-API_ALLOWED_CIDRS="0.0.0.0/0"
-
 # =============================================================================
-# 5. Fence Agents Remediation
+# [12] OADP — VM 백업/복원 (MinIO / ODF backend 자동 감지)
 # =============================================================================
-if [ "${FAR_INSTALLED:-false}" = "true" ]; then
-    print_header "5. Fence Agents Remediation (FAR)"
+if [ "${OADP_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[12]" "OADP — VM 백업/복원 backend 자동 감지"
+    auto_detect_minio
 
-    ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
-    ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
-    ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
+    if [ "${MINIO_FOUND}" = "false" ]; then
+        MINIO_ENDPOINT=""
+        MINIO_BUCKET=""
+        MINIO_ACCESS_KEY=""
+        MINIO_SECRET_KEY=""
+        print_info "MinIO 없음 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
+        if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+            auto_detect_odf
+        else
+            print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
+            ODF_S3_ENDPOINT=""
+            ODF_S3_BUCKET="velero"
+            ODF_S3_REGION="localstorage"
+            ODF_S3_ACCESS_KEY=""
+            ODF_S3_SECRET_KEY=""
+        fi
+    else
+        if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+            auto_detect_odf
+        else
+            ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
+            ODF_S3_BUCKET="velero"
+            ODF_S3_REGION="localstorage"
+            ODF_S3_ACCESS_KEY=""
+            ODF_S3_SECRET_KEY=""
+        fi
+    fi
 else
-    print_info "5. Fence Agents Remediation — FAR Operator 미설치, 건너뜁니다."
-    FENCE_AGENT_IP="192.168.1.100"
-    FENCE_AGENT_USER="admin"
-    FENCE_AGENT_PASS="password"
+    print_info "[12] OADP — OADP Operator 미설치, 건너뜁니다."
+    MINIO_ENDPOINT=""
+    MINIO_BUCKET="velero"
+    MINIO_ACCESS_KEY=""
+    MINIO_SECRET_KEY=""
+    ODF_S3_ENDPOINT=""
+    ODF_S3_BUCKET="velero"
+    ODF_S3_REGION="localstorage"
+    ODF_S3_ACCESS_KEY=""
+    ODF_S3_SECRET_KEY=""
 fi
 
 # =============================================================================
-# 6. 노드 정보
+# [13·14·16] Node — 노드 유지보수 / SNR / Add Node
 # =============================================================================
-print_header "6. 노드 정보"
+print_step_header "[13·14·16]" "Node — 노드 유지보수 / SNR / Add Node"
 
-# 노드 자동 감지
 if check_oc 2>/dev/null; then
-    DETECTED_WORKERS=$(oc get nodes -l node-role.kubernetes.io/worker -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+    DETECTED_WORKERS=$(oc get nodes -l node-role.kubernetes.io/worker \
+        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
     if [ -n "$DETECTED_WORKERS" ]; then
         print_info "감지된 워커 노드: $DETECTED_WORKERS"
         FIRST_WORKER=$(echo $DETECTED_WORKERS | awk '{print $1}')
@@ -394,15 +534,18 @@ ask "워커 노드 이름 목록 (공백으로 구분)" "${DETECTED_WORKERS:-wor
 ask "테스트용 단일 노드 이름" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 7. Grafana
+# [15] FAR — IPMI/BMC 전원 재시작 복구
 # =============================================================================
-if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-    print_header "7. Grafana 설정"
-
-    ask "Grafana admin 비밀번호" "grafana123" GRAFANA_ADMIN_PASS "true"
+if [ "${FAR_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[15]" "FAR — Fence Agents Remediation (IPMI/BMC)"
+    ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
+    ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
+    ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
 else
-    print_info "7. Grafana — Grafana Operator 미설치, 건너뜁니다."
-    GRAFANA_ADMIN_PASS="grafana123"
+    print_info "[15] FAR — FAR Operator 미설치, 건너뜁니다."
+    FENCE_AGENT_IP="192.168.1.100"
+    FENCE_AGENT_USER="admin"
+    FENCE_AGENT_PASS="password"
 fi
 
 # =============================================================================
@@ -413,7 +556,7 @@ print_header "env.conf 저장 중..."
 cat > "$ENV_FILE" << EOF
 # =============================================================================
 # virt-poc-sample 환경 설정 파일
-# setup.sh 에 의해 자동 생성됨: $(date)
+# setup-kr.sh 에 의해 자동 생성됨: $(date)
 # 이 파일은 .gitignore 에 등록되어 있으므로 git에 커밋되지 않습니다.
 # =============================================================================
 
@@ -449,7 +592,20 @@ TEST_NODE=${TEST_NODE}
 # Grafana
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
-# 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
+# MinIO (OADP backend)
+MINIO_ENDPOINT=${MINIO_ENDPOINT}
+MINIO_BUCKET=${MINIO_BUCKET}
+MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+
+# ODF MCG (OADP backend)
+ODF_S3_ENDPOINT=${ODF_S3_ENDPOINT}
+ODF_S3_BUCKET=${ODF_S3_BUCKET}
+ODF_S3_REGION=${ODF_S3_REGION}
+ODF_S3_ACCESS_KEY=${ODF_S3_ACCESS_KEY}
+ODF_S3_SECRET_KEY=${ODF_S3_SECRET_KEY}
+
+# 오퍼레이터 설치 여부 (setup-kr.sh 실행 시 자동 감지)
 VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
@@ -551,9 +707,9 @@ print_ok "총 ${RENDERED_COUNT}개 파일이 rendered/ 에 생성되었습니다
 # 완료 메시지
 # =============================================================================
 echo ""
-echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}  설정 완료!${NC}"
-echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "  다음 단계:"
 echo -e ""
@@ -562,5 +718,4 @@ echo -e "      00-operator/README.md"
 echo -e ""
 echo -e "  ${CYAN}[2] make.sh 실행${NC}"
 echo -e "      ./make.sh"
-echo -e "          01-make-template  — qcow2 업로드 → DataSource → Template 등록"
 echo ""
