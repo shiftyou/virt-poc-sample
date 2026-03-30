@@ -130,25 +130,25 @@ spec:
       rules:
         - alert: VMStopped
           expr: |
-            kubevirt_vmi_phase_count{phase="Succeeded"} > 0
+            kubevirt_vmi_phase_count{phase="succeeded"} > 0
           for: 2m
           labels:
             severity: critical
           annotations:
             summary: "VM이 중지되었습니다"
-            description: "네임스페이스 {{ \$labels.namespace }}에서 Succeeded(중지) 상태의 VM이 {{ \$value }}개 감지되었습니다."
+            description: "네임스페이스 {{ \$labels.namespace }}에서 succeeded(중지) 상태의 VM이 {{ \$value }}개 감지되었습니다."
         - alert: VMStuckPending
           expr: |
-            kubevirt_vmi_phase_count{phase="Pending"} > 0
+            kubevirt_vmi_phase_count{phase="pending"} > 0
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "VM이 Pending 상태로 대기 중입니다"
-            description: "네임스페이스 {{ \$labels.namespace }}에서 Pending 상태의 VM이 {{ \$value }}개 있습니다."
+            summary: "VM이 pending 상태로 대기 중입니다"
+            description: "네임스페이스 {{ \$labels.namespace }}에서 pending 상태의 VM이 {{ \$value }}개 있습니다."
         - alert: VMStuckStarting
           expr: |
-            kubevirt_vmi_phase_count{phase=~"Scheduling|Scheduled"} > 0
+            kubevirt_vmi_phase_count{phase=~"scheduling|scheduled"} > 0
           for: 10m
           labels:
             severity: warning

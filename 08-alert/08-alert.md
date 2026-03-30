@@ -57,7 +57,7 @@ EOF
 
 | 메트릭 | 설명 |
 |--------|------|
-| `kubevirt_vmi_phase_count` | VMI 단계별 개수 — phase 값: `Pending` / `Scheduling` / `Scheduled` / `Running` / `Succeeded` |
+| `kubevirt_vmi_phase_count` | VMI 단계별 개수 — phase 값(소문자): `pending` / `scheduling` / `scheduled` / `running` / `succeeded` |
 | `kubevirt_vmi_vcpu_seconds_total` | vCPU 사용 시간 |
 | `kubevirt_vmi_network_traffic_bytes_total` | VM 네트워크 트래픽 |
 | `kubevirt_vmi_storage_iops_total` | VM 스토리지 IOPS |
@@ -83,34 +83,34 @@ spec:
       interval: 30s
       rules:
 
-        # VM이 중지된 경우 (Succeeded = graceful stop)
-        # KubeVirt phase: Pending / Scheduling / Scheduled / Running / Succeeded
-        # Failed / Unknown 은 이 환경에서 메트릭에 나타나지 않으므로 Succeeded로 감지
+        # VM이 중지된 경우 (succeeded = graceful stop)
+        # kubevirt_vmi_phase_count label phase 값은 소문자: pending/scheduling/scheduled/running/succeeded
+        # failed / unknown 은 이 환경에서 메트릭에 나타나지 않으므로 succeeded로 감지
         - alert: VMStopped
           expr: |
-            kubevirt_vmi_phase_count{phase="Succeeded"} > 0
+            kubevirt_vmi_phase_count{phase="succeeded"} > 0
           for: 2m
           labels:
             severity: critical
           annotations:
             summary: "VM이 중지되었습니다"
-            description: "네임스페이스 {{ $labels.namespace }}에서 Succeeded(중지) 상태의 VM이 {{ $value }}개 감지되었습니다."
+            description: "네임스페이스 {{ $labels.namespace }}에서 succeeded(중지) 상태의 VM이 {{ $value }}개 감지되었습니다."
 
-        # VM이 Pending 상태로 5분 이상 대기 중
+        # VM이 pending 상태로 5분 이상 대기 중
         - alert: VMStuckPending
           expr: |
-            kubevirt_vmi_phase_count{phase="Pending"} > 0
+            kubevirt_vmi_phase_count{phase="pending"} > 0
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "VM이 Pending 상태로 대기 중입니다"
-            description: "네임스페이스 {{ $labels.namespace }}에서 Pending 상태의 VM이 {{ $value }}개 있습니다."
+            summary: "VM이 pending 상태로 대기 중입니다"
+            description: "네임스페이스 {{ $labels.namespace }}에서 pending 상태의 VM이 {{ $value }}개 있습니다."
 
-        # VM이 Scheduling/Scheduled 단계에서 10분 이상 진행 안 됨
+        # VM이 scheduling/scheduled 단계에서 10분 이상 진행 안 됨
         - alert: VMStuckStarting
           expr: |
-            kubevirt_vmi_phase_count{phase=~"Scheduling|Scheduled"} > 0
+            kubevirt_vmi_phase_count{phase=~"scheduling|scheduled"} > 0
           for: 10m
           labels:
             severity: warning
