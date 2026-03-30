@@ -1,4 +1,4 @@
-# 18-multi-tenant: 멀티 테넌트 VM 환경
+# 04-multitenancy: 멀티 테넌트 VM 환경
 
 ## 개요
 
@@ -8,28 +8,29 @@
 ## 사용자 / 권한 구성
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  tenant-ns1                        tenant-ns2               │
-│  ┌──────────────────┐              ┌──────────────────┐     │
-│  │  vm-tenant1      │              │  vm-tenant2      │     │
-│  └──────────────────┘              └──────────────────┘     │
-│                                                             │
-│  user1  ── admin  (모든 권한)       user2  ── admin          │
-│  user3  ── view   (읽기 전용)       user4  ── view           │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  poc-multitenancy-1                poc-multitenancy-2            │
+│  ┌──────────────────┐              ┌──────────────────┐          │
+│  │  vm-poc-mt1      │              │  vm-poc-mt2      │          │
+│  └──────────────────┘              └──────────────────┘          │
+│                                                                  │
+│  user1  ── admin  (모든 권한)       user2  ── admin               │
+│  user3  ── view   (읽기 전용)       user4  ── view                │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-| 사용자 | 네임스페이스 | 역할  | 가능한 작업 |
-|--------|------------|-------|------------|
-| user1  | tenant-ns1 | admin | VM 생성/수정/삭제/콘솔 접근 |
-| user2  | tenant-ns2 | admin | VM 생성/수정/삭제/콘솔 접근 |
-| user3  | tenant-ns1 | view  | VM/리소스 조회만 가능 |
-| user4  | tenant-ns2 | view  | VM/리소스 조회만 가능 |
+| 사용자 | 네임스페이스        | 역할  | 가능한 작업 |
+|--------|-------------------|-------|------------|
+| user1  | poc-multitenancy-1 | admin | VM 생성/수정/삭제/콘솔 접근 |
+| user2  | poc-multitenancy-2 | admin | VM 생성/수정/삭제/콘솔 접근 |
+| user3  | poc-multitenancy-1 | view  | VM/리소스 조회만 가능 |
+| user4  | poc-multitenancy-2 | view  | VM/리소스 조회만 가능 |
 
 - 기본 비밀번호: `Redhat1!`
 - Identity Provider: HTPasswd (`poc-htpasswd`)
+- VM 템플릿: `poc` (01-template 단계에서 등록)
 
-> user1은 tenant-ns2에 접근 불가, user2는 tenant-ns1에 접근 불가.
+> user1/user3 은 poc-multitenancy-1 만 접근 가능, user2/user4 는 poc-multitenancy-2 만 접근 가능.
 
 ## 사전 준비
 
@@ -39,16 +40,19 @@ dnf install -y httpd-tools
 
 # cluster-admin 권한으로 로그인
 oc login -u system:admin
+
+# poc 템플릿 등록 확인 (01-template 단계 완료 필요)
+oc get template poc -n openshift
 ```
 
 ## 실행
 
 ```bash
 # 구성 실행
-./18-multi-tenant.sh
+./04-multitenancy.sh
 
 # 정리
-./18-multi-tenant.sh --cleanup
+./04-multitenancy.sh --cleanup
 ```
 
 ## 단계별 구성 내용
@@ -70,7 +74,7 @@ oc get oauth cluster -o jsonpath='{.spec.identityProviders[*].name}'
 ### 2. 네임스페이스 생성
 
 ```bash
-oc get namespace tenant-ns1 tenant-ns2
+oc get namespace poc-multitenancy-1 poc-multitenancy-2
 ```
 
 ### 3. RBAC (RoleBinding)
@@ -83,18 +87,18 @@ OpenShift 내장 ClusterRole을 사용한다:
 | `view`      | 네임스페이스 내 모든 리소스 조회만 가능 |
 
 ```bash
-oc get rolebindings -n tenant-ns1
-oc get rolebindings -n tenant-ns2
+oc get rolebindings -n poc-multitenancy-1
+oc get rolebindings -n poc-multitenancy-2
 ```
 
 ### 4. VM 생성
 
-각 네임스페이스에 RHEL9 기반 VM 1개를 생성한다.
+각 네임스페이스에 `poc` 템플릿 기반 VM 1개를 생성한다.
 
-| VM 이름      | 네임스페이스 | CPU | Memory | Disk |
-|-------------|------------|-----|--------|------|
-| vm-tenant1  | tenant-ns1 | 1   | 2Gi    | 30Gi |
-| vm-tenant2  | tenant-ns2 | 1   | 2Gi    | 30Gi |
+| VM 이름      | 네임스페이스        | CPU | Memory | Disk  | 템플릿 |
+|-------------|-------------------|-----|--------|-------|--------|
+| vm-poc-mt1  | poc-multitenancy-1 | 1   | 2Gi    | 30Gi  | poc    |
+| vm-poc-mt2  | poc-multitenancy-2 | 1   | 2Gi    | 30Gi  | poc    |
 
 cloud-init 기본 계정: `cloud-user / changeme`
 
@@ -105,20 +109,25 @@ cloud-init 기본 계정: `cloud-user / changeme`
 ```bash
 API=$(oc whoami --show-server)
 
-# user1: tenant-ns1 admin — VM 삭제 가능
+# user1: poc-multitenancy-1 admin — 모든 권한
 oc login -u user1 -p 'Redhat1!' "$API"
-oc get vm -n tenant-ns1         # 성공
-oc get vm -n tenant-ns2         # 실패 (접근 권한 없음)
+oc get vm -n poc-multitenancy-1   # 성공
+oc get vm -n poc-multitenancy-2   # 실패 (접근 권한 없음)
 
-# user3: tenant-ns1 view — 조회만 가능
+# user3: poc-multitenancy-1 view — 조회만 가능
 oc login -u user3 -p 'Redhat1!' "$API"
-oc get vm -n tenant-ns1         # 성공 (조회)
-oc delete vm vm-tenant1 -n tenant-ns1  # 실패 (view 권한 부족)
+oc get vm -n poc-multitenancy-1           # 성공 (조회)
+oc delete vm vm-poc-mt1 -n poc-multitenancy-1  # 실패 (view 권한 부족)
 
-# user4: tenant-ns2 view
+# user2: poc-multitenancy-2 admin
+oc login -u user2 -p 'Redhat1!' "$API"
+oc get vm -n poc-multitenancy-2   # 성공
+oc get vm -n poc-multitenancy-1   # 실패 (접근 권한 없음)
+
+# user4: poc-multitenancy-2 view
 oc login -u user4 -p 'Redhat1!' "$API"
-oc get vm -n tenant-ns2         # 성공 (조회)
-oc delete vm vm-tenant2 -n tenant-ns2  # 실패 (view 권한 부족)
+oc get vm -n poc-multitenancy-2           # 성공 (조회)
+oc delete vm vm-poc-mt2 -n poc-multitenancy-2  # 실패 (view 권한 부족)
 ```
 
 ### Console 접근 테스트
@@ -127,7 +136,7 @@ oc delete vm vm-tenant2 -n tenant-ns2  # 실패 (view 권한 부족)
 2. Identity Provider: `poc-htpasswd` 선택
 3. 각 사용자로 로그인
 4. **Virtualization → VirtualMachines** 메뉴 확인
-   - user1/user2: 생성 버튼 활성화
+   - user1/user2: 생성 버튼 활성화, 자신의 네임스페이스만 표시
    - user3/user4: 조회만 가능, 생성/삭제 버튼 없음
 
 ### VM 콘솔 접근
@@ -135,7 +144,7 @@ oc delete vm vm-tenant2 -n tenant-ns2  # 실패 (view 권한 부족)
 ```bash
 # admin 사용자 (user1)는 virtctl 콘솔 접근 가능
 oc login -u user1 -p 'Redhat1!' "$API"
-virtctl console vm-tenant1 -n tenant-ns1
+virtctl console vm-poc-mt1 -n poc-multitenancy-1
 # 로그인: cloud-user / changeme
 ```
 
@@ -172,19 +181,19 @@ oc get clusterrole view -o jsonpath='{.rules[*].resources}' | tr ' ' '\n' | grep
 oc get datasource -n openshift-virtualization-os-images
 
 # env.conf에 추가
-DATASOURCE_NAME=fedora
+DATASOURCE_NAME=rhel9
 DATASOURCE_NS=openshift-virtualization-os-images
 ```
 
 ## 정리
 
 ```bash
-./18-multi-tenant.sh --cleanup
+./04-multitenancy.sh --cleanup
 ```
 
 정리 항목:
-- VM (vm-tenant1, vm-tenant2)
-- 네임스페이스 (tenant-ns1, tenant-ns2) 및 내부 모든 리소스
+- VM (vm-poc-mt1, vm-poc-mt2)
+- 네임스페이스 (poc-multitenancy-1, poc-multitenancy-2) 및 내부 모든 리소스
 - User 오브젝트 (user1~user4)
 - Identity 오브젝트
 

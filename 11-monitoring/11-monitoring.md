@@ -527,8 +527,47 @@ Grafana Operator를 통해 Grafana 인스턴스를 배포하고 OpenShift Monito
 
 ### 사전 조건
 
-- Grafana Operator 설치 (`00-operator/grafana-operator.md` 참조)
+- Grafana 커뮤니티 Operator 설치 (아래 설치 가이드 참조)
 - `env.conf`의 `GRAFANA_ADMIN_PASS` 설정
+
+### Grafana 커뮤니티 Operator 설치
+
+OperatorHub(community-operators)에서 Grafana Operator를 `poc-monitoring` 네임스페이스 범위로 설치합니다.
+
+```bash
+# 네임스페이스 생성 (없으면)
+oc new-project poc-monitoring
+
+# Grafana Operator 설치 (namespace-scoped)
+oc apply -f - <<'EOF'
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: grafana-operator-group
+  namespace: poc-monitoring
+spec:
+  targetNamespaces:
+    - poc-monitoring
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: grafana-operator
+  namespace: poc-monitoring
+spec:
+  channel: v5
+  name: grafana-operator
+  source: community-operators
+  sourceNamespace: openshift-marketplace
+EOF
+
+# 설치 완료 확인 (Succeeded 상태 대기)
+oc get csv -n poc-monitoring | grep grafana
+# grafana-operator.v5.x.x   Grafana Operator   5.x.x   Succeeded
+
+# setup.sh 재실행하여 GRAFANA_INSTALLED=true 업데이트
+./setup.sh
+```
 
 ### Grafana 인스턴스 배포
 

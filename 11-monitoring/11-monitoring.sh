@@ -37,6 +37,41 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
+step_install_grafana_guide() {
+    echo ""
+    print_warn "Grafana 커뮤니티 Operator 미설치 — 아래 절차로 설치 후 setup.sh 재실행하세요."
+    echo ""
+    echo -e "  ${CYAN}# 1. Grafana Operator (커뮤니티) 설치 — poc-monitoring 네임스페이스 범위${NC}"
+    echo -e "  ${CYAN}oc apply -f - <<'EOF'${NC}"
+    cat <<'YAML'
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: grafana-operator-group
+  namespace: poc-monitoring
+spec:
+  targetNamespaces:
+    - poc-monitoring
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: grafana-operator
+  namespace: poc-monitoring
+spec:
+  channel: v5
+  name: grafana-operator
+  source: community-operators
+  sourceNamespace: openshift-marketplace
+YAML
+    echo -e "  ${CYAN}EOF${NC}"
+    echo ""
+    print_info "설치 완료 후 확인:"
+    echo -e "  ${CYAN}oc get csv -n poc-monitoring | grep grafana${NC}"
+    print_info "설치 완료 후 setup.sh 재실행하여 GRAFANA_INSTALLED=true 로 업데이트하세요."
+    echo ""
+}
+
 preflight() {
     print_step "사전 확인"
 
@@ -48,15 +83,16 @@ preflight() {
 
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ] && [ "${COO_INSTALLED:-false}" != "true" ]; then
         print_warn "Grafana Operator 및 Cluster Observability Operator 모두 미설치 → 건너뜁니다."
-        print_warn "  Grafana 설치 가이드: 00-operator/grafana-operator.md"
-        print_warn "  COO 설치 가이드:     00-operator/coo-operator.md"
+        step_install_grafana_guide
+        print_warn "  COO 설치 가이드: 00-operator/coo-operator.md"
         exit 77
     fi
 
     if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-        print_ok "Grafana Operator 확인"
+        print_ok "Grafana 커뮤니티 Operator 확인"
     else
         print_warn "Grafana Operator 미설치 — Grafana 스텝 건너뜁니다."
+        step_install_grafana_guide
     fi
 
     if [ "${COO_INSTALLED:-false}" = "true" ]; then

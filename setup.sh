@@ -182,9 +182,9 @@ check_operators() {
         echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-operator/oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
-        echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
+        echo -e "  $ok Grafana 커뮤니티 Operator          → Grafana 대시보드 구성 가능"
     else
-        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-operator/grafana-operator.md)"
+        echo -e "  $ng Grafana 커뮤니티 Operator          → 미설치  (11-monitoring.md 참조)"
     fi
     if [ "$COO_INSTALLED" = "true" ]; then
         echo -e "  $ok Cluster Observability Operator     → MonitoringStack 사용 가능"
@@ -465,19 +465,31 @@ fi
 # [12] OADP — VM 백업/복원 (MinIO / ODF backend 자동 감지)
 # =============================================================================
 if [ "${OADP_INSTALLED:-false}" = "true" ]; then
-    print_step_header "[12]" "OADP — VM 백업/복원 backend 자동 감지"
+    print_step_header "[12]" "OADP — VM 백업/복원 backend 설정"
+
+    # MinIO 운영 여부 감지
     auto_detect_minio
 
-    if [ "${MINIO_FOUND}" = "false" ]; then
-        MINIO_ENDPOINT=""
-        MINIO_BUCKET=""
-        MINIO_ACCESS_KEY=""
-        MINIO_SECRET_KEY=""
-        print_info "MinIO 없음 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
+    if [ "${MINIO_FOUND}" = "true" ]; then
+        print_ok "MinIO 운영 중 감지 — 연결 정보를 확인하세요."
+        echo ""
+
+        # Route가 있으면 외부 URL로 제안
+        local minio_route
+        minio_route=$(oc get route minio-api -n minio \
+            -o jsonpath='https://{.status.ingress[0].host}' 2>/dev/null || true)
+        [ -n "$minio_route" ] && MINIO_ENDPOINT="$minio_route"
+
+        ask "MinIO API Endpoint" "${MINIO_ENDPOINT}" MINIO_ENDPOINT
+        ask "MinIO Access Key"   "${MINIO_ACCESS_KEY}" MINIO_ACCESS_KEY
+        ask "MinIO Secret Key"   "${MINIO_SECRET_KEY}" MINIO_SECRET_KEY "true"
+        ask "MinIO Bucket 이름"  "${MINIO_BUCKET}" MINIO_BUCKET
+        MINIO_FOUND=true
+
+        # ODF도 있으면 추가 감지
         if [ "${ODF_INSTALLED:-false}" = "true" ]; then
             auto_detect_odf
         else
-            print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
             ODF_S3_ENDPOINT=""
             ODF_S3_BUCKET="velero"
             ODF_S3_REGION="localstorage"
@@ -485,10 +497,17 @@ if [ "${OADP_INSTALLED:-false}" = "true" ]; then
             ODF_S3_SECRET_KEY=""
         fi
     else
+        MINIO_ENDPOINT=""
+        MINIO_BUCKET="velero"
+        MINIO_ACCESS_KEY=""
+        MINIO_SECRET_KEY=""
+        print_info "MinIO 미감지 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
+        print_info "MinIO를 사용하려면 먼저 배포 후 setup.sh 재실행하세요 (13-oadp.md 참조)"
         if [ "${ODF_INSTALLED:-false}" = "true" ]; then
             auto_detect_odf
         else
-            ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
+            print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
+            ODF_S3_ENDPOINT=""
             ODF_S3_BUCKET="velero"
             ODF_S3_REGION="localstorage"
             ODF_S3_ACCESS_KEY=""

@@ -1,16 +1,16 @@
 #!/bin/bash
 # =============================================================================
-# 18-multi-tenant.sh
+# 04-multitenancy.sh
 #
 # 멀티 테넌트 VM 환경 구성
-#   - 네임스페이스 2개 생성 (tenant-ns1, tenant-ns2)
-#   - user1: tenant-ns1 admin
-#   - user2: tenant-ns2 admin
-#   - user3: tenant-ns1 view (read-only)
-#   - user4: tenant-ns2 view (read-only)
-#   - 각 네임스페이스에 VM 1개 생성
+#   - 네임스페이스 2개 생성 (poc-multitenancy-1, poc-multitenancy-2)
+#   - user1: poc-multitenancy-1 admin
+#   - user2: poc-multitenancy-2 admin
+#   - user3: poc-multitenancy-1 view (read-only)
+#   - user4: poc-multitenancy-2 view (read-only)
+#   - 각 네임스페이스에 VM 1개 생성 (poc 템플릿 사용)
 #
-# 사용법: ./18-multi-tenant.sh [--cleanup]
+# 사용법: ./04-multitenancy.sh [--cleanup]
 # =============================================================================
 
 set -euo pipefail
@@ -39,8 +39,8 @@ print_cmd()   { echo -e "  ${CYAN}$ $1${NC}"; }
 # =============================================================================
 # 설정
 # =============================================================================
-NS1="tenant-ns1"
-NS2="tenant-ns2"
+NS1="poc-multitenancy-1"
+NS2="poc-multitenancy-2"
 
 USER1="user1"   # NS1 admin
 USER2="user2"   # NS2 admin
@@ -54,8 +54,8 @@ HTPASSWD_IDP_NAME="poc-htpasswd"
 HTPASSWD_TMP="/tmp/poc-htpasswd-$$"
 
 DATASOURCE_NS="${DATASOURCE_NS:-openshift-virtualization-os-images}"
-DATASOURCE_NAME="${DATASOURCE_NAME:-rhel9}"
-STORAGE_CLASS="${STORAGE_CLASS:-ocs-external-storagecluster-ceph-rbd}"
+DATASOURCE_NAME="${DATASOURCE_NAME:-poc}"
+STORAGE_CLASS="${STORAGE_CLASS:-}"
 
 # =============================================================================
 preflight() {
@@ -252,8 +252,16 @@ step_vms() {
         return 0
     fi
 
-    create_vm "$NS1" "vm-tenant1"
-    create_vm "$NS2" "vm-tenant2"
+    # StorageClass 자동 감지
+    if [ -z "${STORAGE_CLASS:-}" ]; then
+        STORAGE_CLASS=$(oc get sc \
+            -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' \
+            2>/dev/null | awk '{print $1}' || true)
+        [ -n "$STORAGE_CLASS" ] && print_info "StorageClass 자동 감지: ${STORAGE_CLASS}"
+    fi
+
+    create_vm "$NS1" "vm-poc-mt1"
+    create_vm "$NS2" "vm-poc-mt2"
 
     # 기동 대기
     echo ""
@@ -262,18 +270,18 @@ step_vms() {
     local i=0
     while [ "$i" -lt "$retries" ]; do
         local s1 s2
-        s1=$(oc get vmi vm-tenant1 -n "$NS1" \
+        s1=$(oc get vmi vm-poc-mt1 -n "$NS1" \
             -o jsonpath='{.status.phase}' 2>/dev/null || echo "-")
-        s2=$(oc get vmi vm-tenant2 -n "$NS2" \
+        s2=$(oc get vmi vm-poc-mt2 -n "$NS2" \
             -o jsonpath='{.status.phase}' 2>/dev/null || echo "-")
 
         if [ "$s1" = "Running" ] && [ "$s2" = "Running" ]; then
             echo ""
-            print_ok "vm-tenant1 (${NS1}) → Running"
-            print_ok "vm-tenant2 (${NS2}) → Running"
+            print_ok "vm-poc-mt1 (${NS1}) → Running"
+            print_ok "vm-poc-mt2 (${NS2}) → Running"
             break
         fi
-        printf "  대기 중... tenant1=%s  tenant2=%s  (%d/%d)\r" \
+        printf "  대기 중... mt1=%s  mt2=%s  (%d/%d)\r" \
             "$s1" "$s2" "$((i+1))" "$retries"
         sleep 10
         i=$((i+1))
@@ -313,8 +321,8 @@ cleanup() {
     print_step "정리 (cleanup)"
 
     print_info "VM 삭제..."
-    oc delete vm vm-tenant1 -n "$NS1" --ignore-not-found
-    oc delete vm vm-tenant2 -n "$NS2" --ignore-not-found
+    oc delete vm vm-poc-mt1 -n "$NS1" --ignore-not-found
+    oc delete vm vm-poc-mt2 -n "$NS2" --ignore-not-found
 
     print_info "네임스페이스 삭제 (RoleBinding 포함)..."
     oc delete namespace "$NS1" --ignore-not-found
@@ -346,10 +354,10 @@ print_summary() {
     echo -e "  ${CYAN}━━ 사용자 / 권한 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     printf "  %-8s  %-20s  %-18s  %s\n" "사용자" "네임스페이스" "역할" "비밀번호"
     echo "  ─────────────────────────────────────────────────────────────"
-    printf "  %-8s  %-20s  %-18s  %s\n" "$USER1" "$NS1" "admin (모든 권한)"    "$DEFAULT_PASS"
-    printf "  %-8s  %-20s  %-18s  %s\n" "$USER2" "$NS2" "admin (모든 권한)"    "$DEFAULT_PASS"
-    printf "  %-8s  %-20s  %-18s  %s\n" "$USER3" "$NS1" "view  (읽기 전용)"   "$DEFAULT_PASS"
-    printf "  %-8s  %-20s  %-18s  %s\n" "$USER4" "$NS2" "view  (읽기 전용)"   "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-18s  %s\n" "$USER1" "$NS1" "admin (모든 권한)"    "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-18s  %s\n" "$USER2" "$NS2" "admin (모든 권한)"    "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-18s  %s\n" "$USER3" "$NS1" "view  (읽기 전용)"   "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-18s  %s\n" "$USER4" "$NS2" "view  (읽기 전용)"   "$DEFAULT_PASS"
     echo ""
     echo -e "  ${CYAN}━━ Console 로그인 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  URL: ${BLUE}https://${console_url}${NC}"
@@ -359,9 +367,9 @@ print_summary() {
     echo -e "  ${CYAN}oc login -u user1 -p '${DEFAULT_PASS}' ${api_url}${NC}"
     echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}   # 조회 가능"
     echo -e "  ${CYAN}oc login -u user3 -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc delete vm vm-tenant1 -n ${NS1}${NC}  # 거부됨 (view only)"
+    echo -e "  ${CYAN}oc delete vm vm-poc-mt1 -n ${NS1}${NC}  # 거부됨 (view only)"
     echo ""
-    echo -e "  자세한 내용: 18-multi-tenant.md 참조"
+    echo -e "  자세한 내용: 04-multitenancy.md 참조"
     echo ""
 }
 
@@ -370,7 +378,7 @@ main() {
     if [ "${1:-}" = "--cleanup" ]; then
         echo ""
         echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${YELLOW}  18-multi-tenant: 정리 모드${NC}"
+        echo -e "${YELLOW}  04-multitenancy: 정리 모드${NC}"
         echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         preflight
         cleanup
@@ -379,7 +387,7 @@ main() {
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  18-multi-tenant: 멀티 테넌트 VM 환경 구성${NC}"
+    echo -e "${GREEN}  04-multitenancy: 멀티 테넌트 VM 환경 구성${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight
