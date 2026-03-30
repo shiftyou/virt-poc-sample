@@ -455,12 +455,11 @@ step_vm() {
 
         # cloud-init networkData — 기존 cloudinitdisk 볼륨에 networkData 추가 (VM 시작 전)
         local ci_idx
-        ci_idx=$(oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" -o json | \
-            python3 -c "
-import json, sys
-vols = json.load(sys.stdin)['spec']['template']['spec']['volumes']
-print(next(i for i, v in enumerate(vols) if 'cloudInitNoCloud' in v))
-" 2>/dev/null || echo "")
+        ci_idx=$(oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" \
+            -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' 2>/dev/null | \
+            grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
+        # grep -n은 1-based, JSON patch는 0-based
+        [ -n "$ci_idx" ] && ci_idx=$(( ci_idx - 1 ))
 
         if [ -n "$ci_idx" ]; then
             oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p="[

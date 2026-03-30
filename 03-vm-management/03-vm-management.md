@@ -194,13 +194,11 @@ oc process -n openshift poc \
   | sed 's/  running: false/  runStrategy: Halted/' \
   | oc apply -n poc-vm-management -f -
 
-# cloudinitdisk 볼륨 인덱스 확인
-CI_IDX=$(oc get vm my-poc-vm -n poc-vm-management -o json | \
-  python3 -c "
-import json, sys
-vols = json.load(sys.stdin)['spec']['template']['spec']['volumes']
-print(next(i for i, v in enumerate(vols) if 'cloudInitNoCloud' in v))
-")
+# cloudinitdisk 볼륨 인덱스 확인 (grep -n 은 1-based → 0-based 변환)
+CI_IDX=$(oc get vm my-poc-vm -n poc-vm-management \
+  -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' | \
+  grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
+CI_IDX=$(( CI_IDX - 1 ))
 
 # 기존 cloudinitdisk 에 networkData 추가 (VM 시작 전)
 oc patch vm my-poc-vm -n poc-vm-management --type=json -p="[

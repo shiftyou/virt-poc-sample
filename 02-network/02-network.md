@@ -321,12 +321,10 @@ for suffix in 1 2; do
   ]'
 
   # 기존 cloudinitdisk 볼륨에 networkData 추가 (VM 시작 전)
-  CI_IDX=$(oc get vm "${VM_NAME}" -n "poc-network" -o json | \
-    python3 -c "
-import json, sys
-vols = json.load(sys.stdin)['spec']['template']['spec']['volumes']
-print(next(i for i, v in enumerate(vols) if 'cloudInitNoCloud' in v))
-")
+  CI_IDX=$(oc get vm "${VM_NAME}" -n "poc-network" \
+    -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' | \
+    grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
+  CI_IDX=$(( CI_IDX - 1 ))
   oc patch vm "${VM_NAME}" -n "poc-network" --type=json -p="[
     {\"op\": \"add\",
      \"path\": \"/spec/template/spec/volumes/${CI_IDX}/cloudInitNoCloud/networkData\",
