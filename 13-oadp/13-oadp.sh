@@ -84,8 +84,8 @@ preflight() {
     [ "${ODF_INSTALLED:-false}"   = "true" ] && odf_ok=true
 
     if [ "$minio_ok" = "false" ] && [ "$odf_ok" = "false" ]; then
-        print_warn "MinIO 설정도 없고 ODF Operator 도 미설치 → 건너뜁니다."
-        print_warn "  MinIO : MinIO Operator 설치 후 setup.sh 재실행"
+        print_warn "MinIO 미설치 → 건너뜁니다."
+        print_warn "  MinIO : MinIO 설치 후 setup.sh 재실행"
         print_warn "  ODF   : ODF Operator 설치 후 setup.sh 재실행"
         exit 77
     fi
