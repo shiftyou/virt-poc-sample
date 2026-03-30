@@ -415,6 +415,9 @@ fi
 ask "Node network interface for NNCP (e.g. ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
 ask "Linux Bridge name to create" "br1" BRIDGE_NAME
 ask "NAD namespace" "poc-nad" NAD_NAMESPACE
+echo ""
+print_info "VLAN ID is used when 02-network mode 3 (Linux Bridge + VLAN) or 4 (OVN Localnet + VLAN) is selected."
+ask "VLAN ID (for VLAN filtering / OVN Localnet + VLAN)" "100" VLAN_ID
 
 # =============================================================================
 # 3. Storage Class
@@ -527,6 +530,7 @@ CLUSTER_API=${CLUSTER_API}
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 NAD_NAMESPACE=${NAD_NAMESPACE}
+VLAN_ID=${VLAN_ID}
 
 # Storage class
 STORAGE_CLASS=${STORAGE_CLASS}

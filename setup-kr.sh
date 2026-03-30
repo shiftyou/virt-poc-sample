@@ -96,7 +96,10 @@ check_operators() {
     SNR_INSTALLED=false
     NMSTATE_INSTALLED=false
     OADP_INSTALLED=false
+    OADP_NS="openshift-adp"
     GRAFANA_INSTALLED=false
+    COO_INSTALLED=false
+    ODF_INSTALLED=false
 
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
@@ -109,8 +112,13 @@ check_operators() {
         grep -qi "node-healthcheck"          /tmp/_poc_csv.txt 2>/dev/null && NHC_INSTALLED=true
         grep -qi "self-node-remediation"     /tmp/_poc_csv.txt 2>/dev/null && SNR_INSTALLED=true
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
-        grep -qi "oadp-operator"             /tmp/_poc_csv.txt 2>/dev/null && OADP_INSTALLED=true
-        grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
+        if grep -qi "oadp-operator" /tmp/_poc_csv.txt 2>/dev/null; then
+            OADP_INSTALLED=true
+            OADP_NS=$(oc get csv -A 2>/dev/null | grep -i "oadp-operator" | awk '{print $1}' | head -1 || echo "openshift-adp")
+        fi
+        grep -qi "grafana-operator"               /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
+        grep -qi "cluster-observability-operator" /tmp/_poc_csv.txt 2>/dev/null && COO_INSTALLED=true
+        grep -qi "odf-operator\|ocs-operator"     /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
         # NMState CR 인스턴스 존재 여부 별도 확인
         NMSTATE_CR_EXISTS=false
@@ -162,6 +170,16 @@ check_operators() {
         echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
     else
         echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-operator/grafana-operator.md)"
+    fi
+    if [ "$COO_INSTALLED" = "true" ]; then
+        echo -e "  $ok Cluster Observability Operator     → MonitoringStack 사용 가능"
+    else
+        echo -e "  $ng Cluster Observability Operator     → 건너뜀  (00-operator/coo-operator.md)"
+    fi
+    if [ "$ODF_INSTALLED" = "true" ]; then
+        echo -e "  $ok ODF Operator                       → OpenShift Data Foundation 사용 가능"
+    else
+        echo -e "  $ng ODF Operator                       → 미설치"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
         echo -e "  $ok Fence Agents Remediation Operator  → FAR 구성 가능"
@@ -307,6 +325,9 @@ fi
 ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
 ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
 ask "NAD 네임스페이스" "poc-nad" NAD_NAMESPACE
+echo ""
+print_info "VLAN ID는 02-network 방식 3(Linux Bridge + VLAN) 또는 4(OVN Localnet + VLAN) 선택 시 사용됩니다."
+ask "VLAN ID (VLAN filtering / OVN Localnet + VLAN 사용 시)" "100" VLAN_ID
 
 # =============================================================================
 # 3. 스토리지클래스
@@ -401,6 +422,7 @@ CLUSTER_API=${CLUSTER_API}
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 NAD_NAMESPACE=${NAD_NAMESPACE}
+VLAN_ID=${VLAN_ID}
 
 # 스토리지클래스
 STORAGE_CLASS=${STORAGE_CLASS}
@@ -429,12 +451,15 @@ VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 OADP_INSTALLED=${OADP_INSTALLED:-false}
+OADP_NS=${OADP_NS:-openshift-adp}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
+COO_INSTALLED=${COO_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}
 FAR_INSTALLED=${FAR_INSTALLED:-false}
 NMO_INSTALLED=${NMO_INSTALLED:-false}
 NHC_INSTALLED=${NHC_INSTALLED:-false}
 SNR_INSTALLED=${SNR_INSTALLED:-false}
+ODF_INSTALLED=${ODF_INSTALLED:-false}
 EOF
 
 print_ok "env.conf 파일이 생성되었습니다: $ENV_FILE"
