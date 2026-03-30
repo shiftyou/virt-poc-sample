@@ -6,7 +6,6 @@ env.conf
 
 # 스크립트 실행 시 생성되는 임시 yaml (poc-setup/ 하위에도 생성됨)
 poc-setup/
-*.yaml
 
 # macOS
 .DS_Store

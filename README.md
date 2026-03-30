@@ -59,20 +59,22 @@ cd virt-poc-sample
 | 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
 | 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 + poc 템플릿으로 NAD 보조 네트워크 VM 생성 |
 | 03 | [03-vm-management](03-vm-management/03-vm-management.md) | 네임스페이스 + NAD 준비, VM 생성·스토리지·네트워크·Static IP·Live Migration |
-| 04 | [04-network-policy](04-network-policy/04-network-policy.md) | NetworkPolicy 실습 — Deny All / Allow Same NS / Allow IP |
-| 05 | [05-resource-quota](05-resource-quota/05-resource-quota.md) | ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한 |
-| 06 | [06-descheduler](06-descheduler/06-descheduler.md) | Descheduler 실습 — VM 3개를 Live Migration으로 TEST_NODE에 집중 후 트리거 VM으로 과부하 유발 → 자동 재배치 |
-| 07 | [07-liveness-probe](07-liveness-probe/07-liveness-probe.md) | VM Liveness/Readiness Probe 실습 — HTTP(port 1500)·TCP·Exec Probe 설정 및 실패 시 자동 재시작 |
-| 08 | [08-alert](08-alert/08-alert.md) | VM Alert 실습 — PrometheusRule로 VM 상태 알림 (VMNotRunning·VMStuckPending·VMLowMemory) |
-| 09 | [09-node-exporter](09-node-exporter/09-node-exporter.md) | Node Exporter 실습 — poc 템플릿 VM 생성 + node-exporter Service + ServiceMonitor 등록 |
-| 10 | [10-monitoring](10-monitoring/10-monitoring.md) | 모니터링 실습 — OpenShift Console·COO MonitoringStack·Grafana·Dell/Hitachi 스토리지 모니터링 |
-| 11 | [11-mtv](11-mtv/11-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
-| 12 | [12-oadp](12-oadp/12-oadp.md) | OADP 실습 — VM 백업/복원 (MinIO S3 backend·DataProtectionApplication·Schedule) |
-| 13 | [13-node-maintenance](13-node-maintenance/13-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
-| 14 | [14-snr](14-snr/14-snr.md) | SNR 실습 — NHC가 비정상 노드 감지 → SelfNodeRemediation으로 노드 자가 재시작 (IPMI 불필요) |
-| 15 | [15-far](15-far/15-far.md) | FAR 실습 — NHC가 비정상 노드 감지 → FenceAgentsRemediation으로 IPMI/BMC 전원 재시작 |
-| 16 | [16-add-node](16-add-node/16-add-node.md) | 워커 노드 제거 후 재조인 — kubelet 중지·노드 오브젝트 삭제·CSR 승인·재조인 확인 |
-| 17 | [17-hyperconverged](17-hyperconverged/17-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
+| 04 | [04-multi-tenant](04-multi-tenant/04-multi-tenant.md) | 멀티 테넌트 — 네임스페이스 2개·사용자 4명·RBAC(admin/view)·VM 각 1개 |
+| 05 | [05-network-policy](05-network-policy/05-network-policy.md) | NetworkPolicy 실습 — Deny All / Allow Same NS / Allow IP |
+| 06 | [06-resource-quota](06-resource-quota/06-resource-quota.md) | ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한 |
+| 07 | [07-descheduler](07-descheduler/07-descheduler.md) | Descheduler 실습 — VM 3개를 Live Migration으로 TEST_NODE에 집중 후 트리거 VM으로 과부하 유발 → 자동 재배치 |
+| 08 | [08-liveness-probe](08-liveness-probe/08-liveness-probe.md) | VM Liveness/Readiness Probe 실습 — HTTP(port 1500)·TCP·Exec Probe 설정 및 실패 시 자동 재시작 |
+| 09 | [09-alert](09-alert/09-alert.md) | VM Alert 실습 — PrometheusRule로 VM 상태 알림 (VMNotRunning·VMStuckPending·VMLowMemory) |
+| 10 | [10-node-exporter](10-node-exporter/10-node-exporter.md) | Node Exporter 실습 — poc 템플릿 VM 생성 + node-exporter Service + ServiceMonitor 등록 |
+| 11 | [11-monitoring](11-monitoring/11-monitoring.md) | 모니터링 실습 — OpenShift Console·COO MonitoringStack·Grafana·Dell/Hitachi 스토리지 모니터링 |
+| 12 | [12-mtv](12-mtv/12-mtv.md) | MTV 실습 — VMware → OpenShift 마이그레이션 (Hot-plug 비활성화·CBT·Windows 빠른시작 등 체크리스트) |
+| 13 | [13-oadp](13-oadp/13-oadp.md) | OADP 실습 — VM 백업/복원 (MinIO S3 backend·DataProtectionApplication·Schedule) |
+| 14 | [14-node-maintenance](14-node-maintenance/14-node-maintenance.md) | Node Maintenance 실습 — NodeMaintenance 생성으로 노드 cordon+drain → VM 자동 Live Migration → 유지보수 완료 후 uncordon |
+| 15 | [15-snr](15-snr/15-snr.md) | SNR 실습 — NHC가 비정상 노드 감지 → SelfNodeRemediation으로 노드 자가 재시작 (IPMI 불필요) |
+| 16 | [16-far](16-far/16-far.md) | FAR 실습 — NHC가 비정상 노드 감지 → FenceAgentsRemediation으로 IPMI/BMC 전원 재시작 |
+| 17 | [17-add-node](17-add-node/17-add-node.md) | 워커 노드 제거 후 재조인 — kubelet 중지·노드 오브젝트 삭제·CSR 승인·재조인 확인 |
+| 18 | [18-hyperconverged](18-hyperconverged/18-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
+| 20 | [20-upgrade](20-upgrade/20-upgrade.md) | Airgap 환경 OCP 4.20→4.21 업그레이드 — oc-mirror·IDMS·OSUS·ClusterVersion 설정 |
 
 > 번호 순서가 실행 순서입니다.
 
@@ -114,65 +116,74 @@ virt-poc-sample/
 │   ├── 03-vm-management.md     # 가이드 문서 (VM 생성·스토리지·네트워크·Static IP·Live Migration)
 │   └── 03-vm-management.sh     # 자동화 스크립트 (네임스페이스 + NAD)
 │
-├── 04-network-policy/          # NetworkPolicy 실습
-│   ├── 04-network-policy.md    # 가이드 문서
-│   ├── 04-network-policy.sh    # 자동화 스크립트 (NS·NAD·정책·VM 배포)
+├── 04-multi-tenant/            # 멀티 테넌트 VM 환경 실습
+│   ├── 04-multi-tenant.md      # 가이드 문서 (사용자·RBAC·VM)
+│   └── 04-multi-tenant.sh      # 자동화 스크립트 (HTPasswd 사용자·NS·RoleBinding·VM)
+│
+├── 05-network-policy/          # NetworkPolicy 실습
+│   ├── 05-network-policy.md    # 가이드 문서
+│   ├── 05-network-policy.sh    # 자동화 스크립트 (NS·NAD·정책·VM 배포)
 │   └── netpol-allow-from-ns1-ip.yaml  # NS1→NS2 IP 허용 정책 (IP 수정 후 적용)
 │
-├── 05-resource-quota/          # ResourceQuota 실습
-│   ├── 05-resource-quota.md    # 가이드 문서
-│   ├── 05-resource-quota.sh    # 자동화 스크립트 (NS + ResourceQuota 적용)
+├── 06-resource-quota/          # ResourceQuota 실습
+│   ├── 06-resource-quota.md    # 가이드 문서
+│   ├── 06-resource-quota.sh    # 자동화 스크립트 (NS + ResourceQuota 적용)
 │   └── consoleyamlsample-resourcequota.yaml  # Console YAML Sample
 │
-├── 06-descheduler/             # Descheduler 실습
-│   ├── 06-descheduler.md       # 가이드 문서
-│   └── 06-descheduler.sh       # 자동화 스크립트 (NS·VM3개·Live Migration→NODE1·Descheduler·트리거VM)
+├── 07-descheduler/             # Descheduler 실습
+│   ├── 07-descheduler.md       # 가이드 문서
+│   └── 07-descheduler.sh       # 자동화 스크립트 (NS·VM3개·Live Migration→NODE1·Descheduler·트리거VM)
 │
-├── 07-liveness-probe/          # VM Liveness/Readiness Probe 실습
-│   ├── 07-liveness-probe.md    # 가이드 문서 (HTTP·TCP·Exec Probe·자동 재시작)
-│   └── 07-liveness-probe.sh    # 자동화 스크립트 (NS·poc템플릿VM·Probe 설정)
+├── 08-liveness-probe/          # VM Liveness/Readiness Probe 실습
+│   ├── 08-liveness-probe.md    # 가이드 문서 (HTTP·TCP·Exec Probe·자동 재시작)
+│   └── 08-liveness-probe.sh    # 자동화 스크립트 (NS·poc템플릿VM·Probe 설정)
 │
-├── 08-alert/                   # VM Alert 실습
-│   ├── 08-alert.md             # 가이드 문서 (PrometheusRule·AlertManager)
-│   └── 08-alert.sh             # 자동화 스크립트 (NS·UserWorkloadMonitoring·PrometheusRule)
+├── 09-alert/                   # VM Alert 실습
+│   ├── 09-alert.md             # 가이드 문서 (PrometheusRule·AlertManager)
+│   └── 09-alert.sh             # 자동화 스크립트 (NS·UserWorkloadMonitoring·PrometheusRule)
 │
-├── 09-node-exporter/           # Node Exporter 실습
-│   ├── 09-node-exporter.md     # 가이드 문서 (VM node-exporter·Service·ServiceMonitor)
-│   ├── 09-node-exporter.sh     # 자동화 스크립트 (NS·poc템플릿VM·Service·ServiceMonitor)
+├── 10-node-exporter/           # Node Exporter 실습
+│   ├── 10-node-exporter.md     # 가이드 문서 (VM node-exporter·Service·ServiceMonitor)
+│   ├── 10-node-exporter.sh     # 자동화 스크립트 (NS·poc템플릿VM·Service·ServiceMonitor)
 │   ├── node-exporter-install.sh  # VM 내부 node_exporter 설치 스크립트
 │   └── node-exporter-service.yaml  # node-exporter ClusterIP Service
 │
-├── 10-monitoring/              # 모니터링 실습 (OpenShift Console·COO·Grafana·Dell·Hitachi)
-│   ├── 10-monitoring.md        # 가이드 문서
-│   └── 10-monitoring.sh        # 자동화 스크립트 (NS·VM·COO MonitoringStack·ServiceMonitor·Grafana)
+├── 11-monitoring/              # 모니터링 실습 (OpenShift Console·COO·Grafana·Dell·Hitachi)
+│   ├── 11-monitoring.md        # 가이드 문서
+│   └── 11-monitoring.sh        # 자동화 스크립트 (NS·VM·COO MonitoringStack·ServiceMonitor·Grafana)
 │
-├── 11-mtv/                     # Migration Toolkit for Virtualization 실습
-│   ├── 11-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
-│   └── 11-mtv.sh               # 자동화 스크립트 (NS 생성·체크리스트 출력, MTV_INSTALLED 필요)
+├── 12-mtv/                     # Migration Toolkit for Virtualization 실습
+│   ├── 12-mtv.md               # 가이드 문서 (체크리스트: Hot-plug·CBT·Windows·Shared Disk)
+│   └── 12-mtv.sh               # 자동화 스크립트 (NS 생성·체크리스트 출력, MTV_INSTALLED 필요)
 │
-├── 12-oadp/                    # OADP 백업/복원 실습
-│   ├── 12-oadp.md              # 가이드 문서 (DPA·Backup·Restore·Schedule)
-│   └── 12-oadp.sh              # 자동화 스크립트 (NS·Secret·DPA·BSL 확인, OADP_INSTALLED 필요)
+├── 13-oadp/                    # OADP 백업/복원 실습
+│   ├── 13-oadp.md              # 가이드 문서 (DPA·Backup·Restore·Schedule)
+│   └── 13-oadp.sh              # 자동화 스크립트 (NS·Secret·DPA·BSL 확인, OADP_INSTALLED 필요)
 │
-├── 13-node-maintenance/        # Node Maintenance 실습
-│   ├── 13-node-maintenance.md  # 가이드 문서
-│   └── 13-node-maintenance.sh  # 자동화 스크립트 (NS·VM2개·Live Migration→NODE1·NodeMaintenance)
+├── 14-node-maintenance/        # Node Maintenance 실습
+│   ├── 14-node-maintenance.md  # 가이드 문서
+│   └── 14-node-maintenance.sh  # 자동화 스크립트 (NS·VM2개·Live Migration→NODE1·NodeMaintenance)
 │
-├── 14-snr/                     # Self Node Remediation 실습
-│   ├── 14-snr.md               # 가이드 문서
-│   └── 14-snr.sh               # 자동화 스크립트 (NS·VM2개·SNRTemplate·NHC, SNR_INSTALLED 필요)
+├── 15-snr/                     # Self Node Remediation 실습
+│   ├── 15-snr.md               # 가이드 문서
+│   └── 15-snr.sh               # 자동화 스크립트 (NS·VM2개·SNRTemplate·NHC, SNR_INSTALLED 필요)
 │
-├── 15-far/                     # Fence Agents Remediation 실습
-│   ├── 15-far.md               # 가이드 문서
-│   └── 15-far.sh               # 자동화 스크립트 (NS·VM2개·FARTemplate·NHC, FAR_INSTALLED 필요)
+├── 16-far/                     # Fence Agents Remediation 실습
+│   ├── 16-far.md               # 가이드 문서
+│   └── 16-far.sh               # 자동화 스크립트 (NS·VM2개·FARTemplate·NHC, FAR_INSTALLED 필요)
 │
-├── 16-add-node/                # 워커 노드 제거 후 재조인 실습
-│   ├── 16-add-node.md          # 가이드 문서 (kubelet 중지·CSR 승인·재조인)
-│   └── 16-add-node.sh          # 자동화 스크립트 (Cordon·Drain·kubelet 안내·CSR 승인)
+├── 17-add-node/                # 워커 노드 제거 후 재조인 실습
+│   ├── 17-add-node.md          # 가이드 문서 (kubelet 중지·CSR 승인·재조인)
+│   └── 17-add-node.sh          # 자동화 스크립트 (노드 선택·Cordon·Drain·CSR 수동 승인 안내)
 │
-├── 17-hyperconverged/          # HyperConverged 설정 실습
-│   ├── 17-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
-│   └── 17-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
+├── 18-hyperconverged/          # HyperConverged 설정 실습
+│   ├── 18-hyperconverged.md    # 가이드 문서 (CPU Overcommit·LiveMigration·FeatureGates)
+│   └── 18-hyperconverged.sh    # 자동화 스크립트 (현재 설정 출력·변경 가이드)
+│
+├── 20-upgrade/                 # Airgap 환경 OCP 업그레이드 (4.20→4.21)
+│   ├── 20-upgrade.md           # 가이드 문서 (oc-mirror·IDMS·OSUS·ClusterVersion)
+│   ├── imageset-config.yaml    # oc-mirror v2 이미지셋 구성
+│   └── update-service.yaml     # OpenShift Update Service CR
 │
 └── poc-setup/                  # 스크립트 실행 중 생성된 YAML 파일 저장소
     ├── 01-template/            # datasource·template·consoleyamlsample YAML

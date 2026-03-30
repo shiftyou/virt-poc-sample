@@ -1,10 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# virt-poc-sample environment setup script
-# Collects environment variables for OpenShift Virtualization POC testing
-# and generates the env.conf file.
+# virt-poc-sample 환경 설정 스크립트
+# OpenShift Virtualization POC 테스트를 위한 환경 변수를 수집하고
+# env.conf 파일을 생성합니다.
 #
-# Usage: ./setup.sh
+# 사용법: ./setup.sh
 # =============================================================================
 
 set -euo pipefail
@@ -12,7 +12,7 @@ set -euo pipefail
 ENV_FILE="./env.conf"
 EXAMPLE_FILE="./env.conf.example"
 
-# Color output
+# 색상 출력 설정
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -25,6 +25,16 @@ print_header() {
     echo -e "${CYAN}================================================================${NC}"
     echo -e "${CYAN}  $1${NC}"
     echo -e "${CYAN}================================================================${NC}"
+    echo ""
+}
+
+print_step_header() {
+    local num="$1"
+    local title="$2"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  ${num}  ${title}${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 
@@ -44,7 +54,7 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Input function: prompt message, default value, variable name
+# 값 입력 함수: prompt 메시지, 기본값, 변수명
 ask() {
     local prompt="$1"
     local default="$2"
@@ -52,11 +62,11 @@ ask() {
     local is_secret="${4:-false}"
 
     if [ "$is_secret" = "true" ]; then
-        echo -n -e "${YELLOW}  $prompt${NC} [default: ****]: "
+        echo -n -e "${YELLOW}  $prompt${NC} [기본값: ****]: "
         read -s input_val
         echo ""
     else
-        echo -n -e "${YELLOW}  $prompt${NC} [default: ${default}]: "
+        echo -n -e "${YELLOW}  $prompt${NC} [기본값: ${default}]: "
         read input_val
     fi
 
@@ -67,25 +77,25 @@ ask() {
     eval "$var_name='$input_val'"
 }
 
-# Check oc command
+# oc 명령어 확인
 check_oc() {
     if ! command -v oc &> /dev/null; then
-        print_warn "oc command not found. Saving configuration without cluster connection."
+        print_warn "oc 명령어를 찾을 수 없습니다. OpenShift 클러스터 연결 없이 설정만 저장합니다."
         return 1
     fi
 
     if ! oc whoami &> /dev/null; then
-        print_warn "Not logged in to OpenShift cluster. Saving configuration only."
+        print_warn "OpenShift 클러스터에 로그인되어 있지 않습니다. 설정만 저장합니다."
         return 1
     fi
 
-    print_ok "OpenShift cluster connected: $(oc whoami)"
+    print_ok "OpenShift 클러스터 연결 확인: $(oc whoami)"
     return 0
 }
 
-# Check operator installation
+# 오퍼레이터 설치 확인
 check_operators() {
-    print_header "Pre-check: Operator Installation Status"
+    print_header "사전 준비: 오퍼레이터 설치 확인"
 
     VIRT_INSTALLED=false
     MTV_INSTALLED=false
@@ -116,18 +126,18 @@ check_operators() {
             OADP_INSTALLED=true
             OADP_NS=$(oc get csv -A 2>/dev/null | grep -i "oadp-operator" | awk '{print $1}' | head -1 || echo "openshift-adp")
         fi
-        grep -qi "grafana-operator"          /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
+        grep -qi "grafana-operator"               /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         grep -qi "cluster-observability-operator" /tmp/_poc_csv.txt 2>/dev/null && COO_INSTALLED=true
-        grep -qi "odf-operator\|ocs-operator" /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
+        grep -qi "odf-operator\|ocs-operator"     /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
-        # Check NMState CR instance separately
+        # NMState CR 인스턴스 존재 여부 별도 확인
         NMSTATE_CR_EXISTS=false
         if [ "$NMSTATE_INSTALLED" = "true" ]; then
             oc get nmstate 2>/dev/null | grep -q "." && NMSTATE_CR_EXISTS=true || true
         fi
     else
-        print_warn "Cannot check operator status: not connected to cluster."
-        print_info "Operator installation guide: 00-operator/README.md"
+        print_warn "클러스터에 연결되지 않아 오퍼레이터 상태를 확인할 수 없습니다."
+        print_info "오퍼레이터 설치 방법: 00-operator/README.md 참조"
         echo ""
         return
     fi
@@ -137,69 +147,69 @@ check_operators() {
     local wa="${YELLOW}[~]${NC}"
 
     echo ""
-    printf "  %-45s %s\n" "Operator" "Status"
+    printf "  %-45s %s\n" "오퍼레이터" "상태"
     echo "  ──────────────────────────────────────────────────────────"
     if [ "$VIRT_INSTALLED" = "true" ]; then
-        echo -e "  $ok OpenShift Virtualization Operator  → Virtualization ready"
+        echo -e "  $ok OpenShift Virtualization Operator  → Virtualization 사용 가능"
     else
-        echo -e "  $ng OpenShift Virtualization Operator  → Not installed  (00-operator/)"
+        echo -e "  $ng OpenShift Virtualization Operator  → 미설치  (00-operator/)"
     fi
     if [ "$MTV_INSTALLED" = "true" ]; then
-        echo -e "  $ok Migration Toolkit for Virt Operator → MTV ready"
+        echo -e "  $ok Migration Toolkit for Virt Operator → MTV 사용 가능"
     else
-        echo -e "  $ng Migration Toolkit for Virt Operator → Not installed"
+        echo -e "  $ng Migration Toolkit for Virt Operator → 미설치"
     fi
     if [ "$NMSTATE_INSTALLED" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" = "true" ]; then
-        echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState available"
+        echo -e "  $ok Kubernetes NMState Operator        → NodeNetworkState 조회 가능"
     elif [ "$NMSTATE_INSTALLED" = "true" ]; then
-        echo -e "  $wa Kubernetes NMState Operator        → NMState CR missing (apply nmstate-cr.yaml)  (00-operator/nmstate-operator.md)"
+        echo -e "  $wa Kubernetes NMState Operator        → NMState CR 없음 (oc apply -f nmstate-cr.yaml 필요)  (00-operator/nmstate-operator.md)"
     else
-        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS unavailable  (00-operator/nmstate-operator.md)"
+        echo -e "  $ng Kubernetes NMState Operator        → NNCP/NNS 사용 불가  (00-operator/nmstate-operator.md)"
     fi
     if [ "$DESCHEDULER_INSTALLED" = "true" ]; then
-        echo -e "  $ok Kube Descheduler Operator          → Descheduler ready"
+        echo -e "  $ok Kube Descheduler Operator          → descheduler 구성 가능"
     else
-        echo -e "  $ng Kube Descheduler Operator          → Skipped  (00-operator/descheduler-operator.md)"
+        echo -e "  $ng Kube Descheduler Operator          → descheduler 구성 건너뜀  (00-operator/descheduler-operator.md)"
     fi
     if [ "$ODF_INSTALLED" = "true" ]; then
-        echo -e "  $ok ODF Operator                       → OpenShift Data Foundation ready"
+        echo -e "  $ok ODF Operator                       → OpenShift Data Foundation 사용 가능"
     else
-        echo -e "  $ng ODF Operator                       → Not installed"
+        echo -e "  $ng ODF Operator                       → 미설치"
     fi
     if [ "$OADP_INSTALLED" = "true" ]; then
-        echo -e "  $ok OADP Operator                      → Backup/Restore ready  (ns: ${OADP_NS})"
+        echo -e "  $ok OADP Operator                      → 백업/복원 구성 가능  (ns: ${OADP_NS})"
     else
-        echo -e "  $ng OADP Operator                      → Skipped  (00-operator/oadp-operator.md)"
+        echo -e "  $ng OADP Operator                      → 백업/복원 건너뜀  (00-operator/oadp-operator.md)"
     fi
     if [ "$GRAFANA_INSTALLED" = "true" ]; then
-        echo -e "  $ok Grafana Operator                   → Grafana dashboard ready"
+        echo -e "  $ok Grafana Operator                   → Grafana 대시보드 구성 가능"
     else
-        echo -e "  $ng Grafana Operator                   → Skipped  (00-operator/grafana-operator.md)"
+        echo -e "  $ng Grafana Operator                   → 모니터링 대시보드 건너뜀  (00-operator/grafana-operator.md)"
     fi
     if [ "$COO_INSTALLED" = "true" ]; then
-        echo -e "  $ok Cluster Observability Operator     → MonitoringStack ready"
+        echo -e "  $ok Cluster Observability Operator     → MonitoringStack 사용 가능"
     else
-        echo -e "  $ng Cluster Observability Operator     → Skipped  (00-operator/coo-operator.md)"
+        echo -e "  $ng Cluster Observability Operator     → 건너뜀  (00-operator/coo-operator.md)"
     fi
     if [ "$FAR_INSTALLED" = "true" ]; then
-        echo -e "  $ok Fence Agents Remediation Operator  → FAR ready"
+        echo -e "  $ok Fence Agents Remediation Operator  → FAR 구성 가능"
     else
-        echo -e "  $ng Fence Agents Remediation Operator  → Skipped  (00-operator/far-operator.md)"
+        echo -e "  $ng Fence Agents Remediation Operator  → FAR 구성 건너뜀  (00-operator/far-operator.md)"
     fi
     if [ "$NMO_INSTALLED" = "true" ]; then
-        echo -e "  $ok Node Maintenance Operator          → Node maintenance ready"
+        echo -e "  $ok Node Maintenance Operator          → 노드 유지보수 가능"
     else
-        echo -e "  $ng Node Maintenance Operator          → Skipped  (00-operator/node-maintenance-operator.md)"
+        echo -e "  $ng Node Maintenance Operator          → 노드 유지보수 건너뜀  (00-operator/node-maintenance-operator.md)"
     fi
     if [ "$NHC_INSTALLED" = "true" ]; then
-        echo -e "  $ok Node Health Check Operator         → NHC ready"
+        echo -e "  $ok Node Health Check Operator         → NHC 구성 가능"
     else
-        echo -e "  $ng Node Health Check Operator         → Skipped  (00-operator/nhc-operator.md)"
+        echo -e "  $ng Node Health Check Operator         → NHC 구성 건너뜀  (00-operator/nhc-operator.md)"
     fi
     if [ "$SNR_INSTALLED" = "true" ]; then
-        echo -e "  $ok Self Node Remediation Operator     → SNR ready"
+        echo -e "  $ok Self Node Remediation Operator     → SNR 구성 가능"
     else
-        echo -e "  $ng Self Node Remediation Operator     → Skipped  (00-operator/snr-operator.md)"
+        echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-operator/snr-operator.md)"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""
@@ -297,19 +307,19 @@ auto_detect_odf() {
     fi
 }
 
-# Auto-detect cluster information
+# 클러스터 정보 자동 감지
 auto_detect_cluster() {
     if check_oc; then
         DETECTED_API=$(oc whoami --show-server 2>/dev/null || echo "")
         DETECTED_DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}' 2>/dev/null | sed 's/^apps\.//' || echo "")
         if [ -n "$DETECTED_API" ]; then
-            print_info "Detected API server: $DETECTED_API"
+            print_info "감지된 API 서버: $DETECTED_API"
         fi
         if [ -n "$DETECTED_DOMAIN" ]; then
-            print_info "Detected cluster domain: $DETECTED_DOMAIN"
+            print_info "감지된 클러스터 도메인: $DETECTED_DOMAIN"
         fi
 
-        # Storage class auto-detection: virtualization-specific → ceph-rbd → default
+        # 스토리지클래스 자동 감지: virtualization 전용 → ceph-rbd 계열 → 기본값 순
         DETECTED_SC=$(oc get sc -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | \
             grep -i "virtualization" | head -1 || true)
         if [ -z "$DETECTED_SC" ]; then
@@ -320,15 +330,15 @@ auto_detect_cluster() {
             DETECTED_SC=$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null || echo "")
         fi
         if [ -n "$DETECTED_SC" ]; then
-            print_info "Detected storage class: $DETECTED_SC"
+            print_info "감지된 스토리지클래스: $DETECTED_SC"
         fi
         ALL_SC=$(oc get sc -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | tr '\n' ' ' || echo "")
         if [ -n "$ALL_SC" ]; then
-            print_info "Available storage classes: $ALL_SC"
+            print_info "사용 가능한 스토리지클래스: $ALL_SC"
         fi
 
-        # Node network interface auto-detection
-        # Method 1: NodeNetworkState (NMState operator, fast)
+        # 노드 네트워크 인터페이스 자동 감지
+        # 방법 1: NodeNetworkState (NMState operator, 빠름)
         FIRST_WORKER_FOR_NNS=$(oc get nodes -l node-role.kubernetes.io/worker \
             -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
         DETECTED_IFACES=""
@@ -337,18 +347,18 @@ auto_detect_cluster() {
                 -o jsonpath='{range .status.currentState.interfaces[?(@.type=="ethernet")]}{.name}{"\n"}{end}' \
                 2>/dev/null | grep -vE '^(br-ex|ovs-system)' | tr '\n' ' ' | xargs || true)
         fi
-        # Method 2: oc debug node (fallback, slow ~30s)
+        # 방법 2: oc debug node (폴백, 느림 ~30초)
         if [ -z "$DETECTED_IFACES" ] && [ -n "$FIRST_WORKER_FOR_NNS" ]; then
             if [ "${NMSTATE_INSTALLED:-false}" = "true" ] && [ "${NMSTATE_CR_EXISTS:-false}" != "true" ]; then
-                print_warn "NMState Operator is installed but NMState CR is missing."
-                print_info "To enable NodeNetworkState: oc apply -f - <<'EOF'
+                print_warn "NMState Operator가 설치되어 있지만 NMState CR이 없습니다."
+                print_info "NodeNetworkState를 사용하려면: oc apply -f - <<'EOF'
 apiVersion: nmstate.io/v1
 kind: NMState
 metadata:
   name: nmstate
 EOF"
             fi
-            print_info "NodeNetworkState not found → detecting via oc debug node (~30s)..."
+            print_info "NodeNetworkState 없음 → oc debug node 로 인터페이스 감지 중 (약 30초)..."
             DETECTED_IFACES=$(oc debug node/"$FIRST_WORKER_FOR_NNS" -- \
                 chroot /host ip -o link show 2>/dev/null | \
                 awk -F': ' '{print $2}' | \
@@ -357,7 +367,7 @@ EOF"
         fi
         DETECTED_IFACE=$(echo "$DETECTED_IFACES" | awk '{print $1}')
         if [ -n "$DETECTED_IFACES" ]; then
-            print_info "Detected network interfaces (node: $FIRST_WORKER_FOR_NNS): $DETECTED_IFACES"
+            print_info "감지된 네트워크 인터페이스 (노드: $FIRST_WORKER_FOR_NNS): $DETECTED_IFACES"
         fi
     else
         DETECTED_API=""
@@ -369,110 +379,149 @@ EOF"
 }
 
 # =============================================================================
-# Main
+# 메인 실행
 # =============================================================================
 
 echo ""
-echo -e "${GREEN}============================================================${NC}"
-echo -e "${GREEN}  OpenShift Virtualization POC Setup${NC}"
-echo -e "${GREEN}  virt-poc-sample setup.sh${NC}"
-echo -e "${GREEN}============================================================${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}  OpenShift Virtualization POC 환경 설정${NC}"
+echo -e "${CYAN}  virt-poc-sample setup.sh${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Check existing env.conf
+# 기존 env.conf 확인
 if [ -f "$ENV_FILE" ]; then
-    print_warn "env.conf already exists."
-    echo -n -e "${YELLOW}  Overwrite? (y/N): ${NC}"
+    print_warn "기존 env.conf 파일이 존재합니다."
+    echo -n -e "${YELLOW}  덮어쓰시겠습니까? (y/N): ${NC}"
     read overwrite
     if [[ ! "$overwrite" =~ ^[Yy]$ ]]; then
-        print_info "Setup cancelled. Using existing env.conf."
+        print_info "설정을 취소했습니다. 기존 env.conf 파일을 사용합니다."
         exit 0
     fi
 fi
 
-# Auto-detect cluster
+# 클러스터 자동 감지 및 오퍼레이터 확인
 auto_detect_cluster
-
-# Check operators
 check_operators
-
-# =============================================================================
-# 1. Cluster Basic Info
-# =============================================================================
-print_header "1. Cluster Basic Info"
-
-ask "Cluster base domain (e.g. example.com)" "${DETECTED_DOMAIN:-example.com}" CLUSTER_DOMAIN
-ask "API server URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUSTER_API
-
-# =============================================================================
-# 2. Network Settings (NNCP / NAD)
-# =============================================================================
-print_header "2. Network Settings (NNCP / NAD)"
-
-if [ -n "${DETECTED_IFACES:-}" ]; then
-    print_info "Detected interfaces: $DETECTED_IFACES"
-else
-    print_info "Check node interfaces: oc debug node/<node> -- ip link show"
-fi
-ask "Node network interface for NNCP (e.g. ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
-ask "Linux Bridge name to create" "br1" BRIDGE_NAME
-echo ""
-print_info "VLAN ID is used when 02-network mode 3 (Linux Bridge + VLAN) or 4 (OVN Localnet + VLAN) is selected."
-ask "VLAN ID (for VLAN filtering / OVN Localnet + VLAN)" "100" VLAN_ID
-echo ""
-print_info "SECONDARY_IP_PREFIX is the network prefix for secondary NIC (eth1) static IPs via cloud-init."
-print_info "  e.g. 192.168.100 → poc-network-vm: .10/24, NS1 VM: .11/24, NS2 VM: .12/24"
-ask "Secondary NIC IP prefix (cloud-init networkData)" "192.168.100" SECONDARY_IP_PREFIX
-
-# =============================================================================
-# 3. Storage Class
-# =============================================================================
-print_header "3. Storage Class"
-
-ask "Storage class for VM image upload" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
-
-# =============================================================================
-# 4. VDDK Image
-# =============================================================================
-if [ "${MTV_INSTALLED:-false}" = "true" ]; then
-    print_header "4. VDDK Image"
-
-    print_info "VDDK image path in internal registry (push manually before use)"
-    ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
-else
-    print_info "4. VDDK Image — MTV Operator not installed, skipping."
-    VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
-fi
 
 CONSOLE_ALLOWED_CIDRS="0.0.0.0/0"
 API_ALLOWED_CIDRS="0.0.0.0/0"
 
 # =============================================================================
-# 5. Fence Agents Remediation
+# [ Cluster ] 클러스터 기본 정보
 # =============================================================================
-if [ "${FAR_INSTALLED:-false}" = "true" ]; then
-    print_header "5. Fence Agents Remediation (FAR)"
+print_step_header "[ Cluster ]" "클러스터 기본 정보"
 
-    ask "IPMI/BMC IP address" "192.168.1.100" FENCE_AGENT_IP
-    ask "IPMI username" "admin" FENCE_AGENT_USER
-    ask "IPMI password" "password" FENCE_AGENT_PASS "true"
+ask "클러스터 base domain (예: example.com)" "${DETECTED_DOMAIN:-example.com}" CLUSTER_DOMAIN
+ask "API 서버 URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUSTER_API
+
+# =============================================================================
+# [01] Template — DataVolume / DataSource / Template 등록
+# =============================================================================
+print_step_header "[01]" "Template — DataVolume / DataSource / Template 등록"
+
+ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
+
+# =============================================================================
+# [02] Network — NNCP / NAD / VM 생성
+# =============================================================================
+print_step_header "[02]" "Network — NNCP / NAD / VM 생성"
+
+if [ -n "${DETECTED_IFACES:-}" ]; then
+    print_info "감지된 인터페이스 목록: $DETECTED_IFACES"
 else
-    print_info "5. Fence Agents Remediation — FAR Operator not installed, skipping."
-    FENCE_AGENT_IP="192.168.1.100"
-    FENCE_AGENT_USER="admin"
-    FENCE_AGENT_PASS="password"
+    print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
+fi
+ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
+ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
+echo ""
+print_info "VLAN ID는 02-network 방식 3(Linux Bridge + VLAN) 또는 4(OVN Localnet + VLAN) 선택 시 사용됩니다."
+ask "VLAN ID (VLAN filtering / OVN Localnet + VLAN 사용 시)" "100" VLAN_ID
+echo ""
+print_info "SECONDARY_IP_PREFIX: secondary NIC(eth1) cloud-init 정적 IP 할당 시 사용하는 네트워크 프리픽스입니다."
+print_info "  예) 192.168.100 → poc-network-vm: .10/24, NS1 VM: .11/24, NS2 VM: .12/24"
+ask "Secondary NIC IP 프리픽스 (cloud-init networkData)" "192.168.100" SECONDARY_IP_PREFIX
+
+# =============================================================================
+# [10] Monitoring — Grafana 대시보드
+# =============================================================================
+if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[10]" "Monitoring — Grafana 대시보드"
+    ask "Grafana admin 비밀번호" "grafana123" GRAFANA_ADMIN_PASS "true"
+else
+    print_info "[10] Monitoring — Grafana Operator 미설치, 건너뜁니다."
+    GRAFANA_ADMIN_PASS="grafana123"
 fi
 
 # =============================================================================
-# 6. Node Info
+# [11] MTV — VMware → OpenShift 마이그레이션
 # =============================================================================
-print_header "6. Node Info"
+if [ "${MTV_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[11]" "MTV — VMware → OpenShift 마이그레이션"
+    print_info "VDDK 이미지 경로 (내부 레지스트리에 직접 push 후 입력)"
+    ask "VDDK 이미지 경로" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
+else
+    print_info "[11] MTV — MTV Operator 미설치, 건너뜁니다."
+    VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
+fi
 
-# Auto-detect worker nodes
+# =============================================================================
+# [12] OADP — VM 백업/복원 (MinIO / ODF backend 자동 감지)
+# =============================================================================
+if [ "${OADP_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[12]" "OADP — VM 백업/복원 backend 자동 감지"
+    auto_detect_minio
+
+    if [ "${MINIO_FOUND}" = "false" ]; then
+        MINIO_ENDPOINT=""
+        MINIO_BUCKET=""
+        MINIO_ACCESS_KEY=""
+        MINIO_SECRET_KEY=""
+        print_info "MinIO 없음 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
+        if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+            auto_detect_odf
+        else
+            print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
+            ODF_S3_ENDPOINT=""
+            ODF_S3_BUCKET="velero"
+            ODF_S3_REGION="localstorage"
+            ODF_S3_ACCESS_KEY=""
+            ODF_S3_SECRET_KEY=""
+        fi
+    else
+        if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+            auto_detect_odf
+        else
+            ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
+            ODF_S3_BUCKET="velero"
+            ODF_S3_REGION="localstorage"
+            ODF_S3_ACCESS_KEY=""
+            ODF_S3_SECRET_KEY=""
+        fi
+    fi
+else
+    print_info "[12] OADP — OADP Operator 미설치, 건너뜁니다."
+    MINIO_ENDPOINT=""
+    MINIO_BUCKET="velero"
+    MINIO_ACCESS_KEY=""
+    MINIO_SECRET_KEY=""
+    ODF_S3_ENDPOINT=""
+    ODF_S3_BUCKET="velero"
+    ODF_S3_REGION="localstorage"
+    ODF_S3_ACCESS_KEY=""
+    ODF_S3_SECRET_KEY=""
+fi
+
+# =============================================================================
+# [13·14·16] Node — 노드 유지보수 / SNR / Add Node
+# =============================================================================
+print_step_header "[13·14·16]" "Node — 노드 유지보수 / SNR / Add Node"
+
 if check_oc 2>/dev/null; then
-    DETECTED_WORKERS=$(oc get nodes -l node-role.kubernetes.io/worker -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+    DETECTED_WORKERS=$(oc get nodes -l node-role.kubernetes.io/worker \
+        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
     if [ -n "$DETECTED_WORKERS" ]; then
-        print_info "Detected worker nodes: $DETECTED_WORKERS"
+        print_info "감지된 워커 노드: $DETECTED_WORKERS"
         FIRST_WORKER=$(echo $DETECTED_WORKERS | awk '{print $1}')
     else
         FIRST_WORKER="worker-0"
@@ -482,90 +531,53 @@ else
     FIRST_WORKER="worker-0"
 fi
 
-ask "Worker node names (space-separated)" "${DETECTED_WORKERS:-worker-0 worker-1 worker-2}" WORKER_NODES
-ask "Single node name for testing" "${FIRST_WORKER:-worker-0}" TEST_NODE
+ask "워커 노드 이름 목록 (공백으로 구분)" "${DETECTED_WORKERS:-worker-0 worker-1 worker-2}" WORKER_NODES
+ask "테스트용 단일 노드 이름" "${FIRST_WORKER:-worker-0}" TEST_NODE
 
 # =============================================================================
-# 7. Grafana
+# [15] FAR — IPMI/BMC 전원 재시작 복구
 # =============================================================================
-if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-    print_header "7. Grafana"
-
-    ask "Grafana admin password" "grafana123" GRAFANA_ADMIN_PASS "true"
+if [ "${FAR_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[15]" "FAR — Fence Agents Remediation (IPMI/BMC)"
+    ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
+    ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
+    ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
 else
-    print_info "7. Grafana — Grafana Operator not installed, skipping."
-    GRAFANA_ADMIN_PASS="grafana123"
+    print_info "[15] FAR — FAR Operator 미설치, 건너뜁니다."
+    FENCE_AGENT_IP="192.168.1.100"
+    FENCE_AGENT_USER="admin"
+    FENCE_AGENT_PASS="password"
 fi
 
 # =============================================================================
-# 8. OADP backend 자동 감지 (MinIO / ODF)
+# env.conf 저장
 # =============================================================================
-print_header "8. MinIO 자동 감지 (OADP backend)"
-auto_detect_minio
-
-if [ "${MINIO_FOUND}" = "false" ]; then
-    # MinIO 감지 실패 → MinIO 변수 비움, ODF로 대체
-    MINIO_ENDPOINT=""
-    MINIO_BUCKET=""
-    MINIO_ACCESS_KEY=""
-    MINIO_SECRET_KEY=""
-
-    print_info "MinIO 없음 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
-    if [ "${ODF_INSTALLED:-false}" = "true" ]; then
-        print_header "8-1. ODF 자동 감지 (OADP backend)"
-        auto_detect_odf
-    else
-        print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
-        ODF_S3_ENDPOINT=""
-        ODF_S3_BUCKET="velero"
-        ODF_S3_REGION="localstorage"
-        ODF_S3_ACCESS_KEY=""
-        ODF_S3_SECRET_KEY=""
-    fi
-else
-    # MinIO 감지 성공 → ODF는 추가 감지만 수행
-    if [ "${ODF_INSTALLED:-false}" = "true" ]; then
-        print_header "8-1. ODF 자동 감지 (OADP backend)"
-        auto_detect_odf
-    else
-        print_info "8-1. ODF — ODF Operator 미설치, 기본값 설정."
-        ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
-        ODF_S3_BUCKET="velero"
-        ODF_S3_REGION="localstorage"
-        ODF_S3_ACCESS_KEY=""
-        ODF_S3_SECRET_KEY=""
-    fi
-fi
-
-# =============================================================================
-# Save env.conf
-# =============================================================================
-print_header "Saving env.conf..."
+print_header "env.conf 저장 중..."
 
 cat > "$ENV_FILE" << EOF
 # =============================================================================
-# virt-poc-sample environment configuration
-# Auto-generated by setup.sh: $(date)
-# This file is listed in .gitignore and will not be committed to git.
+# virt-poc-sample 환경 설정 파일
+# setup.sh 에 의해 자동 생성됨: $(date)
+# 이 파일은 .gitignore 에 등록되어 있으므로 git에 커밋되지 않습니다.
 # =============================================================================
 
-# Cluster basic info
+# 클러스터 기본 정보
 CLUSTER_DOMAIN=${CLUSTER_DOMAIN}
 CLUSTER_API=${CLUSTER_API}
 
-# Network settings
+# 네트워크 설정
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 VLAN_ID=${VLAN_ID}
 SECONDARY_IP_PREFIX=${SECONDARY_IP_PREFIX}
 
-# Storage class
+# 스토리지클래스
 STORAGE_CLASS=${STORAGE_CLASS}
 
-# VDDK image
+# VDDK 이미지
 VDDK_IMAGE=${VDDK_IMAGE}
 
-# Console / API access CIDR
+# Console / API 접근 IP 제한
 CONSOLE_ALLOWED_CIDRS=${CONSOLE_ALLOWED_CIDRS}
 API_ALLOWED_CIDRS=${API_ALLOWED_CIDRS}
 
@@ -574,7 +586,7 @@ FENCE_AGENT_IP=${FENCE_AGENT_IP}
 FENCE_AGENT_USER=${FENCE_AGENT_USER}
 FENCE_AGENT_PASS=${FENCE_AGENT_PASS}
 
-# Node info
+# 노드 정보
 WORKER_NODES="${WORKER_NODES}"
 TEST_NODE=${TEST_NODE}
 
@@ -594,7 +606,7 @@ ODF_S3_REGION=${ODF_S3_REGION}
 ODF_S3_ACCESS_KEY=${ODF_S3_ACCESS_KEY}
 ODF_S3_SECRET_KEY=${ODF_S3_SECRET_KEY}
 
-# Operator installation status (auto-detected by setup.sh)
+# 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
 VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
@@ -610,21 +622,21 @@ SNR_INSTALLED=${SNR_INSTALLED:-false}
 ODF_INSTALLED=${ODF_INSTALLED:-false}
 EOF
 
-print_ok "env.conf created: $ENV_FILE"
+print_ok "env.conf 파일이 생성되었습니다: $ENV_FILE"
 
 # =============================================================================
-# Done
+# 완료 메시지
 # =============================================================================
 echo ""
-echo -e "${GREEN}============================================================${NC}"
-echo -e "${GREEN}  Setup complete!${NC}"
-echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}  설정 완료!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  Next steps:"
+echo -e "  다음 단계:"
 echo -e ""
-echo -e "  ${CYAN}[1] Install Operators${NC}"
+echo -e "  ${CYAN}[1] 오퍼레이터 설치${NC}"
 echo -e "      00-operator/README.md"
 echo -e ""
-echo -e "  ${CYAN}[2] Run make.sh${NC}"
+echo -e "  ${CYAN}[2] make.sh 실행${NC}"
 echo -e "      ./make.sh"
 echo ""

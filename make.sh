@@ -202,23 +202,25 @@ done
 # 스텝 설명
 step_desc() {
     case "$1" in
-        01-template)        echo "DataVolume 업로드 → DataSource → Template 등록" ;;
-        02-network)         echo "NNCP Linux Bridge + NAD + VM 생성" ;;
-        03-vm-management)   echo "네임스페이스 + NAD 준비" ;;
-        04-network-policy)  echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
-        05-resource-quota)  echo "ResourceQuota — CPU·Memory·Pod·PVC 제한" ;;
-        06-descheduler)     echo "Descheduler — VM 자동 재배치 (Operator 필요)" ;;
-        07-liveness-probe)  echo "VM Liveness Probe — HTTP·TCP·Exec" ;;
-        08-alert)           echo "VM Alert — PrometheusRule 알림" ;;
-        09-node-exporter)   echo "Node Exporter — 커스텀 메트릭 수집" ;;
-        10-monitoring)      echo "Grafana 모니터링 (Operator 필요)" ;;
-        11-mtv)             echo "MTV — VMware → OpenShift 마이그레이션 (Operator 필요)" ;;
-        12-oadp)            echo "OADP — VM 백업/복원 (Operator 필요)" ;;
-        13-node-maintenance) echo "Node Maintenance — 노드 유지보수 VM Migration (Operator 필요)" ;;
-        14-snr)             echo "SNR — 노드 자가 재시작 복구 (Operator 필요)" ;;
-        15-far)             echo "FAR — IPMI/BMC 전원 재시작 복구 (Operator 필요)" ;;
-        16-hyperconverged)  echo "HyperConverged — CPU Overcommit 설정" ;;
-        *)                  echo "$1" ;;
+        01-template)         echo "DataVolume 업로드 → DataSource → Template 등록" ;;
+        02-network)          echo "NNCP Linux Bridge + NAD + VM 생성" ;;
+        03-vm-management)    echo "네임스페이스 + NAD 준비" ;;
+        04-multi-tenant)     echo "멀티 테넌트 — 네임스페이스·사용자·RBAC·VM" ;;
+        05-network-policy)   echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
+        06-resource-quota)   echo "ResourceQuota — CPU·Memory·Pod·PVC 제한" ;;
+        07-descheduler)      echo "Descheduler — VM 자동 재배치 (Operator 필요)" ;;
+        08-liveness-probe)   echo "VM Liveness Probe — HTTP·TCP·Exec" ;;
+        09-alert)            echo "VM Alert — PrometheusRule 알림" ;;
+        10-node-exporter)    echo "Node Exporter — 커스텀 메트릭 수집" ;;
+        11-monitoring)       echo "Grafana 모니터링 (Operator 필요)" ;;
+        12-mtv)              echo "MTV — VMware → OpenShift 마이그레이션 (Operator 필요)" ;;
+        13-oadp)             echo "OADP — VM 백업/복원 (Operator 필요)" ;;
+        14-node-maintenance) echo "Node Maintenance — 노드 유지보수 VM Migration (Operator 필요)" ;;
+        15-snr)              echo "SNR — 노드 자가 재시작 복구 (Operator 필요)" ;;
+        16-far)              echo "FAR — IPMI/BMC 전원 재시작 복구 (Operator 필요)" ;;
+        17-add-node)         echo "워커 노드 제거 후 재조인" ;;
+        18-hyperconverged)   echo "HyperConverged — CPU Overcommit 설정" ;;
+        *)                   echo "$1" ;;
     esac
 }
 
@@ -382,19 +384,21 @@ echo ""
 ns_desc() {
     case "$1" in
         poc-vm-management)  echo "03 VM 생성·스토리지·네트워크·Live Migration 실습" ;;
-        poc-network-policy-1)       echo "04 NetworkPolicy 실습 — NS1 (Deny All / Allow Same NS)" ;;
-        poc-network-policy-2)       echo "04 NetworkPolicy 실습 — NS2 (Deny All / Allow Same NS)" ;;
-        poc-resource-quota) echo "05 ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한" ;;
-        poc-descheduler)    echo "06 Descheduler 실습 — 노드 과부하 시 VM 자동 재배치" ;;
-        poc-liveness-probe) echo "07 Liveness Probe 실습 — HTTP·TCP·Exec Probe 설정 및 자동 재시작" ;;
-        poc-alert)          echo "08 VM Alert 실습 — PrometheusRule VM 상태 알림" ;;
-        poc-node-exporter)  echo "09 Node Exporter 실습 — 커스텀 메트릭 수집" ;;
-        poc-monitoring)     echo "10 모니터링 실습 — Grafana·Dell·Hitachi 스토리지" ;;
-        poc-mtv)            echo "11 MTV 실습 — VMware → OpenShift 마이그레이션" ;;
-        poc-oadp)           echo "12 OADP 실습 — VM 백업/복원" ;;
-        poc-maintenance)    echo "13 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
-        poc-snr)            echo "14 SNR 실습 — NHC 감지 → 노드 자가 재시작 복구" ;;
-        poc-far)            echo "15 FAR 실습 — NHC 감지 → IPMI/BMC 전원 재시작 복구" ;;
+        tenant-ns1)               echo "04 멀티 테넌트 — NS1 (user1 admin / user3 view)" ;;
+        tenant-ns2)               echo "04 멀티 테넌트 — NS2 (user2 admin / user4 view)" ;;
+        poc-network-policy-1)     echo "05 NetworkPolicy 실습 — NS1 (Deny All / Allow Same NS)" ;;
+        poc-network-policy-2)     echo "05 NetworkPolicy 실습 — NS2 (Deny All / Allow Same NS)" ;;
+        poc-resource-quota)       echo "06 ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한" ;;
+        poc-descheduler)          echo "07 Descheduler 실습 — 노드 과부하 시 VM 자동 재배치" ;;
+        poc-liveness-probe)       echo "08 Liveness Probe 실습 — HTTP·TCP·Exec Probe 설정 및 자동 재시작" ;;
+        poc-alert)                echo "09 VM Alert 실습 — PrometheusRule VM 상태 알림" ;;
+        poc-node-exporter)        echo "10 Node Exporter 실습 — 커스텀 메트릭 수집" ;;
+        poc-monitoring)           echo "11 모니터링 실습 — Grafana·Dell·Hitachi 스토리지" ;;
+        poc-mtv)                  echo "12 MTV 실습 — VMware → OpenShift 마이그레이션" ;;
+        poc-oadp)                 echo "13 OADP 실습 — VM 백업/복원" ;;
+        poc-maintenance)          echo "14 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
+        poc-snr)                  echo "15 SNR 실습 — NHC 감지 → 노드 자가 재시작 복구" ;;
+        poc-far)                  echo "16 FAR 실습 — NHC 감지 → IPMI/BMC 전원 재시작 복구" ;;
         *)                  echo "" ;;
     esac
 }
