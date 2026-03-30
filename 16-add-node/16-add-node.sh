@@ -58,11 +58,36 @@ preflight() {
     fi
     print_ok "워커 노드 ${worker_count}개 확인"
 
-    # 마지막 워커 노드 (이름 기준 정렬)
-    TARGET_NODE=$(oc get nodes -l node-role.kubernetes.io/worker \
-        --no-headers -o custom-columns=NAME:.metadata.name \
-        | sort | tail -1)
-    print_ok "대상 노드: ${TARGET_NODE}"
+    # 워커 노드 목록 표시 및 선택
+    local workers
+    mapfile -t workers < <(oc get nodes -l node-role.kubernetes.io/worker \
+        --no-headers -o custom-columns=NAME:.metadata.name | sort)
+
+    echo ""
+    print_info "워커 노드 목록:"
+    echo ""
+    local idx=1
+    for node in "${workers[@]}"; do
+        local node_status
+        node_status=$(oc get node "$node" \
+            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+        [ "$node_status" = "True" ] && node_status="${GREEN}Ready${NC}" || node_status="${YELLOW}NotReady${NC}"
+        printf "    ${CYAN}[%d]${NC}  %-40s  " "$idx" "$node"
+        echo -e "$node_status"
+        idx=$((idx+1))
+    done
+    echo ""
+
+    local choice
+    read -r -p "  제거할 노드 번호를 선택하세요 [1-${#workers[@]}]: " choice
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#workers[@]}" ]; then
+        print_error "잘못된 선택입니다: ${choice}"
+        exit 1
+    fi
+
+    TARGET_NODE="${workers[$((choice-1))]}"
+    print_ok "선택된 대상 노드: ${TARGET_NODE}"
 }
 
 # =============================================================================
@@ -175,25 +200,40 @@ step_start_kubelet() {
     echo -e "  ${CYAN}sudo systemctl start kubelet${NC}"
     echo ""
     print_info "kubelet이 시작되면 기존 인증서를 사용해 API 서버에 재등록합니다."
-    print_info "CSR(인증서 서명 요청)이 생성될 수 있으며 승인이 필요합니다."
+    print_info "CSR(인증서 서명 요청)이 생성되면 수동으로 승인해야 합니다."
     echo ""
     read -r -p "  kubelet을 시작했으면 Enter를 누르세요..."
 
-    # CSR 승인
-    print_info "CSR 대기 및 자동 승인 (최대 3분)..."
+    # CSR 수동 승인 안내 (최대 3분 대기)
+    print_info "CSR 생성 및 노드 재조인 대기 중 (최대 3분)..."
     local retries=36
     local i=0
+    local last_pending=""
     while [ "$i" -lt "$retries" ]; do
         local pending_csrs
         pending_csrs=$(oc get csr --no-headers 2>/dev/null \
-            | awk '$4 ~ /Pending/ || $NF ~ /Pending/ {print $1}' || true)
+            | awk '$4 ~ /Pending/ || $NF ~ /Pending/ {print $1}' \
+            | tr '\n' ' ' | xargs || true)
 
-        if [ -n "$pending_csrs" ]; then
-            echo "$pending_csrs" | xargs -r oc adm certificate approve
-            print_ok "CSR 승인 완료: $(echo "$pending_csrs" | tr '\n' ' ')"
+        # 새로운 Pending CSR이 생긴 경우에만 안내 출력
+        if [ -n "$pending_csrs" ] && [ "$pending_csrs" != "$last_pending" ]; then
+            echo ""
+            print_warn "승인 대기 중인 CSR이 있습니다:"
+            echo ""
+            oc get csr
+            echo ""
+            print_info "다음 명령으로 CSR을 승인하세요:"
+            echo ""
+            echo -e "  ${CYAN}oc adm certificate approve ${pending_csrs}${NC}"
+            echo ""
+            echo -e "  또는 Pending 전체 승인:"
+            echo -e "  ${CYAN}oc get csr -o name | xargs oc adm certificate approve${NC}"
+            echo ""
+            read -r -p "  CSR 승인 후 Enter를 누르세요..."
+            last_pending="$pending_csrs"
         fi
 
-        # 노드가 나타났는지 확인
+        # 노드가 Ready 상태인지 확인
         if oc get node "$TARGET_NODE" &>/dev/null; then
             local status
             status=$(oc get node "$TARGET_NODE" \
