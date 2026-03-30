@@ -20,6 +20,7 @@ fi
 
 VM_NS="poc-vm-management"
 BRIDGE_NAME="${BRIDGE_NAME}"
+SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -121,8 +122,8 @@ kind: ConsoleYAMLSample
 metadata:
   name: poc-virtualmachine
 spec:
-  title: "POC VirtualMachine 생성 (Bridge 네트워크 연결)"
-  description: "poc 템플릿 기반 VM에 Linux Bridge NAD(${BRIDGE_NAME})를 보조 네트워크로 연결합니다. poc Template 및 NAD 등록 후 적용하세요."
+  title: "POC VirtualMachine 생성 (Bridge 네트워크 + cloud-init 정적 IP)"
+  description: "poc 템플릿 기반 VM에 Linux Bridge NAD(${BRIDGE_NAME})를 보조 네트워크로 연결하고, cloud-init으로 eth1 정적 IP를 설정합니다. poc Template 및 NAD 등록 후 적용하세요."
   targetResource:
     apiVersion: kubevirt.io/v1
     kind: VirtualMachine
@@ -146,6 +147,9 @@ spec:
                 - disk:
                     bus: virtio
                   name: rootdisk
+                - disk:
+                    bus: virtio
+                  name: cloudinit
               interfaces:
                 - masquerade: {}
                   model: virtio
@@ -165,6 +169,15 @@ spec:
             - dataVolume:
                 name: poc-vm
               name: rootdisk
+            - name: cloudinit
+              cloudInitNoCloud:
+                networkData: |
+                  version: 2
+                  ethernets:
+                    eth1:
+                      dhcp4: false
+                      addresses:
+                        - ${SECONDARY_IP_PREFIX}.10/24
       dataVolumeTemplates:
         - metadata:
             name: poc-vm

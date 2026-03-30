@@ -418,6 +418,10 @@ ask "NAD namespace" "poc-nad" NAD_NAMESPACE
 echo ""
 print_info "VLAN ID is used when 02-network mode 3 (Linux Bridge + VLAN) or 4 (OVN Localnet + VLAN) is selected."
 ask "VLAN ID (for VLAN filtering / OVN Localnet + VLAN)" "100" VLAN_ID
+echo ""
+print_info "SECONDARY_IP_PREFIX is the network prefix for secondary NIC (eth1) static IPs via cloud-init."
+print_info "  e.g. 192.168.100 → poc-network-vm: .10/24, NS1 VM: .11/24, NS2 VM: .12/24"
+ask "Secondary NIC IP prefix (cloud-init networkData)" "192.168.100" SECONDARY_IP_PREFIX
 
 # =============================================================================
 # 3. Storage Class
@@ -531,6 +535,7 @@ BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 NAD_NAMESPACE=${NAD_NAMESPACE}
 VLAN_ID=${VLAN_ID}
+SECONDARY_IP_PREFIX=${SECONDARY_IP_PREFIX}
 
 # Storage class
 STORAGE_CLASS=${STORAGE_CLASS}

@@ -28,6 +28,7 @@ fi
 
 BRIDGE_NAME="${BRIDGE_NAME:-br1}"
 OVN_LOCALNET_NAME="poc-localnet"
+SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
 # 모드별로 설정되는 변수
 POLICY_MODE=""
@@ -364,8 +365,30 @@ step_vms() {
           }
         ]'
 
+        # cloud-init networkData — secondary NIC(eth1) 정적 IP 설정
+        # NS1 → .11/24, NS2 → .12/24
+        local ip_suffix
+        if [ "$NS" = "$NS1" ]; then ip_suffix="11"; else ip_suffix="12"; fi
+        oc patch vm "$VM_NAME" -n "$NS" --type=json -p="[
+          {
+            \"op\": \"add\",
+            \"path\": \"/spec/template/spec/domain/devices/disks/-\",
+            \"value\": {\"name\": \"cloudinit\", \"disk\": {\"bus\": \"virtio\"}}
+          },
+          {
+            \"op\": \"add\",
+            \"path\": \"/spec/template/spec/volumes/-\",
+            \"value\": {
+              \"name\": \"cloudinit\",
+              \"cloudInitNoCloud\": {
+                \"networkData\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.${ip_suffix}/24\\n\"
+              }
+            }
+          }
+        ]"
+
         virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM_NAME 배포 완료 (namespace: $NS, eth1: ${NAD_NAME})"
+        print_ok "VM $VM_NAME 배포 완료 (namespace: $NS, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.${ip_suffix}/24)"
     done
 }
 

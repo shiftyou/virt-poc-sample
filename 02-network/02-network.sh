@@ -26,6 +26,7 @@ BRIDGE_INTERFACE="${BRIDGE_INTERFACE:-ens4}"
 BRIDGE_NAME="${BRIDGE_NAME:-br1}"
 NAD_NAMESPACE="${NAD_NAMESPACE:-poc-nad}"
 VLAN_ID="${VLAN_ID:-100}"
+SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
 # 모드별로 설정되는 변수
 NET_TYPE=""
@@ -444,8 +445,27 @@ step_vm() {
       }
     ]'
 
+    # cloud-init networkData — secondary NIC(eth1) 정적 IP 설정
+    oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p="[
+      {
+        \"op\": \"add\",
+        \"path\": \"/spec/template/spec/domain/devices/disks/-\",
+        \"value\": {\"name\": \"cloudinit\", \"disk\": {\"bus\": \"virtio\"}}
+      },
+      {
+        \"op\": \"add\",
+        \"path\": \"/spec/template/spec/volumes/-\",
+        \"value\": {
+          \"name\": \"cloudinit\",
+          \"cloudInitNoCloud\": {
+            \"networkData\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.10/24\\n\"
+          }
+        }
+      }
+    ]"
+
     virtctl start "$VM_NAME" -n "$NAD_NAMESPACE" 2>/dev/null || true
-    print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: ${NAD_NAME})"
+    print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.10/24)"
 }
 
 # =============================================================================

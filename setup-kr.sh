@@ -328,6 +328,10 @@ ask "NAD 네임스페이스" "poc-nad" NAD_NAMESPACE
 echo ""
 print_info "VLAN ID는 02-network 방식 3(Linux Bridge + VLAN) 또는 4(OVN Localnet + VLAN) 선택 시 사용됩니다."
 ask "VLAN ID (VLAN filtering / OVN Localnet + VLAN 사용 시)" "100" VLAN_ID
+echo ""
+print_info "SECONDARY_IP_PREFIX: secondary NIC(eth1) cloud-init 정적 IP 할당 시 사용하는 네트워크 프리픽스입니다."
+print_info "  예) 192.168.100 → poc-network-vm: .10/24, NS1 VM: .11/24, NS2 VM: .12/24"
+ask "Secondary NIC IP 프리픽스 (cloud-init networkData)" "192.168.100" SECONDARY_IP_PREFIX
 
 # =============================================================================
 # 3. 스토리지클래스
@@ -423,6 +427,7 @@ BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 NAD_NAMESPACE=${NAD_NAMESPACE}
 VLAN_ID=${VLAN_ID}
+SECONDARY_IP_PREFIX=${SECONDARY_IP_PREFIX}
 
 # 스토리지클래스
 STORAGE_CLASS=${STORAGE_CLASS}
