@@ -222,13 +222,9 @@ auto_detect_minio() {
     MINIO_ACCESS_KEY="minio"
     MINIO_SECRET_KEY="minio123"
 
-    # MinIO Operator가 만드는 Tenant CR에서 네임스페이스 탐색
+    # app=minio 레이블 서비스로 네임스페이스 탐색 (커뮤니티 standalone 배포 감지)
     local minio_ns
-    minio_ns=$(oc get tenant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
-    # 없으면 minio 레이블 서비스로 탐색
-    if [ -z "$minio_ns" ]; then
-        minio_ns=$(oc get svc -A -l app=minio -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
-    fi
+    minio_ns=$(oc get svc -A -l app=minio -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
 
     MINIO_FOUND=false
 
@@ -266,7 +262,7 @@ auto_detect_minio() {
         print_info "MinIO bucket   : ${MINIO_BUCKET}"
         print_info "MinIO accessKey: ${MINIO_ACCESS_KEY}"
     else
-        print_warn "MinIO Tenant/Service 감지 실패 → MinIO 설정을 건너뜁니다."
+        print_warn "MinIO Service(app=minio) 감지 실패 → MinIO 설정을 건너뜁니다."
     fi
 }
 
@@ -593,7 +589,8 @@ TEST_NODE=${TEST_NODE}
 # Grafana
 GRAFANA_ADMIN_PASS=${GRAFANA_ADMIN_PASS}
 
-# MinIO (OADP backend)
+# MinIO 커뮤니티 (OADP backend)
+MINIO_INSTALLED=${MINIO_FOUND:-false}
 MINIO_ENDPOINT=${MINIO_ENDPOINT}
 MINIO_BUCKET=${MINIO_BUCKET}
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}

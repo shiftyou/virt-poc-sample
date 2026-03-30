@@ -15,7 +15,7 @@
 #
 # 실행 조건:
 #   - OADP Operator 설치 필수 (기본 네임스페이스: openshift-adp)
-#   - 백엔드: MinIO Operator 설치 + 설정 완료, 또는 ODF Operator 설치
+#   - 백엔드: MinIO 커뮤니티 버전 배포 + 설정 완료, 또는 ODF Operator 설치
 #
 # 사용법: ./12-oadp.sh
 # =============================================================================
@@ -84,8 +84,8 @@ preflight() {
     [ "${ODF_INSTALLED:-false}"   = "true" ] && odf_ok=true
 
     if [ "$minio_ok" = "false" ] && [ "$odf_ok" = "false" ]; then
-        print_warn "MinIO 미설치 → 건너뜁니다."
-        print_warn "  MinIO : MinIO 설치 후 setup.sh 재실행"
+        print_warn "MinIO/ODF 백엔드 없음 → 건너뜁니다."
+        print_warn "  MinIO : MinIO 커뮤니티 버전 배포 후 setup.sh 재실행 (13-oadp.md 참조)"
         print_warn "  ODF   : ODF Operator 설치 후 setup.sh 재실행"
         exit 77
     fi

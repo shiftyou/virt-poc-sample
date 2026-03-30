@@ -21,16 +21,16 @@ OADP (Velero) — openshift-adp 네임스페이스
 ## 사전 조건
 
 - OADP Operator 설치 (`00-operator/oadp-operator.md` 참조) — **`openshift-adp` 네임스페이스에 설치**
-- S3 백엔드: **MinIO Operator** 또는 **ODF Operator** 중 하나 설치
+- S3 백엔드: **MinIO 커뮤니티 버전** 배포 또는 **ODF Operator** 설치 (아래 MinIO 설치 가이드 참조)
 - `setup.sh` 실행 완료 (MinIO/ODF 자동 감지 및 `env.conf` 저장)
 - `12-oadp.sh` 실행 완료
 
 ---
 
-## MinIO 커뮤니티 버전 설치 (S3 백엔드 대안)
+## MinIO 커뮤니티 버전 설치
 
-MinIO Operator 없이 단순 Deployment로 MinIO를 배포하는 방법입니다.
-소규모 POC 환경에서 ODF 없이 빠르게 S3 백엔드를 구성할 때 사용합니다.
+Operator 없이 단순 Deployment로 MinIO를 배포하는 방법입니다.
+ODF 없이 빠르게 S3 백엔드를 구성할 때 사용합니다.
 
 ### 1. Namespace 및 SCC 설정
 
@@ -190,9 +190,10 @@ mc ls poc --insecure
 
 ### 5. env.conf 수동 설정
 
-`setup.sh`가 MinIO Operator를 감지하지 못한 경우 아래 값을 `env.conf`에 직접 추가합니다.
+`setup.sh`가 MinIO를 감지하지 못한 경우 아래 값을 `env.conf`에 직접 추가합니다.
 
 ```bash
+MINIO_INSTALLED=true
 MINIO_ENDPOINT=https://minio-api-minio.apps.<cluster-domain>
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
