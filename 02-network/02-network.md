@@ -282,56 +282,54 @@ spec:
 ## VM 생성 (공통)
 
 선택된 NAD를 보조 네트워크로 연결하고, cloud-init으로 eth1 정적 IP를 설정합니다.
+VM은 2대(`poc-network-vm-1`, `poc-network-vm-2`) 배포됩니다.
 
-- `SECONDARY_IP_PREFIX` : `env.conf`에서 설정 (기본값 `192.168.100`)
-- poc-network-vm → `${SECONDARY_IP_PREFIX}.10/24`, gateway `${SECONDARY_IP_PREFIX}.1`
+| VM | eth1 IP |
+|----|---------|
+| poc-network-vm-1 | `SECONDARY_IP_PREFIX`.10/24 |
+| poc-network-vm-2 | `SECONDARY_IP_PREFIX`.11/24 |
+
+> `SECONDARY_IP_PREFIX` 기본값: `192.168.100` (env.conf에서 변경 가능)
+> `02-network.sh`가 아래 패치를 자동으로 수행합니다.
 
 ```bash
-VM_NAME="poc-network-vm"
 NAD_NAME="poc-bridge-nad"           # 선택한 방식에 따라 변경
 SECONDARY_IP_PREFIX="192.168.100"   # env.conf 값 사용
 
-# poc 템플릿으로 VM 생성
-oc process -n openshift poc -p NAME="${VM_NAME}" \
-  | oc apply -n "${NAD_NAMESPACE}" -f -
+for suffix in 1 2; do
+  VM_NAME="poc-network-vm-${suffix}"
 
-# 보조 NIC 추가
-oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p='[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/domain/devices/interfaces/-",
-    "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/networks/-",
-    "value": {"name": "bridge-net", "multus": {"networkName": "'"${NAD_NAME}"'"}}
-  }
-]'
+  # poc 템플릿으로 VM 생성
+  oc process -n openshift poc -p NAME="${VM_NAME}" \
+    | oc apply -n "${NAD_NAMESPACE}" -f -
 
-# cloud-init networkData — eth1 정적 IP 설정
-oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p="[
-  {
-    \"op\": \"add\",
-    \"path\": \"/spec/template/spec/domain/devices/disks/-\",
-    \"value\": {\"name\": \"cloudinit\", \"disk\": {\"bus\": \"virtio\"}}
-  },
-  {
-    \"op\": \"add\",
-    \"path\": \"/spec/template/spec/volumes/-\",
-    \"value\": {
-      \"name\": \"cloudinit\",
-      \"cloudInitNoCloud\": {
-        \"networkData\": \"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - ${SECONDARY_IP_PREFIX}.10/24\n    gateway4: ${SECONDARY_IP_PREFIX}.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"
-      }
+  # 보조 NIC 추가
+  oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p='[
+    {
+      "op": "add",
+      "path": "/spec/template/spec/domain/devices/interfaces/-",
+      "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
+    },
+    {
+      "op": "add",
+      "path": "/spec/template/spec/networks/-",
+      "value": {"name": "bridge-net", "multus": {"networkName": "'"${NAD_NAME}"'"}}
     }
-  }
-]"
+  ]'
 
-virtctl start "${VM_NAME}" -n "${NAD_NAMESPACE}"
+  # cloud-init networkData — eth1 정적 IP 설정 (vm-1: .10, vm-2: .11)
+  IP_SUFFIX=$([ "$suffix" = "1" ] && echo "10" || echo "11")
+  oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p="[
+    {\"op\":\"add\",\"path\":\"/spec/template/spec/domain/devices/disks/-\",
+      \"value\":{\"name\":\"cloudinit\",\"disk\":{\"bus\":\"virtio\"}}},
+    {\"op\":\"add\",\"path\":\"/spec/template/spec/volumes/-\",
+      \"value\":{\"name\":\"cloudinit\",\"cloudInitNoCloud\":{
+        \"networkData\":\"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - ${SECONDARY_IP_PREFIX}.${IP_SUFFIX}/24\n    gateway4: ${SECONDARY_IP_PREFIX}.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}}}
+  ]"
+
+  virtctl start "${VM_NAME}" -n "${NAD_NAMESPACE}"
+done
 ```
-
-> `02-network.sh`가 위 패치를 자동으로 수행합니다.
 
 ### cloud-init networkData 형식
 
@@ -351,14 +349,17 @@ ethernets:
 ### VM 네트워크 확인
 
 ```bash
-# VMI NIC 상태
-oc get vmi "${VM_NAME}" -n "${NAD_NAMESPACE}" \
-  -o jsonpath='{range .status.interfaces[*]}{.name}: {.ipAddress}{"\n"}{end}'
+# VMI NIC 상태 (두 VM 모두)
+for vm in poc-network-vm-1 poc-network-vm-2; do
+  echo "=== ${vm} ==="
+  oc get vmi "${vm}" -n "${NAD_NAMESPACE}" \
+    -o jsonpath='{range .status.interfaces[*]}{.name}: {.ipAddress}{"\n"}{end}'
+done
 
 # VM 콘솔 접속
-virtctl console "${VM_NAME}" -n "${NAD_NAMESPACE}"
+virtctl console poc-network-vm-1 -n "${NAD_NAMESPACE}"
 # ip addr show eth1
-# ip route
+# ping 192.168.100.11   ← vm-2로 통신 테스트
 ```
 
 ---

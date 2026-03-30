@@ -419,53 +419,62 @@ step_vm() {
         return
     fi
 
-    local VM_NAME="poc-network-vm"
+    local ip_suffixes=(10 11)
+    local idx=0
 
-    if oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" &>/dev/null; then
-        print_ok "VM $VM_NAME 이미 존재 — 스킵"
-        return
-    fi
+    for suffix in 1 2; do
+        local VM_NAME="poc-network-vm-${suffix}"
+        local ip_suffix="${ip_suffixes[$idx]}"
+        idx=$((idx + 1))
 
-    oc process -n openshift poc -p NAME="$VM_NAME" | \
-        sed 's/  running: false/  runStrategy: Halted/' > "vm-${VM_NAME}.yaml"
-    echo "생성된 파일: vm-${VM_NAME}.yaml"
-    oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
+        if oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" &>/dev/null; then
+            print_ok "VM $VM_NAME 이미 존재 — 스킵"
+            continue
+        fi
 
-    ensure_runstrategy "$VM_NAME" "$NAD_NAMESPACE"
-    oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p='[
-      {
-        "op": "add",
-        "path": "/spec/template/spec/domain/devices/interfaces/-",
-        "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
-      },
-      {
-        "op": "add",
-        "path": "/spec/template/spec/networks/-",
-        "value": {"name": "bridge-net", "multus": {"networkName": "'"${NAD_NAME}"'"}}
-      }
-    ]'
+        oc process -n openshift poc -p NAME="$VM_NAME" | \
+            sed 's/  running: false/  runStrategy: Halted/' > "vm-${VM_NAME}.yaml"
+        echo "생성된 파일: vm-${VM_NAME}.yaml"
+        oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
 
-    # cloud-init networkData — secondary NIC(eth1) 정적 IP 설정
-    oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p="[
-      {
-        \"op\": \"add\",
-        \"path\": \"/spec/template/spec/domain/devices/disks/-\",
-        \"value\": {\"name\": \"cloudinit\", \"disk\": {\"bus\": \"virtio\"}}
-      },
-      {
-        \"op\": \"add\",
-        \"path\": \"/spec/template/spec/volumes/-\",
-        \"value\": {
-          \"name\": \"cloudinit\",
-          \"cloudInitNoCloud\": {
-            \"networkData\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.10/24\\n    gateway4: ${SECONDARY_IP_PREFIX}.1\\n    nameservers:\\n      addresses:\\n        - 8.8.8.8\\n\"
+        ensure_runstrategy "$VM_NAME" "$NAD_NAMESPACE"
+
+        # 보조 NIC (NAD) 추가
+        oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p='[
+          {
+            "op": "add",
+            "path": "/spec/template/spec/domain/devices/interfaces/-",
+            "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
+          },
+          {
+            "op": "add",
+            "path": "/spec/template/spec/networks/-",
+            "value": {"name": "bridge-net", "multus": {"networkName": "'"${NAD_NAME}"'"}}
           }
-        }
-      }
-    ]"
+        ]'
 
-    virtctl start "$VM_NAME" -n "$NAD_NAMESPACE" 2>/dev/null || true
-    print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.10/24)"
+        # cloud-init networkData — secondary NIC(eth1) 정적 IP 설정
+        oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p="[
+          {
+            \"op\": \"add\",
+            \"path\": \"/spec/template/spec/domain/devices/disks/-\",
+            \"value\": {\"name\": \"cloudinit\", \"disk\": {\"bus\": \"virtio\"}}
+          },
+          {
+            \"op\": \"add\",
+            \"path\": \"/spec/template/spec/volumes/-\",
+            \"value\": {
+              \"name\": \"cloudinit\",
+              \"cloudInitNoCloud\": {
+                \"networkData\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.${ip_suffix}/24\\n    gateway4: ${SECONDARY_IP_PREFIX}.1\\n    nameservers:\\n      addresses:\\n        - 8.8.8.8\\n\"
+              }
+            }
+          }
+        ]"
+
+        virtctl start "$VM_NAME" -n "$NAD_NAMESPACE" 2>/dev/null || true
+        print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.${ip_suffix}/24)"
+    done
 }
 
 # =============================================================================
@@ -644,6 +653,10 @@ print_summary() {
     echo -e "  NNCE 상태 : ${CYAN}oc get nnce${NC}"
     echo -e "  NAD 확인  : ${CYAN}oc get net-attach-def -n ${NAD_NAMESPACE}${NC}"
     echo -e "  VM 상태   : ${CYAN}oc get vm,vmi -n ${NAD_NAMESPACE}${NC}"
+    echo ""
+    echo -e "  VM IP (eth1):"
+    echo -e "    poc-network-vm-1 : ${CYAN}${SECONDARY_IP_PREFIX}.10/24${NC}"
+    echo -e "    poc-network-vm-2 : ${CYAN}${SECONDARY_IP_PREFIX}.11/24${NC}"
     echo ""
 }
 
