@@ -168,6 +168,31 @@ oc get multinetworkpolicy -n poc-multi-network-policy-2
 
 ---
 
+## VM IP 할당 (cloud-init networkData)
+
+`04-network-policy.sh`가 VM 생성 시 cloud-init으로 eth1 정적 IP를 자동 설정합니다.
+
+| VM | 네임스페이스 | eth1 IP |
+|----|-------------|---------|
+| poc-vm-1 (NS1) | poc-network-policy-1 / poc-multi-network-policy-1 | `SECONDARY_IP_PREFIX`.11/24 |
+| poc-vm-2 (NS2) | poc-network-policy-2 / poc-multi-network-policy-2 | `SECONDARY_IP_PREFIX`.12/24 |
+
+> `SECONDARY_IP_PREFIX` 기본값: `192.168.100` (env.conf에서 변경 가능)
+
+```yaml
+# cloud-init networkData 형식 (version 2)
+version: 2
+ethernets:
+  eth1:
+    dhcp4: false
+    addresses:
+      - 192.168.100.11/24       # NS1 VM
+    gateway4: 192.168.100.1
+    nameservers:
+      addresses:
+        - 8.8.8.8
+```
+
 ## VM 상태 및 IP 확인
 
 ```bash

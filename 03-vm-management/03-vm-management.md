@@ -180,32 +180,54 @@ oc get vmi my-poc-vm -n poc-vm-management \
 보조 NIC(`eth1`)에 Static IP를 설정합니다.
 cloud-init으로 초기 설정하거나, VM 내부에서 직접 설정합니다.
 
-### 방법 A — cloud-init으로 초기 설정
+> `03-vm-management.sh`가 생성하는 ConsoleYAMLSample VM에는 cloud-init networkData가 이미 포함되어 있습니다.
 
-VM 생성 시 cloud-init에 네트워크 설정을 포함합니다.
+### 방법 A — cloud-init networkData로 초기 설정
+
+VM 생성 시 `cloudInitNoCloud.networkData`로 eth1 정적 IP를 설정합니다.
+`userData`(OS 설정)와 `networkData`(네트워크 설정)를 분리하여 관리하는 것이 권장됩니다.
 
 ```bash
+# VM 생성
 oc process -n openshift poc \
   -p NAME=my-poc-vm \
   | oc apply -n poc-vm-management -f -
 
-# VM 생성 후 cloud-init Secret 수정 (재시작 필요)
-oc patch vm my-poc-vm -n poc-vm-management --type=merge -p='{
-  "spec": {
-    "template": {
-      "spec": {
-        "volumes": [
-          {
-            "name": "cloudinitdisk",
-            "cloudInitNoCloud": {
-              "userData": "#cloud-config\nuser: cloud-user\npassword: changeme\nchpasswd: { expire: False }\nnetwork:\n  version: 2\n  ethernets:\n    eth1:\n      addresses:\n        - 192.168.100.10/24\n      gateway4: 192.168.100.1\n      nameservers:\n        addresses: [8.8.8.8, 8.8.4.4]\n        search: [poc.example.com]\n"
-            }
-          }
-        ]
+# cloud-init 디스크 + networkData 추가
+oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/domain/devices/disks/-",
+    "value": {"name": "cloudinit", "disk": {"bus": "virtio"}}
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/volumes/-",
+    "value": {
+      "name": "cloudinit",
+      "cloudInitNoCloud": {
+        "networkData": "version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - 192.168.100.10/24\n    gateway4: 192.168.100.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n"
       }
     }
   }
-}'
+]'
+
+virtctl start my-poc-vm -n poc-vm-management
+```
+
+cloud-init networkData 형식 (version 2):
+
+```yaml
+version: 2
+ethernets:
+  eth1:
+    dhcp4: false
+    addresses:
+      - 192.168.100.10/24
+    gateway4: 192.168.100.1
+    nameservers:
+      addresses:
+        - 8.8.8.8
 ```
 
 ### 방법 B — VM 내부에서 nmcli 설정
