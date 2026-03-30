@@ -178,6 +178,10 @@ spec:
                       dhcp4: false
                       addresses:
                         - ${SECONDARY_IP_PREFIX}.10/24
+                      gateway4: ${SECONDARY_IP_PREFIX}.1
+                      nameservers:
+                        addresses:
+                          - 8.8.8.8
       dataVolumeTemplates:
         - metadata:
             name: poc-vm
