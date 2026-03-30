@@ -27,6 +27,182 @@ OADP (Velero) — openshift-adp 네임스페이스
 
 ---
 
+## MinIO 커뮤니티 버전 설치 (S3 백엔드 대안)
+
+MinIO Operator 없이 단순 Deployment로 MinIO를 배포하는 방법입니다.
+소규모 POC 환경에서 ODF 없이 빠르게 S3 백엔드를 구성할 때 사용합니다.
+
+### 1. Namespace 및 SCC 설정
+
+```bash
+oc new-project minio
+
+# MinIO 컨테이너는 /data 디렉토리에 임의 UID로 쓰기가 필요 — anyuid 부여
+oc adm policy add-scc-to-user anyuid -z default -n minio
+```
+
+### 2. 리소스 배포
+
+```bash
+oc apply -f - <<'EOF'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              value: "minioadmin"
+            - name: MINIO_ROOT_PASSWORD
+              value: "minioadmin"
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minio-api
+  namespace: minio
+spec:
+  to:
+    kind: Service
+    name: minio
+  port:
+    targetPort: api
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minio-console
+  namespace: minio
+spec:
+  to:
+    kind: Service
+    name: minio
+  port:
+    targetPort: console
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+EOF
+```
+
+### 3. 기동 확인
+
+```bash
+oc get pods -n minio
+# NAME                     READY   STATUS    RESTARTS   AGE
+# minio-xxxxxxxxx-xxxxx    1/1     Running   0          1m
+
+oc get route -n minio
+# NAME            HOST/PORT                              ...
+# minio-api       minio-api-minio.apps.cluster.com       ...
+# minio-console   minio-console-minio.apps.cluster.com   ...
+```
+
+### 4. 버킷 생성
+
+#### 방법 A — MinIO Console (웹 UI)
+
+1. `https://minio-console-minio.apps.<cluster-domain>` 접속
+2. ID: `minioadmin` / PW: `minioadmin` 로 로그인
+3. **Buckets → Create Bucket** → 이름: `velero-backups`
+
+#### 방법 B — mc 클라이언트 (CLI)
+
+```bash
+# mc 설치 (bastion 또는 로컬)
+curl -sO https://dl.min.io/client/mc/release/linux-amd64/mc
+chmod +x mc && mv mc /usr/local/bin/
+
+# MinIO API Route 주소 확인
+MINIO_API=$(oc get route minio-api -n minio -o jsonpath='{.status.ingress[0].host}')
+
+# alias 등록
+mc alias set poc https://${MINIO_API} minioadmin minioadmin --insecure
+
+# 버킷 생성
+mc mb poc/velero-backups --insecure
+
+# 확인
+mc ls poc --insecure
+```
+
+### 5. env.conf 수동 설정
+
+`setup.sh`가 MinIO Operator를 감지하지 못한 경우 아래 값을 `env.conf`에 직접 추가합니다.
+
+```bash
+MINIO_ENDPOINT=https://minio-api-minio.apps.<cluster-domain>
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=velero-backups
+```
+
+이후 `13-oadp.sh`를 실행하면 이 값으로 DPA가 구성됩니다.
+
+---
+
 ## 구성 개요
 
 | 항목 | 값 |
