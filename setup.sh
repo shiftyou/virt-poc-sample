@@ -220,6 +220,8 @@ auto_detect_minio() {
         minio_ns=$(oc get svc -A -l app=minio -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
     fi
 
+    MINIO_FOUND=false
+
     if [ -n "$minio_ns" ]; then
         local minio_svc minio_port
         minio_svc=$(oc get svc -n "$minio_ns" -l app=minio \
@@ -249,12 +251,12 @@ auto_detect_minio() {
             [ -n "$sk" ] && MINIO_SECRET_KEY="$sk"
         fi
 
+        MINIO_FOUND=true
         print_info "MinIO endpoint : ${MINIO_ENDPOINT}  (ns: ${minio_ns})"
         print_info "MinIO bucket   : ${MINIO_BUCKET}"
         print_info "MinIO accessKey: ${MINIO_ACCESS_KEY}"
     else
-        MINIO_ENDPOINT="http://minio.poc-minio.svc.cluster.local:9000"
-        print_warn "MinIO Tenant/Service 감지 실패 → 기본값 사용: ${MINIO_ENDPOINT}"
+        print_warn "MinIO Tenant/Service 감지 실패 → MinIO 설정을 건너뜁니다."
     fi
 }
 
@@ -501,16 +503,38 @@ fi
 print_header "8. MinIO 자동 감지 (OADP backend)"
 auto_detect_minio
 
-if [ "${ODF_INSTALLED:-false}" = "true" ]; then
-    print_header "8-1. ODF 자동 감지 (OADP backend)"
-    auto_detect_odf
+if [ "${MINIO_FOUND}" = "false" ]; then
+    # MinIO 감지 실패 → MinIO 변수 비움, ODF로 대체
+    MINIO_ENDPOINT=""
+    MINIO_BUCKET=""
+    MINIO_ACCESS_KEY=""
+    MINIO_SECRET_KEY=""
+
+    print_info "MinIO 없음 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
+    if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+        print_header "8-1. ODF 자동 감지 (OADP backend)"
+        auto_detect_odf
+    else
+        print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
+        ODF_S3_ENDPOINT=""
+        ODF_S3_BUCKET="velero"
+        ODF_S3_REGION="localstorage"
+        ODF_S3_ACCESS_KEY=""
+        ODF_S3_SECRET_KEY=""
+    fi
 else
-    print_info "8-1. ODF — ODF Operator 미설치, 기본값 설정."
-    ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
-    ODF_S3_BUCKET="velero"
-    ODF_S3_REGION="localstorage"
-    ODF_S3_ACCESS_KEY=""
-    ODF_S3_SECRET_KEY=""
+    # MinIO 감지 성공 → ODF는 추가 감지만 수행
+    if [ "${ODF_INSTALLED:-false}" = "true" ]; then
+        print_header "8-1. ODF 자동 감지 (OADP backend)"
+        auto_detect_odf
+    else
+        print_info "8-1. ODF — ODF Operator 미설치, 기본값 설정."
+        ODF_S3_ENDPOINT="http://s3.openshift-storage.svc.cluster.local"
+        ODF_S3_BUCKET="velero"
+        ODF_S3_REGION="localstorage"
+        ODF_S3_ACCESS_KEY=""
+        ODF_S3_SECRET_KEY=""
+    fi
 fi
 
 # =============================================================================
