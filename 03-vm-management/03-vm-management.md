@@ -184,50 +184,56 @@ cloud-init으로 초기 설정하거나, VM 내부에서 직접 설정합니다.
 
 ### 방법 A — cloud-init networkData로 초기 설정
 
-VM 생성 시 `cloudInitNoCloud.networkData`로 eth1 정적 IP를 설정합니다.
-`userData`(OS 설정)와 `networkData`(네트워크 설정)를 분리하여 관리하는 것이 권장됩니다.
+VM 생성 시 기존 `cloudinitdisk` 볼륨에 `networkData`를 추가합니다.
+**VM 부팅 전에 반영해야** 하므로 `runStrategy: Halted` 상태에서 패치하고 이후 시작합니다.
 
 ```bash
-# VM 생성
+# VM 생성 (Halted 상태)
 oc process -n openshift poc \
   -p NAME=my-poc-vm \
+  | sed 's/  running: false/  runStrategy: Halted/' \
   | oc apply -n poc-vm-management -f -
 
-# cloud-init 디스크 + networkData 추가
-oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/domain/devices/disks/-",
-    "value": {"name": "cloudinit", "disk": {"bus": "virtio"}}
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/volumes/-",
-    "value": {
-      "name": "cloudinit",
-      "cloudInitNoCloud": {
-        "networkData": "version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - 192.168.100.10/24\n    gateway4: 192.168.100.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n"
-      }
-    }
-  }
-]'
+# cloudinitdisk 볼륨 인덱스 확인
+CI_IDX=$(oc get vm my-poc-vm -n poc-vm-management -o json | \
+  python3 -c "
+import json, sys
+vols = json.load(sys.stdin)['spec']['template']['spec']['volumes']
+print(next(i for i, v in enumerate(vols) if 'cloudInitNoCloud' in v))
+")
 
+# 기존 cloudinitdisk 에 networkData 추가 (VM 시작 전)
+oc patch vm my-poc-vm -n poc-vm-management --type=json -p="[
+  {\"op\": \"add\",
+   \"path\": \"/spec/template/spec/volumes/${CI_IDX}/cloudInitNoCloud/networkData\",
+   \"value\": \"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - 192.168.100.10/24\n    gateway4: 192.168.100.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}
+]"
+
+# VM 시작
 virtctl start my-poc-vm -n poc-vm-management
 ```
 
-cloud-init networkData 형식 (version 2):
+결과적으로 `cloudinitdisk` 볼륨은 아래와 같이 구성됩니다:
 
 ```yaml
-version: 2
-ethernets:
-  eth1:
-    dhcp4: false
-    addresses:
-      - 192.168.100.10/24
-    gateway4: 192.168.100.1
-    nameservers:
-      addresses:
-        - 8.8.8.8
+- name: cloudinitdisk
+  cloudInitNoCloud:
+    userData: |-
+      #cloud-config
+      user: cloud-user
+      password: changeme
+      chpasswd: { expire: False }
+    networkData: |
+      version: 2
+      ethernets:
+        eth1:
+          dhcp4: false
+          addresses:
+            - 192.168.100.10/24
+          gateway4: 192.168.100.1
+          nameservers:
+            addresses:
+              - 8.8.8.8
 ```
 
 ### 방법 B — VM 내부에서 nmcli 설정

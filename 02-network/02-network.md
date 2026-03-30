@@ -299,9 +299,11 @@ SECONDARY_IP_PREFIX="192.168.100"   # env.conf 값 사용
 
 for suffix in 1 2; do
   VM_NAME="poc-network-vm-${suffix}"
+  IP_SUFFIX=$([ "$suffix" = "1" ] && echo "10" || echo "11")
 
-  # poc 템플릿으로 VM 생성
+  # poc 템플릿으로 VM 생성 (Halted 상태)
   oc process -n openshift poc -p NAME="${VM_NAME}" \
+    | sed 's/  running: false/  runStrategy: Halted/' \
     | oc apply -n "poc-network" -f -
 
   # 보조 NIC 추가
@@ -318,33 +320,44 @@ for suffix in 1 2; do
     }
   ]'
 
-  # cloud-init networkData — eth1 정적 IP 설정 (vm-1: .10, vm-2: .11)
-  IP_SUFFIX=$([ "$suffix" = "1" ] && echo "10" || echo "11")
+  # 기존 cloudinitdisk 볼륨에 networkData 추가 (VM 시작 전)
+  CI_IDX=$(oc get vm "${VM_NAME}" -n "poc-network" -o json | \
+    python3 -c "
+import json, sys
+vols = json.load(sys.stdin)['spec']['template']['spec']['volumes']
+print(next(i for i, v in enumerate(vols) if 'cloudInitNoCloud' in v))
+")
   oc patch vm "${VM_NAME}" -n "poc-network" --type=json -p="[
-    {\"op\":\"add\",\"path\":\"/spec/template/spec/domain/devices/disks/-\",
-      \"value\":{\"name\":\"cloudinit\",\"disk\":{\"bus\":\"virtio\"}}},
-    {\"op\":\"add\",\"path\":\"/spec/template/spec/volumes/-\",
-      \"value\":{\"name\":\"cloudinit\",\"cloudInitNoCloud\":{
-        \"networkData\":\"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - ${SECONDARY_IP_PREFIX}.${IP_SUFFIX}/24\n    gateway4: ${SECONDARY_IP_PREFIX}.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}}}
+    {\"op\": \"add\",
+     \"path\": \"/spec/template/spec/volumes/${CI_IDX}/cloudInitNoCloud/networkData\",
+     \"value\": \"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - ${SECONDARY_IP_PREFIX}.${IP_SUFFIX}/24\n    gateway4: ${SECONDARY_IP_PREFIX}.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}
   ]"
 
   virtctl start "${VM_NAME}" -n "poc-network"
 done
 ```
 
-### cloud-init networkData 형식
+결과적으로 `cloudinitdisk` 볼륨:
 
 ```yaml
-version: 2
-ethernets:
-  eth1:
-    dhcp4: false
-    addresses:
-      - 192.168.100.10/24
-    gateway4: 192.168.100.1
-    nameservers:
-      addresses:
-        - 8.8.8.8
+- name: cloudinitdisk
+  cloudInitNoCloud:
+    userData: |-
+      #cloud-config
+      user: cloud-user
+      password: ...
+      chpasswd: { expire: False }
+    networkData: |
+      version: 2
+      ethernets:
+        eth1:
+          dhcp4: false
+          addresses:
+            - 192.168.100.10/24
+          gateway4: 192.168.100.1
+          nameservers:
+            addresses:
+              - 8.8.8.8
 ```
 
 ### VM 네트워크 확인

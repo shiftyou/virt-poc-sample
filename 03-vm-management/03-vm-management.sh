@@ -149,7 +149,7 @@ spec:
                   name: rootdisk
                 - disk:
                     bus: virtio
-                  name: cloudinit
+                  name: cloudinitdisk
               interfaces:
                 - masquerade: {}
                   model: virtio
@@ -169,8 +169,13 @@ spec:
             - dataVolume:
                 name: poc-vm
               name: rootdisk
-            - name: cloudinit
+            - name: cloudinitdisk
               cloudInitNoCloud:
+                userData: |-
+                  #cloud-config
+                  user: cloud-user
+                  password: changeme
+                  chpasswd: { expire: False }
                 networkData: |
                   version: 2
                   ethernets:

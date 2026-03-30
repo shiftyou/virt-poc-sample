@@ -365,27 +365,29 @@ step_vms() {
           }
         ]'
 
-        # cloud-init networkData — secondary NIC(eth1) 정적 IP 설정
+        # cloud-init networkData — 기존 cloudinitdisk 볼륨에 networkData 추가 (VM 시작 전)
         # NS1 → .11/24, NS2 → .12/24
         local ip_suffix
         if [ "$NS" = "$NS1" ]; then ip_suffix="11"; else ip_suffix="12"; fi
-        oc patch vm "$VM_NAME" -n "$NS" --type=json -p="[
-          {
-            \"op\": \"add\",
-            \"path\": \"/spec/template/spec/domain/devices/disks/-\",
-            \"value\": {\"name\": \"cloudinit\", \"disk\": {\"bus\": \"virtio\"}}
-          },
-          {
-            \"op\": \"add\",
-            \"path\": \"/spec/template/spec/volumes/-\",
-            \"value\": {
-              \"name\": \"cloudinit\",
-              \"cloudInitNoCloud\": {
-                \"networkData\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.${ip_suffix}/24\\n    gateway4: ${SECONDARY_IP_PREFIX}.1\\n    nameservers:\\n      addresses:\\n        - 8.8.8.8\\n\"
-              }
-            }
-          }
-        ]"
+
+        local ci_idx
+        ci_idx=$(oc get vm "$VM_NAME" -n "$NS" -o json | \
+            python3 -c "
+import json, sys
+vols = json.load(sys.stdin)['spec']['template']['spec']['volumes']
+print(next(i for i, v in enumerate(vols) if 'cloudInitNoCloud' in v))
+" 2>/dev/null || echo "")
+
+        if [ -n "$ci_idx" ]; then
+            oc patch vm "$VM_NAME" -n "$NS" --type=json -p="[
+              {\"op\": \"add\",
+               \"path\": \"/spec/template/spec/volumes/${ci_idx}/cloudInitNoCloud/networkData\",
+               \"value\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.${ip_suffix}/24\\n    gateway4: ${SECONDARY_IP_PREFIX}.1\\n    nameservers:\\n      addresses:\\n        - 8.8.8.8\\n\"}
+            ]"
+            print_ok "networkData 추가 완료 → cloudinitdisk (index: ${ci_idx})"
+        else
+            print_warn "cloudinitdisk 볼륨을 찾지 못했습니다. networkData 미설정."
+        fi
 
         virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
         print_ok "VM $VM_NAME 배포 완료 (namespace: $NS, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.${ip_suffix}/24)"
