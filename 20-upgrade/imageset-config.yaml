@@ -1,0 +1,27 @@
+# =============================================================================
+# oc-mirror v2 이미지셋 구성 파일
+# OpenShift 4.20 → 4.21 업그레이드용 이미지 미러링
+#
+# 사용법:
+#   oc mirror --config=imageset-config.yaml \
+#     --workspace file:///mnt/mirror \
+#     docker://REGISTRY_HOST/ocp4
+#
+# REGISTRY_HOST: 내부 레지스트리 주소 (예: registry.example.com)
+# =============================================================================
+
+apiVersion: mirror.openshift.io/v2alpha1
+kind: ImageSetConfiguration
+
+mirror:
+  platform:
+    # graph: true → 업그레이드 그래프 데이터 이미지도 함께 미러링
+    # UpdateService(OSUS)가 이 이미지를 사용해 업그레이드 경로를 제공함
+    graph: true
+    channels:
+      - name: stable-4.21
+        # 현재 버전(4.20.x)부터 목표 버전(4.21.x)까지의 업그레이드 경로 포함
+        minVersion: 4.20.0
+        maxVersion: 4.21.99
+        # shortestPath: 최단 업그레이드 경로만 미러링 (스토리지 절약)
+        shortestPath: true

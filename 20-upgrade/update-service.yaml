@@ -1,0 +1,59 @@
+# =============================================================================
+# OpenShift Update Service (OSUS / Cincinnati) 배포
+#
+# OSUS가 로컬 업그레이드 그래프를 제공하면 console에서 업그레이드 버튼이 표시됨.
+#
+# 적용 전에 REGISTRY_HOST를 실제 내부 레지스트리 주소로 교체하세요.
+# 예: sed -i 's|REGISTRY_HOST|registry.example.com|g' update-service.yaml
+# =============================================================================
+
+---
+# 1. 네임스페이스
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-update-service
+  annotations:
+    openshift.io/node-selector: ""
+  labels:
+    openshift.io/cluster-monitoring: "true"
+
+---
+# 2. OperatorGroup
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: update-service-operator-group
+  namespace: openshift-update-service
+spec:
+  targetNamespaces:
+    - openshift-update-service
+
+---
+# 3. Subscription (OLM을 통한 OSUS 오퍼레이터 설치)
+#    airgap 환경에서는 redhat-operators CatalogSource가 미러링되어 있어야 함
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: update-service-subscription
+  namespace: openshift-update-service
+spec:
+  channel: v1
+  name: cincinnati-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+
+---
+# 4. UpdateService CR
+#    - releases: oc-mirror가 미러링한 release-images 저장소 경로
+#    - graphDataImage: oc-mirror가 생성한 그래프 데이터 이미지
+#      (oc-mirror 출력 결과의 UpdateService 섹션에서 실제 경로 확인)
+apiVersion: updateservice.operator.openshift.io/v1
+kind: UpdateService
+metadata:
+  name: service
+  namespace: openshift-update-service
+spec:
+  replicas: 2
+  releases: REGISTRY_HOST/ocp4/openshift/release-images
+  graphDataImage: REGISTRY_HOST/ocp4/openshift/graph-image:latest
