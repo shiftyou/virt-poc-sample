@@ -3,7 +3,12 @@
 # 02-network.sh
 #
 # NNCP(NodeNetworkConfigurationPolicy) + NAD(NetworkAttachmentDefinition) 구성
-# 워커 노드에 Linux Bridge를 생성하고 VM용 보조 네트워크를 등록합니다.
+# 4가지 네트워크 방식 중 선택하여 VM용 보조 네트워크를 구성합니다.
+#
+#   1. Linux Bridge          — cnv-bridge CNI, NMState NNCP
+#   2. OVN Localnet          — ovn-k8s-cni-overlay, OVN bridge-mappings
+#   3. Linux Bridge + VLAN   — cnv-bridge CNI + VLAN ID, trunk port
+#   4. OVN Localnet + VLAN   — ovn-k8s-cni-overlay + vlanID
 #
 # 사용법: ./02-network.sh
 # =============================================================================
@@ -12,15 +17,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# env.conf 자동 로드 (단독 실행 시)
 ENV_FILE="${SCRIPT_DIR}/../env.conf"
 if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-BRIDGE_INTERFACE="${BRIDGE_INTERFACE}"
-BRIDGE_NAME="${BRIDGE_NAME}"
-NAD_NAMESPACE="${NAD_NAMESPACE}"
+BRIDGE_INTERFACE="${BRIDGE_INTERFACE:-ens4}"
+BRIDGE_NAME="${BRIDGE_NAME:-br1}"
+NAD_NAMESPACE="${NAD_NAMESPACE:-poc-nad}"
+VLAN_ID="${VLAN_ID:-100}"
+
+# 모드별로 설정되는 변수
+NET_TYPE=""
+NNCP_NAME=""
+NAD_NAME=""
+OVN_LOCALNET_NAME="poc-localnet"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -35,8 +46,6 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
 ensure_runstrategy() {
     local vm="$1" ns="$2"
     local running
@@ -52,23 +61,83 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
+# 네트워크 방식 선택
+# =============================================================================
+choose_mode() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  네트워크 구성 방식을 선택하세요${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${GREEN}1)${NC} Linux Bridge"
+    echo -e "     NNCP로 Linux Bridge 생성 → cnv-bridge CNI"
+    echo -e "     단순 L2 연결. 추가 스위치 설정 불필요."
+    echo ""
+    echo -e "  ${GREEN}2)${NC} OVN Localnet"
+    echo -e "     NNCP에 OVN bridge-mappings 추가 → ovn-k8s-cni-overlay CNI"
+    echo -e "     OVN이 스위칭 처리. 포트 보안·ACL 지원."
+    echo ""
+    echo -e "  ${GREEN}3)${NC} Linux Bridge + VLAN filtering"
+    echo -e "     NNCP로 Linux Bridge trunk 포트 구성 → cnv-bridge + VLAN ID"
+    echo -e "     단일 물리 NIC으로 여러 VLAN 분리."
+    echo ""
+    echo -e "  ${GREEN}4)${NC} OVN Localnet + VLAN"
+    echo -e "     OVN bridge-mappings → ovn-k8s-cni-overlay + vlanID"
+    echo -e "     OVN 포트 보안 + VLAN 분리 동시 활용."
+    echo ""
+    echo -e "  현재 설정:"
+    echo -e "    BRIDGE_INTERFACE : ${CYAN}${BRIDGE_INTERFACE}${NC}"
+    echo -e "    BRIDGE_NAME      : ${CYAN}${BRIDGE_NAME}${NC}"
+    echo -e "    NAD_NAMESPACE    : ${CYAN}${NAD_NAMESPACE}${NC}"
+    echo ""
+    read -r -p "  선택 [1-4]: " NET_TYPE
+
+    case "$NET_TYPE" in
+        1)
+            NNCP_NAME="poc-bridge-nncp"
+            NAD_NAME="poc-bridge-nad"
+            print_ok "선택: Linux Bridge"
+            ;;
+        2)
+            NNCP_NAME="poc-localnet-nncp"
+            NAD_NAME="poc-localnet-nad"
+            print_ok "선택: OVN Localnet"
+            ;;
+        3)
+            NNCP_NAME="poc-bridge-nncp"
+            NAD_NAME="poc-bridge-vlan-nad"
+            echo ""
+            read -r -p "  VLAN ID를 입력하세요 [기본값: ${VLAN_ID}]: " input_vlan
+            [ -n "$input_vlan" ] && VLAN_ID="$input_vlan"
+            print_ok "선택: Linux Bridge + VLAN ${VLAN_ID}"
+            ;;
+        4)
+            NNCP_NAME="poc-localnet-nncp"
+            NAD_NAME="poc-localnet-vlan-nad"
+            echo ""
+            read -r -p "  VLAN ID를 입력하세요 [기본값: ${VLAN_ID}]: " input_vlan
+            [ -n "$input_vlan" ] && VLAN_ID="$input_vlan"
+            print_ok "선택: OVN Localnet + VLAN ${VLAN_ID}"
+            ;;
+        *)
+            print_error "1~4 사이의 값을 입력하세요."
+            exit 1
+            ;;
+    esac
+}
+
+# =============================================================================
 # 사전 확인
 # =============================================================================
 preflight() {
     print_step "사전 확인"
 
-    print_ok "설정 확인"
-    print_info "  BRIDGE_INTERFACE : ${BRIDGE_INTERFACE}"
-    print_info "  BRIDGE_NAME      : ${BRIDGE_NAME}"
-    print_info "  NAD_NAMESPACE    : ${NAD_NAMESPACE}"
-
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "OpenShift에 로그인되어 있지 않습니다."
         exit 1
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # NMState Operator 확인 (env.conf의 NMSTATE_INSTALLED 우선, 없으면 직접 확인)
     if [ "${NMSTATE_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
             print_warn "Kubernetes NMState Operator 미설치 → 건너뜁니다."
@@ -78,16 +147,14 @@ preflight() {
     fi
     print_ok "NMState Operator 확인"
 
-    # NMState CR 확인
     if ! oc get nmstate 2>/dev/null | grep -q "."; then
-        print_warn "NMState CR 이 없습니다. NMState 인스턴스를 생성합니다..."
+        print_warn "NMState CR이 없습니다. NMState 인스턴스를 생성합니다..."
         cat > nmstate-cr.yaml <<'NMEOF'
 apiVersion: nmstate.io/v1
 kind: NMState
 metadata:
   name: nmstate
 NMEOF
-        echo "생성된 파일: nmstate-cr.yaml"
         oc apply -f nmstate-cr.yaml
         print_info "NMState 핸들러 준비 대기 중 (최대 60초)..."
         oc rollout status daemonset/nmstate-handler -n openshift-nmstate --timeout=60s 2>/dev/null || true
@@ -98,140 +165,253 @@ NMEOF
 }
 
 # =============================================================================
-# 1단계: NNCP — Linux Bridge 생성
+# NNCP — 방식별 적용
 # =============================================================================
-step_nncp() {
-    print_step "1/4  NNCP — Linux Bridge 생성 (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
-
-    # 기존 NNCP가 진행 중이면 포트 이름을 표시하고 완료될 때까지 대기 (admission webhook 충돌 방지)
-    if oc get nncp poc-bridge-nncp &>/dev/null; then
-        local pre_status
-        pre_status=$(oc get nncp poc-bridge-nncp \
-            -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
-        if [ "$pre_status" != "True" ]; then
-            # 현재 NNCP에 설정된 bridge port name 표시
-            local cur_port
-            cur_port=$(oc get nncp poc-bridge-nncp \
-                -o jsonpath='{.spec.desiredState.interfaces[0].bridge.port[0].name}' 2>/dev/null || echo "unknown")
-            local cur_bridge
-            cur_bridge=$(oc get nncp poc-bridge-nncp \
-                -o jsonpath='{.spec.desiredState.interfaces[0].name}' 2>/dev/null || echo "unknown")
-            print_info "기존 NNCP 가 노드에 전파 중입니다. 완료 대기 중..."
-            print_info "  Bridge     : ${cur_bridge}"
-            print_info "  Port (NIC) : ${cur_port}"
-            local w=0
-            while [ $w -lt 24 ]; do
-                pre_status=$(oc get nncp poc-bridge-nncp \
-                    -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
-                [ "$pre_status" = "True" ] && break
-                local reason
-                reason=$(oc get nncp poc-bridge-nncp \
-                    -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null || echo "")
-                printf "  [%d/24] 전파 대기 중... (%s)\r" "$((w+1))" "${reason:-Pending}"
-                sleep 5
-                w=$((w+1))
-            done
-            echo ""
-            if [ $w -eq 24 ]; then
-                print_warn "대기 시간 초과. oc get nnce 로 노드별 상태를 확인하세요."
-            else
-                print_ok "기존 NNCP 전파 완료 (bridge: ${cur_bridge}, port: ${cur_port})"
-            fi
-        fi
-    fi
-
-    cat > nncp-poc-bridge.yaml <<EOF
-apiVersion: nmstate.io/v1
-kind: NodeNetworkConfigurationPolicy
-metadata:
-  name: poc-bridge-nncp
-spec:
-  desiredState:
-    interfaces:
-      - bridge:
-          options:
-            stp:
-              enabled: false
-          port:
-            - name: ${BRIDGE_INTERFACE}
-        description: Linux bridge with ${BRIDGE_INTERFACE} as a port
-        ipv4:
-          dhcp: false
-          enabled: false
-        name: ${BRIDGE_NAME}
-        state: up
-        type: linux-bridge
-  nodeSelector:
-    node-role.kubernetes.io/worker: ''
-EOF
-    echo "생성된 파일: nncp-poc-bridge.yaml"
-    oc apply -f nncp-poc-bridge.yaml
-
+_wait_nncp() {
+    local name="$1"
     print_info "NNCP 적용 완료 — 노드 설정 전파 대기 중..."
-
-    local retries=24
-    local i=0
-    while [ $i -lt $retries ]; do
-        local status
-        status=$(oc get nncp poc-bridge-nncp \
+    local retries=24 i=0
+    while [ "$i" -lt "$retries" ]; do
+        local status reason
+        status=$(oc get nncp "$name" \
             -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || echo "")
         if [ "$status" = "True" ]; then
-            print_ok "NNCP poc-bridge-nncp Available"
+            print_ok "NNCP ${name} Available"
             break
         fi
-        local reason
-        reason=$(oc get nncp poc-bridge-nncp \
+        reason=$(oc get nncp "$name" \
             -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null || echo "")
         printf "  [%d/%d] 상태 대기 중... (%s)\r" "$((i+1))" "$retries" "${reason:-Pending}"
         sleep 5
         i=$((i+1))
     done
     echo ""
-
-    if [ $i -eq $retries ]; then
-        print_warn "NNCP 적용 시간 초과. 상태를 직접 확인하세요:"
-        echo "  oc get nncp"
-        echo "  oc get nnce"
+    if [ "$i" -eq "$retries" ]; then
+        print_warn "NNCP 적용 시간 초과. 상태를 직접 확인하세요: oc get nncp / oc get nnce"
     fi
-
-    echo ""
     print_info "노드별 적용 상태 (NNCE):"
-    oc get nnce 2>/dev/null | grep "poc-bridge-nncp" | \
+    oc get nnce 2>/dev/null | grep "$name" | \
         awk '{printf "    %-40s %s\n", $1, $2}' || true
 }
 
-# =============================================================================
-# 2단계: NAD — NetworkAttachmentDefinition 등록
-# =============================================================================
-step_nad() {
-    print_step "2/4  NAD — NetworkAttachmentDefinition 등록 (${NAD_NAMESPACE})"
+step_nncp_linux_bridge() {
+    print_step "1/4  NNCP — Linux Bridge (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
 
-    oc new-project "${NAD_NAMESPACE}" >/dev/null || \
-        oc project "${NAD_NAMESPACE}" >/dev/null || true
+    cat > nncp-${NNCP_NAME}.yaml <<EOF
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ${NNCP_NAME}
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ''
+  desiredState:
+    interfaces:
+      - name: ${BRIDGE_NAME}
+        description: Linux bridge with ${BRIDGE_INTERFACE} as a port
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: ${BRIDGE_INTERFACE}
+EOF
+    echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
+    oc apply -f nncp-${NNCP_NAME}.yaml
+    _wait_nncp "$NNCP_NAME"
+}
+
+step_nncp_linux_bridge_vlan() {
+    print_step "1/4  NNCP — Linux Bridge + VLAN trunk (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE}, VLAN ${VLAN_ID})"
+
+    cat > nncp-${NNCP_NAME}.yaml <<EOF
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ${NNCP_NAME}
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ''
+  desiredState:
+    interfaces:
+      - name: ${BRIDGE_NAME}
+        description: Linux bridge (VLAN trunk) with ${BRIDGE_INTERFACE} as a port
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: ${BRIDGE_INTERFACE}
+              vlan:
+                mode: trunk
+                trunk-tags:
+                  - id-range:
+                      min: 1
+                      max: 4094
+EOF
+    echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
+    oc apply -f nncp-${NNCP_NAME}.yaml
+    _wait_nncp "$NNCP_NAME"
+}
+
+step_nncp_ovn_localnet() {
+    print_step "1/4  NNCP — OVN Localnet bridge-mappings (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
+
+    cat > nncp-${NNCP_NAME}.yaml <<EOF
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ${NNCP_NAME}
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ''
+  desiredState:
+    interfaces:
+      - name: ${BRIDGE_NAME}
+        description: OVN Localnet bridge with ${BRIDGE_INTERFACE} as a port
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: ${BRIDGE_INTERFACE}
+    ovn:
+      bridge-mappings:
+        - localnet: ${OVN_LOCALNET_NAME}
+          bridge: ${BRIDGE_NAME}
+          state: present
+EOF
+    echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
+    oc apply -f nncp-${NNCP_NAME}.yaml
+    _wait_nncp "$NNCP_NAME"
+}
+
+step_nncp() {
+    case "$NET_TYPE" in
+        1) step_nncp_linux_bridge ;;
+        2) step_nncp_ovn_localnet ;;
+        3) step_nncp_linux_bridge_vlan ;;
+        4) step_nncp_ovn_localnet ;;
+    esac
+}
+
+# =============================================================================
+# NAD — 방식별 등록
+# =============================================================================
+_ensure_namespace() {
+    oc new-project "${NAD_NAMESPACE}" >/dev/null 2>&1 || \
+        oc project "${NAD_NAMESPACE}" >/dev/null 2>&1 || true
     print_ok "네임스페이스: ${NAD_NAMESPACE}"
+}
 
-    cat > nad-poc-bridge.yaml <<EOF
+step_nad_linux_bridge() {
+    print_step "2/4  NAD — Linux Bridge (cnv-bridge)"
+    _ensure_namespace
+
+    cat > nad-${NAD_NAME}.yaml <<EOF
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
-  name: poc-bridge-nad
+  name: ${NAD_NAME}
   namespace: ${NAD_NAMESPACE}
   annotations:
     k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
 spec:
-  config: '{"cniVersion":"0.3.1","name":"poc-bridge-nad","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
+  config: '{"cniVersion":"0.3.1","name":"${NAD_NAME}","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
 EOF
-    echo "생성된 파일: nad-poc-bridge.yaml"
-    oc apply -f nad-poc-bridge.yaml
+    echo "생성된 파일: nad-${NAD_NAME}.yaml"
+    oc apply -f nad-${NAD_NAME}.yaml
+    print_ok "NAD ${NAD_NAME} 등록 완료"
+}
 
-    print_ok "NAD poc-bridge-nad 등록 완료"
+step_nad_linux_bridge_vlan() {
+    print_step "2/4  NAD — Linux Bridge + VLAN ${VLAN_ID} (cnv-bridge)"
+    _ensure_namespace
+
+    cat > nad-${NAD_NAME}.yaml <<EOF
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ${NAD_NAME}
+  namespace: ${NAD_NAMESPACE}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
+spec:
+  config: '{"cniVersion":"0.3.1","name":"${NAD_NAME}","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","vlan":${VLAN_ID},"macspoofchk":true,"ipam":{}}'
+EOF
+    echo "생성된 파일: nad-${NAD_NAME}.yaml"
+    oc apply -f nad-${NAD_NAME}.yaml
+    print_ok "NAD ${NAD_NAME} 등록 완료 (VLAN ${VLAN_ID})"
+}
+
+step_nad_ovn_localnet() {
+    print_step "2/4  NAD — OVN Localnet (ovn-k8s-cni-overlay)"
+    _ensure_namespace
+
+    cat > nad-${NAD_NAME}.yaml <<EOF
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ${NAD_NAME}
+  namespace: ${NAD_NAMESPACE}
+spec:
+  config: '{"cniVersion":"0.3.1","name":"${OVN_LOCALNET_NAME}","type":"ovn-k8s-cni-overlay","topology":"localnet","netAttachDefName":"${NAD_NAMESPACE}/${NAD_NAME}"}'
+EOF
+    echo "생성된 파일: nad-${NAD_NAME}.yaml"
+    oc apply -f nad-${NAD_NAME}.yaml
+    print_ok "NAD ${NAD_NAME} 등록 완료"
+}
+
+step_nad_ovn_localnet_vlan() {
+    print_step "2/4  NAD — OVN Localnet + VLAN ${VLAN_ID} (ovn-k8s-cni-overlay)"
+    _ensure_namespace
+
+    cat > nad-${NAD_NAME}.yaml <<EOF
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ${NAD_NAME}
+  namespace: ${NAD_NAMESPACE}
+spec:
+  config: '{"cniVersion":"0.3.1","name":"${OVN_LOCALNET_NAME}","type":"ovn-k8s-cni-overlay","topology":"localnet","netAttachDefName":"${NAD_NAMESPACE}/${NAD_NAME}","vlanID":${VLAN_ID}}'
+EOF
+    echo "생성된 파일: nad-${NAD_NAME}.yaml"
+    oc apply -f nad-${NAD_NAME}.yaml
+    print_ok "NAD ${NAD_NAME} 등록 완료 (VLAN ${VLAN_ID})"
+}
+
+step_nad() {
+    case "$NET_TYPE" in
+        1) step_nad_linux_bridge ;;
+        2) step_nad_ovn_localnet ;;
+        3) step_nad_linux_bridge_vlan ;;
+        4) step_nad_ovn_localnet_vlan ;;
+    esac
 }
 
 # =============================================================================
-# 3단계: VM 생성 (poc 템플릿 + NAD 보조 네트워크)
+# VM 생성 (poc 템플릿 + 선택된 NAD)
 # =============================================================================
 step_vm() {
-    print_step "3/4  VM 생성 (poc 템플릿 + poc-bridge-nad)"
+    print_step "3/4  VM 생성 (poc 템플릿 + ${NAD_NAME})"
 
     if ! oc get template poc -n openshift &>/dev/null; then
         print_warn "poc Template 없음 — VM 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
@@ -245,13 +425,11 @@ step_vm() {
         return
     fi
 
-    # poc 템플릿으로 VM 생성
     oc process -n openshift poc -p NAME="$VM_NAME" | \
         sed 's/  running: false/  runStrategy: Halted/' > "vm-${VM_NAME}.yaml"
     echo "생성된 파일: vm-${VM_NAME}.yaml"
     oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
 
-    # 보조 NIC (poc-bridge-nad) 추가 패치
     ensure_runstrategy "$VM_NAME" "$NAD_NAMESPACE"
     oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p='[
       {
@@ -262,48 +440,40 @@ step_vm() {
       {
         "op": "add",
         "path": "/spec/template/spec/networks/-",
-        "value": {"name": "bridge-net", "multus": {"networkName": "poc-bridge-nad"}}
+        "value": {"name": "bridge-net", "multus": {"networkName": "'"${NAD_NAME}"'"}}
       }
     ]'
 
     virtctl start "$VM_NAME" -n "$NAD_NAMESPACE" 2>/dev/null || true
-    print_ok "VM $VM_NAME 생성 완료 (eth0: masquerade, eth1: poc-bridge-nad)"
+    print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: ${NAD_NAME})"
 }
 
 # =============================================================================
-# 4단계: ConsoleYAMLSample 등록
+# ConsoleYAMLSample 등록
 # =============================================================================
 step_consoleyamlsamples() {
     print_step "4/4  ConsoleYAMLSample 등록"
 
-    cat > consoleyamlsample-nncp.yaml <<EOF
-apiVersion: console.openshift.io/v1
-kind: ConsoleYAMLSample
-metadata:
-  name: poc-bridge-nncp
-spec:
-  title: "POC Linux Bridge NNCP 생성"
-  description: "워커 노드에 Linux Bridge(${BRIDGE_NAME})를 생성합니다. NMState Operator 설치 후 적용하세요. 인터페이스 이름(${BRIDGE_INTERFACE})을 환경에 맞게 수정하세요."
-  targetResource:
-    apiVersion: nmstate.io/v1
-    kind: NodeNetworkConfigurationPolicy
-  yaml: |
+    # NNCP 샘플 — 방식별
+    local nncp_title nncp_desc nncp_yaml
+    case "$NET_TYPE" in
+        1)
+            nncp_title="POC Linux Bridge NNCP"
+            nncp_desc="워커 노드에 Linux Bridge(${BRIDGE_NAME})를 생성합니다."
+            nncp_yaml="$(cat <<YAML
     apiVersion: nmstate.io/v1
     kind: NodeNetworkConfigurationPolicy
     metadata:
-      name: poc-bridge-nncp
+      name: ${NNCP_NAME}
     spec:
       nodeSelector:
         node-role.kubernetes.io/worker: ""
       desiredState:
         interfaces:
           - name: ${BRIDGE_NAME}
-            description: "POC VM용 Linux Bridge (${BRIDGE_INTERFACE} 기반)"
             type: linux-bridge
             state: up
             ipv4:
-              enabled: false
-            ipv6:
               enabled: false
             bridge:
               options:
@@ -311,19 +481,111 @@ spec:
                   enabled: false
               port:
                 - name: ${BRIDGE_INTERFACE}
+YAML
+)"
+            ;;
+        2|4)
+            nncp_title="POC OVN Localnet NNCP"
+            nncp_desc="OVN bridge-mappings로 ${BRIDGE_NAME}을 ${OVN_LOCALNET_NAME}에 매핑합니다."
+            nncp_yaml="$(cat <<YAML
+    apiVersion: nmstate.io/v1
+    kind: NodeNetworkConfigurationPolicy
+    metadata:
+      name: ${NNCP_NAME}
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      desiredState:
+        interfaces:
+          - name: ${BRIDGE_NAME}
+            type: linux-bridge
+            state: up
+            ipv4:
+              enabled: false
+            bridge:
+              options:
+                stp:
+                  enabled: false
+              port:
+                - name: ${BRIDGE_INTERFACE}
+        ovn:
+          bridge-mappings:
+            - localnet: ${OVN_LOCALNET_NAME}
+              bridge: ${BRIDGE_NAME}
+              state: present
+YAML
+)"
+            ;;
+        3)
+            nncp_title="POC Linux Bridge VLAN trunk NNCP"
+            nncp_desc="워커 노드에 VLAN trunk 포트로 Linux Bridge(${BRIDGE_NAME})를 생성합니다."
+            nncp_yaml="$(cat <<YAML
+    apiVersion: nmstate.io/v1
+    kind: NodeNetworkConfigurationPolicy
+    metadata:
+      name: ${NNCP_NAME}
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      desiredState:
+        interfaces:
+          - name: ${BRIDGE_NAME}
+            type: linux-bridge
+            state: up
+            ipv4:
+              enabled: false
+            bridge:
+              options:
+                stp:
+                  enabled: false
+              port:
+                - name: ${BRIDGE_INTERFACE}
+                  vlan:
+                    mode: trunk
+                    trunk-tags:
+                      - id-range:
+                          min: 1
+                          max: 4094
+YAML
+)"
+            ;;
+    esac
+
+    cat > consoleyamlsample-nncp.yaml <<EOF
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: ${NNCP_NAME}
+spec:
+  title: "${nncp_title}"
+  description: "${nncp_desc}"
+  targetResource:
+    apiVersion: nmstate.io/v1
+    kind: NodeNetworkConfigurationPolicy
+  yaml: |
+${nncp_yaml}
 EOF
     echo "생성된 파일: consoleyamlsample-nncp.yaml"
     oc apply -f consoleyamlsample-nncp.yaml
-    print_ok "ConsoleYAMLSample poc-bridge-nncp 등록 완료"
+    print_ok "ConsoleYAMLSample ${NNCP_NAME} 등록 완료"
+
+    # NAD 샘플
+    local nad_config
+    case "$NET_TYPE" in
+        1) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${NAD_NAME}\",\"type\":\"cnv-bridge\",\"bridge\":\"${BRIDGE_NAME}\",\"macspoofchk\":true,\"ipam\":{}}" ;;
+        2) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${OVN_LOCALNET_NAME}\",\"type\":\"ovn-k8s-cni-overlay\",\"topology\":\"localnet\",\"netAttachDefName\":\"${NAD_NAMESPACE}/${NAD_NAME}\"}" ;;
+        3) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${NAD_NAME}\",\"type\":\"cnv-bridge\",\"bridge\":\"${BRIDGE_NAME}\",\"vlan\":${VLAN_ID},\"macspoofchk\":true,\"ipam\":{}}" ;;
+        4) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${OVN_LOCALNET_NAME}\",\"type\":\"ovn-k8s-cni-overlay\",\"topology\":\"localnet\",\"netAttachDefName\":\"${NAD_NAMESPACE}/${NAD_NAME}\",\"vlanID\":${VLAN_ID}}" ;;
+    esac
 
     cat > consoleyamlsample-nad.yaml <<EOF
 apiVersion: console.openshift.io/v1
 kind: ConsoleYAMLSample
 metadata:
-  name: poc-bridge-nad
+  name: ${NAD_NAME}
 spec:
-  title: "POC Linux Bridge NAD 등록"
-  description: "NNCP로 생성된 Linux Bridge(${BRIDGE_NAME})를 VM 보조 네트워크로 등록합니다. NNCP가 Available 상태인 후 적용하세요."
+  title: "POC NAD — ${NAD_NAME}"
+  description: "NNCP 적용 후 VM 보조 네트워크로 등록합니다. (방식: $(echo "$NET_TYPE" | sed 's/1/Linux Bridge/;s/2/OVN Localnet/;s/3/Linux Bridge+VLAN/;s/4/OVN Localnet+VLAN/'))"
   targetResource:
     apiVersion: k8s.cni.cncf.io/v1
     kind: NetworkAttachmentDefinition
@@ -331,25 +593,31 @@ spec:
     apiVersion: k8s.cni.cncf.io/v1
     kind: NetworkAttachmentDefinition
     metadata:
-      name: poc-bridge-nad
-      namespace: poc-vm-management
-      annotations:
-        k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
+      name: ${NAD_NAME}
+      namespace: ${NAD_NAMESPACE}
     spec:
-      config: '{"cniVersion":"0.3.1","name":"poc-bridge-nad","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
+      config: '${nad_config}'
 EOF
     echo "생성된 파일: consoleyamlsample-nad.yaml"
     oc apply -f consoleyamlsample-nad.yaml
-    print_ok "ConsoleYAMLSample poc-bridge-nad 등록 완료"
+    print_ok "ConsoleYAMLSample ${NAD_NAME} 등록 완료"
 }
 
 # =============================================================================
 # 완료 요약
 # =============================================================================
 print_summary() {
+    local mode_label
+    case "$NET_TYPE" in
+        1) mode_label="Linux Bridge" ;;
+        2) mode_label="OVN Localnet" ;;
+        3) mode_label="Linux Bridge + VLAN ${VLAN_ID}" ;;
+        4) mode_label="OVN Localnet + VLAN ${VLAN_ID}" ;;
+    esac
+
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! NNCP + NAD 구성 및 VM 생성이 완료되었습니다.${NC}"
+    echo -e "${GREEN}  완료! 네트워크 구성 (${mode_label})${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  NNCP 상태 : ${CYAN}oc get nncp${NC}"
@@ -365,9 +633,10 @@ print_summary() {
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  네트워크 구성: NNCP + NAD + VM${NC}"
+    echo -e "${CYAN}  02-network: NNCP + NAD + VM 구성${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
+    choose_mode
     preflight
     step_nncp
     step_nad
