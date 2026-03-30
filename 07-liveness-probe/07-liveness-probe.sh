@@ -156,7 +156,8 @@ step_service() {
     print_info "httpd 미설치 시 VM 접속 후 간이 서버 실행:"
     echo -e "    ${CYAN}virtctl console $VM_NAME -n $NS${NC}"
     echo -e "    ${CYAN}# VM 내부에서:${NC}"
-    echo -e "    ${CYAN}python3 -m http.server 80 &${NC}"
+    echo -e "    ${CYAN}nohup python3 -m http.server 80 &>/dev/null &${NC}"
+    echo -e "    ${CYAN}# python3 미설치 시: nohup nc -lk -p 80 -e /bin/echo &>/dev/null &${NC}"
 }
 
 # =============================================================================
@@ -172,7 +173,7 @@ print_summary() {
     echo -e "    ${CYAN}oc get vm,vmi -n ${NS}${NC}"
     echo ""
     echo -e "  Probe 상태 확인:"
-    echo -e "    ${CYAN}oc get vmi $VM_NAME -n $NS -o jsonpath='{.status.conditions}' | python3 -m json.tool${NC}"
+    echo -e "    ${CYAN}oc get vmi $VM_NAME -n $NS -o jsonpath='{range .status.conditions[*]}{.type}: {.status}  {.message}{\"\\n\"}{end}'${NC}"
     echo ""
     echo -e "  VM 콘솔 접속:"
     echo -e "    ${CYAN}virtctl console $VM_NAME -n $NS${NC}"

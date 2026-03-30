@@ -68,8 +68,7 @@ step_show_current() {
     echo ""
     echo -e "  ${CYAN}── Live Migration ──${NC}"
     oc get hyperconverged "$HCO_NAME" -n "$HCO_NS" \
-        -o jsonpath='{.spec.liveMigrationConfig}' 2>/dev/null | \
-        python3 -m json.tool 2>/dev/null || \
+        -o jsonpath='{range .spec.liveMigrationConfig}{@}{"\n"}{end}' 2>/dev/null || \
         echo "  (기본값 사용 중)"
 
     echo ""
