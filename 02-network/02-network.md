@@ -22,7 +22,8 @@ NNCP(NodeNetworkConfigurationPolicy)와 NAD(NetworkAttachmentDefinition)를 구�
 ## 사전 조건
 
 - NMState Operator 설치 및 NMState CR 생성 (`00-operator/nmstate-operator.md` 참조)
-- `env.conf`에 `BRIDGE_INTERFACE`, `BRIDGE_NAME`, `NAD_NAMESPACE`, `SECONDARY_IP_PREFIX` 설정
+- `env.conf`에 `BRIDGE_INTERFACE`, `BRIDGE_NAME`, `SECONDARY_IP_PREFIX` 설정
+- 네임스페이스 : `poc-network` (고정)
 
 ```bash
 # NMState Operator 상태
@@ -82,7 +83,7 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: poc-bridge-nad
-  namespace: poc-nad
+  namespace: poc-network
   annotations:
     k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/br1
 spec:
@@ -152,14 +153,14 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: poc-localnet-nad
-  namespace: poc-nad
+  namespace: poc-network
 spec:
   config: '{
     "cniVersion": "0.3.1",
     "name": "poc-localnet",           # NNCP bridge-mappings localnet 값과 일치
     "type": "ovn-k8s-cni-overlay",
     "topology": "localnet",
-    "netAttachDefName": "poc-nad/poc-localnet-nad"
+    "netAttachDefName": "poc-network/poc-localnet-nad"
   }'
 ```
 
@@ -220,7 +221,7 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: poc-bridge-vlan-nad
-  namespace: poc-nad
+  namespace: poc-network
   annotations:
     k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/br1
 spec:
@@ -265,14 +266,14 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: poc-localnet-vlan-nad
-  namespace: poc-nad
+  namespace: poc-network
 spec:
   config: '{
     "cniVersion": "0.3.1",
     "name": "poc-localnet",
     "type": "ovn-k8s-cni-overlay",
     "topology": "localnet",
-    "netAttachDefName": "poc-nad/poc-localnet-vlan-nad",
+    "netAttachDefName": "poc-network/poc-localnet-vlan-nad",
     "vlanID": 100
   }'
 ```
@@ -301,10 +302,10 @@ for suffix in 1 2; do
 
   # poc 템플릿으로 VM 생성
   oc process -n openshift poc -p NAME="${VM_NAME}" \
-    | oc apply -n "${NAD_NAMESPACE}" -f -
+    | oc apply -n "poc-network" -f -
 
   # 보조 NIC 추가
-  oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p='[
+  oc patch vm "${VM_NAME}" -n "poc-network" --type=json -p='[
     {
       "op": "add",
       "path": "/spec/template/spec/domain/devices/interfaces/-",
@@ -319,7 +320,7 @@ for suffix in 1 2; do
 
   # cloud-init networkData — eth1 정적 IP 설정 (vm-1: .10, vm-2: .11)
   IP_SUFFIX=$([ "$suffix" = "1" ] && echo "10" || echo "11")
-  oc patch vm "${VM_NAME}" -n "${NAD_NAMESPACE}" --type=json -p="[
+  oc patch vm "${VM_NAME}" -n "poc-network" --type=json -p="[
     {\"op\":\"add\",\"path\":\"/spec/template/spec/domain/devices/disks/-\",
       \"value\":{\"name\":\"cloudinit\",\"disk\":{\"bus\":\"virtio\"}}},
     {\"op\":\"add\",\"path\":\"/spec/template/spec/volumes/-\",
@@ -327,7 +328,7 @@ for suffix in 1 2; do
         \"networkData\":\"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - ${SECONDARY_IP_PREFIX}.${IP_SUFFIX}/24\n    gateway4: ${SECONDARY_IP_PREFIX}.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}}}
   ]"
 
-  virtctl start "${VM_NAME}" -n "${NAD_NAMESPACE}"
+  virtctl start "${VM_NAME}" -n "poc-network"
 done
 ```
 
@@ -352,12 +353,12 @@ ethernets:
 # VMI NIC 상태 (두 VM 모두)
 for vm in poc-network-vm-1 poc-network-vm-2; do
   echo "=== ${vm} ==="
-  oc get vmi "${vm}" -n "${NAD_NAMESPACE}" \
+  oc get vmi "${vm}" -n "poc-network" \
     -o jsonpath='{range .status.interfaces[*]}{.name}: {.ipAddress}{"\n"}{end}'
 done
 
 # VM 콘솔 접속
-virtctl console poc-network-vm-1 -n "${NAD_NAMESPACE}"
+virtctl console poc-network-vm-1 -n "poc-network"
 # ip addr show eth1
 # ping 192.168.100.11   ← vm-2로 통신 테스트
 ```
@@ -380,7 +381,7 @@ oc get nns <node> -o yaml | grep -A5 "linux-bridge"
 oc get nncp poc-localnet-nncp -o jsonpath='{.spec.desiredState.ovn}' | python3 -m json.tool
 
 # NAD 목록
-oc get net-attach-def -n ${NAD_NAMESPACE}
+oc get net-attach-def -n poc-network
 ```
 
 ---
@@ -389,13 +390,13 @@ oc get net-attach-def -n ${NAD_NAMESPACE}
 
 ```bash
 # NAD 삭제
-oc delete net-attach-def -n ${NAD_NAMESPACE} --all
+oc delete net-attach-def -n poc-network --all
 
 # NNCP 삭제 (Bridge 제거)
 oc delete nncp poc-bridge-nncp poc-localnet-nncp 2>/dev/null || true
 
 # 네임스페이스 삭제
-oc delete namespace ${NAD_NAMESPACE}
+oc delete namespace poc-network
 ```
 
 ---
@@ -430,7 +431,7 @@ oc get nncp poc-localnet-nncp \
   -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].localnet}'
 
 # NAD CNI config의 name 확인
-oc get net-attach-def poc-localnet-nad -n poc-nad \
+oc get net-attach-def poc-localnet-nad -n poc-network \
   -o jsonpath='{.spec.config}' | python3 -m json.tool | grep '"name"'
 ```
 
