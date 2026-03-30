@@ -59,7 +59,7 @@ cd virt-poc-sample
 | 01 | [01-template](01-template/01-template.md) | RHEL9 qcow2 → DataVolume → DataSource → Template 등록 |
 | 02 | [02-network](02-network/02-network.md) | NNCP Linux Bridge 생성 + NAD 등록 + poc 템플릿으로 NAD 보조 네트워크 VM 생성 |
 | 03 | [03-vm-management](03-vm-management/03-vm-management.md) | 네임스페이스 + NAD 준비, VM 생성·스토리지·네트워크·Static IP·Live Migration |
-| 04 | [04-multi-tenant](04-multi-tenant/04-multi-tenant.md) | 멀티 테넌트 — 네임스페이스 2개·사용자 4명·RBAC(admin/view)·VM 각 1개 |
+| 04 | [04-multitenancy](04-multitenancy/04-multitenancy.md) | 멀티 테넌트 — 네임스페이스 2개·사용자 4명·RBAC(admin/view)·VM 각 1개 |
 | 05 | [05-network-policy](05-network-policy/05-network-policy.md) | NetworkPolicy 실습 — Deny All / Allow Same NS / Allow IP |
 | 06 | [06-resource-quota](06-resource-quota/06-resource-quota.md) | ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한 |
 | 07 | [07-descheduler](07-descheduler/07-descheduler.md) | Descheduler 실습 — VM 3개를 Live Migration으로 TEST_NODE에 집중 후 트리거 VM으로 과부하 유발 → 자동 재배치 |
@@ -116,9 +116,9 @@ virt-poc-sample/
 │   ├── 03-vm-management.md     # 가이드 문서 (VM 생성·스토리지·네트워크·Static IP·Live Migration)
 │   └── 03-vm-management.sh     # 자동화 스크립트 (네임스페이스 + NAD)
 │
-├── 04-multi-tenant/            # 멀티 테넌트 VM 환경 실습
-│   ├── 04-multi-tenant.md      # 가이드 문서 (사용자·RBAC·VM)
-│   └── 04-multi-tenant.sh      # 자동화 스크립트 (HTPasswd 사용자·NS·RoleBinding·VM)
+├── 04-multitenancy/            # 멀티 테넌트 VM 환경 실습
+│   ├── 04-multitenancy.md      # 가이드 문서 (사용자·RBAC·VM)
+│   └── 04-multitenancy.sh      # 자동화 스크립트 (HTPasswd 사용자·NS·RoleBinding·VM)
 │
 ├── 05-network-policy/          # NetworkPolicy 실습
 │   ├── 05-network-policy.md    # 가이드 문서

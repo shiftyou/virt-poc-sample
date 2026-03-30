@@ -205,7 +205,7 @@ step_desc() {
         01-template)         echo "DataVolume 업로드 → DataSource → Template 등록" ;;
         02-network)          echo "NNCP Linux Bridge + NAD + VM 생성" ;;
         03-vm-management)    echo "네임스페이스 + NAD 준비" ;;
-        04-multi-tenant)     echo "멀티 테넌트 — 네임스페이스·사용자·RBAC·VM" ;;
+        04-multitenancy)     echo "멀티 테넌트 — 네임스페이스·사용자·RBAC·VM" ;;
         05-network-policy)   echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
         06-resource-quota)   echo "ResourceQuota — CPU·Memory·Pod·PVC 제한" ;;
         07-descheduler)      echo "Descheduler — VM 자동 재배치 (Operator 필요)" ;;
