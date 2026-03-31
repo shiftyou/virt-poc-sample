@@ -11,16 +11,10 @@ OpenShift Virtualization POC(Proof of Concept) 샘플 모음입니다.
 git clone https://github.com/shiftyou/virt-poc-sample.git
 cd virt-poc-sample
 
-# 2. rhel9-poc-golden.qcow2 파일 다운로드(1.8G)
-https://mega.nz/file/qpAnGZoJ#-P_M8SkNvL_X8wktZQ5cE-KcwSjrDwrcxPxf1Nyvqvw
-혹은
-wget http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2
-mv rhel9-poc-golden.qcow2 ./vm-images/
-
-# 3. 환경 설정 (env.conf 생성)
+# 2. 환경 설정 (env.conf 생성)
 ./setup.sh
 
-# 4. 전체 순서대로 실행
+# 3. 전체 순서대로 실행
 ./make.sh
 ```
 
