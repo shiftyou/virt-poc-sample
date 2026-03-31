@@ -81,7 +81,14 @@ preflight() {
 
     if [ ! -f "$IMAGE_PATH" ]; then
         print_error "이미지 파일을 찾을 수 없습니다: $IMAGE_PATH"
-        echo "  사용법: $0 [qcow2-파일-경로]"
+    	print_ok "이미지 파일을 다운로드 합니다."
+	wget -O $IMAGE_PATH http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2
+    fi
+
+    if [ ! -f "$IMAGE_PATH" ]; then
+        print_error "이미지 파일을 찾을 수 없습니다: $IMAGE_PATH"
+	echo "wget -O $IMAGE_PATH http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2 하여 파일을 저장하세요."
+	echo "혹은 https://mega.nz/file/qpAnGZoJ#-P_M8SkNvL_X8wktZQ5cE-KcwSjrDwrcxPxf1Nyvqvw 를 클릭하여 다운로드 받고 vm-images 에 저장하세요."
         exit 1
     fi
     print_ok "이미지 파일: $IMAGE_PATH ($(du -sh "$IMAGE_PATH" | cut -f1))"

@@ -189,6 +189,7 @@ _wait_nncp() {
     echo ""
     if [ "$i" -eq "$retries" ]; then
         print_warn "NNCP 적용 시간 초과. 상태를 직접 확인하세요: oc get nncp / oc get nnce"
+	exit 1
     fi
     print_info "노드별 적용 상태 (NNCE):"
     oc get nnce 2>/dev/null | grep "$name" | \
@@ -279,25 +280,10 @@ spec:
   nodeSelector:
     node-role.kubernetes.io/worker: ''
   desiredState:
-    interfaces:
-      - name: ${BRIDGE_NAME}
-        description: OVN Localnet bridge with ${BRIDGE_INTERFACE} as a port
-        type: linux-bridge
-        state: up
-        ipv4:
-          enabled: false
-        ipv6:
-          enabled: false
-        bridge:
-          options:
-            stp:
-              enabled: false
-          port:
-            - name: ${BRIDGE_INTERFACE}
     ovn:
       bridge-mappings:
         - localnet: ${OVN_LOCALNET_NAME}
-          bridge: ${BRIDGE_NAME}
+          bridge: br-ex
           state: present
 EOF
     echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
@@ -525,22 +511,10 @@ YAML
       nodeSelector:
         node-role.kubernetes.io/worker: ""
       desiredState:
-        interfaces:
-          - name: ${BRIDGE_NAME}
-            type: linux-bridge
-            state: up
-            ipv4:
-              enabled: false
-            bridge:
-              options:
-                stp:
-                  enabled: false
-              port:
-                - name: ${BRIDGE_INTERFACE}
         ovn:
           bridge-mappings:
             - localnet: ${OVN_LOCALNET_NAME}
-              bridge: ${BRIDGE_NAME}
+              bridge: br-ex
               state: present
 YAML
 )"
