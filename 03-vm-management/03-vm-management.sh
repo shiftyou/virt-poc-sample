@@ -18,7 +18,7 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-VM_NS="poc-vm-management"
+VM_NS="poc-vm"
 BRIDGE_NAME="${BRIDGE_NAME}"
 SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
