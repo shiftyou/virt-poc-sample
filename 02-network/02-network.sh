@@ -166,6 +166,51 @@ NMEOF
 }
 
 # =============================================================================
+# 기존 NNCP 감지 — 있으면 재사용
+# =============================================================================
+detect_existing_nncp() {
+    local all_nncps
+    all_nncps=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
+    [ -z "$all_nncps" ] && return 1
+
+    # poc- 접두어 NNCP 우선, 없으면 전체에서 linux-bridge / ovn 타입 검색
+    local candidates
+    candidates=$(echo "$all_nncps" | tr ' ' '\n' | grep -E '^poc-' || \
+                 echo "$all_nncps" | tr ' ' '\n')
+
+    local nncp
+    for nncp in $candidates; do
+        # linux-bridge 타입 확인
+        local bridge_name
+        bridge_name=$(oc get nncp "$nncp" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+            2>/dev/null || true)
+        if [ -n "$bridge_name" ]; then
+            EXISTING_NNCP="$nncp"
+            EXISTING_BRIDGE="$bridge_name"
+            EXISTING_NNCP_TYPE="linux-bridge"
+            print_ok "기존 NNCP 발견: ${EXISTING_NNCP} (타입: linux-bridge, bridge: ${EXISTING_BRIDGE})"
+            return 0
+        fi
+
+        # OVN bridge-mappings 타입 확인
+        local ovn_bridge
+        ovn_bridge=$(oc get nncp "$nncp" \
+            -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
+            2>/dev/null || true)
+        if [ -n "$ovn_bridge" ]; then
+            EXISTING_NNCP="$nncp"
+            EXISTING_BRIDGE="$ovn_bridge"
+            EXISTING_NNCP_TYPE="ovn"
+            print_ok "기존 NNCP 발견: ${EXISTING_NNCP} (타입: ovn-localnet, bridge: ${EXISTING_BRIDGE})"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# =============================================================================
 # NNCP — 방식별 적용
 # =============================================================================
 _wait_nncp() {
@@ -292,6 +337,16 @@ EOF
 }
 
 step_nncp() {
+    print_step "1/4  NNCP 확인"
+
+    if detect_existing_nncp; then
+        # 기존 NNCP 재사용 — bridge 이름을 덮어씌움
+        BRIDGE_NAME="${EXISTING_BRIDGE}"
+        NNCP_NAME="${EXISTING_NNCP}"
+        print_info "NNCP 생성 스킵 — 기존 NNCP(${NNCP_NAME})를 사용합니다. (bridge: ${BRIDGE_NAME})"
+        return
+    fi
+
     case "$NET_TYPE" in
         1) step_nncp_linux_bridge ;;
         2) step_nncp_ovn_localnet ;;
@@ -310,7 +365,7 @@ _ensure_namespace() {
 }
 
 step_nad_linux_bridge() {
-    print_step "2/4  NAD — Linux Bridge (cnv-bridge)"
+    print_step "2/4  NAD — Linux Bridge (bridge)"
     _ensure_namespace
 
     cat > nad-${NAD_NAME}.yaml <<EOF
@@ -322,7 +377,16 @@ metadata:
   annotations:
     k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
 spec:
-  config: '{"cniVersion":"0.3.1","name":"${NAD_NAME}","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
+  config: |-
+    {
+        "cniVersion": "0.3.1",
+        "name": "${NAD_NAME}",
+        "type": "bridge",
+        "bridge": "${BRIDGE_NAME}",
+        "ipam": {},
+        "macspoofchk": true,
+        "preserveDefaultVlan": false
+    }
 EOF
     echo "생성된 파일: nad-${NAD_NAME}.yaml"
     oc apply -f nad-${NAD_NAME}.yaml
@@ -330,7 +394,7 @@ EOF
 }
 
 step_nad_linux_bridge_vlan() {
-    print_step "2/4  NAD — Linux Bridge + VLAN ${VLAN_ID} (cnv-bridge)"
+    print_step "2/4  NAD — Linux Bridge + VLAN ${VLAN_ID} (bridge)"
     _ensure_namespace
 
     cat > nad-${NAD_NAME}.yaml <<EOF
@@ -342,7 +406,17 @@ metadata:
   annotations:
     k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
 spec:
-  config: '{"cniVersion":"0.3.1","name":"${NAD_NAME}","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","vlan":${VLAN_ID},"macspoofchk":true,"ipam":{}}'
+  config: |-
+    {
+        "cniVersion": "0.3.1",
+        "name": "${NAD_NAME}",
+        "type": "bridge",
+        "bridge": "${BRIDGE_NAME}",
+        "vlan": ${VLAN_ID},
+        "ipam": {},
+        "macspoofchk": true,
+        "preserveDefaultVlan": false
+    }
 EOF
     echo "생성된 파일: nad-${NAD_NAME}.yaml"
     oc apply -f nad-${NAD_NAME}.yaml
@@ -360,7 +434,14 @@ metadata:
   name: ${NAD_NAME}
   namespace: ${NAD_NAMESPACE}
 spec:
-  config: '{"cniVersion":"0.3.1","name":"${OVN_LOCALNET_NAME}","type":"ovn-k8s-cni-overlay","topology":"localnet","netAttachDefName":"${NAD_NAMESPACE}/${NAD_NAME}"}'
+  config: |-
+    {
+        "cniVersion": "0.3.1",
+        "name": "${OVN_LOCALNET_NAME}",
+        "type": "ovn-k8s-cni-overlay",
+        "topology": "localnet",
+        "netAttachDefName": "${NAD_NAMESPACE}/${NAD_NAME}"
+    }
 EOF
     echo "생성된 파일: nad-${NAD_NAME}.yaml"
     oc apply -f nad-${NAD_NAME}.yaml
@@ -378,11 +459,41 @@ metadata:
   name: ${NAD_NAME}
   namespace: ${NAD_NAMESPACE}
 spec:
-  config: '{"cniVersion":"0.3.1","name":"${OVN_LOCALNET_NAME}","type":"ovn-k8s-cni-overlay","topology":"localnet","netAttachDefName":"${NAD_NAMESPACE}/${NAD_NAME}","vlanID":${VLAN_ID}}'
+  config: |-
+    {
+        "cniVersion": "0.3.1",
+        "name": "${OVN_LOCALNET_NAME}",
+        "type": "ovn-k8s-cni-overlay",
+        "topology": "localnet",
+        "netAttachDefName": "${NAD_NAMESPACE}/${NAD_NAME}",
+        "vlanID": ${VLAN_ID}
+    }
 EOF
     echo "생성된 파일: nad-${NAD_NAME}.yaml"
     oc apply -f nad-${NAD_NAME}.yaml
     print_ok "NAD ${NAD_NAME} 등록 완료 (VLAN ${VLAN_ID})"
+}
+
+# poc- 로 시작하는 모든 네임스페이스에 NAD 추가 배포
+_deploy_nad_to_poc_namespaces() {
+    local nad_file="nad-${NAD_NAME}.yaml"
+
+    # NAD_NAMESPACE 를 제외한 poc- 네임스페이스 목록
+    local poc_namespaces
+    poc_namespaces=$(oc get namespaces \
+        -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+        tr ' ' '\n' | grep '^poc-' | grep -v "^${NAD_NAMESPACE}$" || true)
+
+    [ -z "$poc_namespaces" ] && return 0
+
+    print_info "추가 poc- 네임스페이스에 NAD 배포 중..."
+    for ns in $poc_namespaces; do
+        # metadata.namespace 및 OVN netAttachDefName 내 네임스페이스 치환 후 적용
+        sed -e "s|namespace: ${NAD_NAMESPACE}|namespace: ${ns}|g" \
+            -e "s|\"netAttachDefName\": \"${NAD_NAMESPACE}/|\"netAttachDefName\": \"${ns}/|g" \
+            "$nad_file" | oc apply -f -
+        print_ok "  NAD ${NAD_NAME} → ${ns}"
+    done
 }
 
 step_nad() {
@@ -392,6 +503,7 @@ step_nad() {
         3) step_nad_linux_bridge_vlan ;;
         4) step_nad_ovn_localnet_vlan ;;
     esac
+    _deploy_nad_to_poc_namespaces
 }
 
 # =============================================================================
@@ -418,10 +530,11 @@ step_vm() {
             continue
         fi
 
+        local vm_yaml="${SCRIPT_DIR}/vm-${VM_NAME}.yaml"
         oc process -n openshift poc -p NAME="$VM_NAME" | \
-            sed 's/  running: false/  runStrategy: Halted/' > "vm-${VM_NAME}.yaml"
-        echo "생성된 파일: vm-${VM_NAME}.yaml"
-        oc apply -n "$NAD_NAMESPACE" -f "vm-${VM_NAME}.yaml"
+            sed 's/  running: false/  runStrategy: Halted/' > "${vm_yaml}"
+        echo "생성된 파일: ${vm_yaml}"
+        oc apply -n "$NAD_NAMESPACE" -f "${vm_yaml}"
 
         ensure_runstrategy "$VM_NAME" "$NAD_NAMESPACE"
 
@@ -572,13 +685,43 @@ EOF
     oc apply -f consoleyamlsample-nncp.yaml
     print_ok "ConsoleYAMLSample ${NNCP_NAME} 등록 완료"
 
-    # NAD 샘플
-    local nad_config
+    # NAD 샘플 — config 블록 방식별 생성
+    local nad_config_block
     case "$NET_TYPE" in
-        1) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${NAD_NAME}\",\"type\":\"cnv-bridge\",\"bridge\":\"${BRIDGE_NAME}\",\"macspoofchk\":true,\"ipam\":{}}" ;;
-        2) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${OVN_LOCALNET_NAME}\",\"type\":\"ovn-k8s-cni-overlay\",\"topology\":\"localnet\",\"netAttachDefName\":\"${NAD_NAMESPACE}/${NAD_NAME}\"}" ;;
-        3) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${NAD_NAME}\",\"type\":\"cnv-bridge\",\"bridge\":\"${BRIDGE_NAME}\",\"vlan\":${VLAN_ID},\"macspoofchk\":true,\"ipam\":{}}" ;;
-        4) nad_config="{\"cniVersion\":\"0.3.1\",\"name\":\"${OVN_LOCALNET_NAME}\",\"type\":\"ovn-k8s-cni-overlay\",\"topology\":\"localnet\",\"netAttachDefName\":\"${NAD_NAMESPACE}/${NAD_NAME}\",\"vlanID\":${VLAN_ID}}" ;;
+        1) nad_config_block="    {
+        \"cniVersion\": \"0.3.1\",
+        \"name\": \"${NAD_NAME}\",
+        \"type\": \"bridge\",
+        \"bridge\": \"${BRIDGE_NAME}\",
+        \"ipam\": {},
+        \"macspoofchk\": true,
+        \"preserveDefaultVlan\": false
+    }" ;;
+        2) nad_config_block="    {
+        \"cniVersion\": \"0.3.1\",
+        \"name\": \"${OVN_LOCALNET_NAME}\",
+        \"type\": \"ovn-k8s-cni-overlay\",
+        \"topology\": \"localnet\",
+        \"netAttachDefName\": \"${NAD_NAMESPACE}/${NAD_NAME}\"
+    }" ;;
+        3) nad_config_block="    {
+        \"cniVersion\": \"0.3.1\",
+        \"name\": \"${NAD_NAME}\",
+        \"type\": \"bridge\",
+        \"bridge\": \"${BRIDGE_NAME}\",
+        \"vlan\": ${VLAN_ID},
+        \"ipam\": {},
+        \"macspoofchk\": true,
+        \"preserveDefaultVlan\": false
+    }" ;;
+        4) nad_config_block="    {
+        \"cniVersion\": \"0.3.1\",
+        \"name\": \"${OVN_LOCALNET_NAME}\",
+        \"type\": \"ovn-k8s-cni-overlay\",
+        \"topology\": \"localnet\",
+        \"netAttachDefName\": \"${NAD_NAMESPACE}/${NAD_NAME}\",
+        \"vlanID\": ${VLAN_ID}
+    }" ;;
     esac
 
     cat > consoleyamlsample-nad.yaml <<EOF
@@ -599,7 +742,8 @@ spec:
       name: ${NAD_NAME}
       namespace: ${NAD_NAMESPACE}
     spec:
-      config: '${nad_config}'
+      config: |-
+${nad_config_block}
 EOF
     echo "생성된 파일: consoleyamlsample-nad.yaml"
     oc apply -f consoleyamlsample-nad.yaml

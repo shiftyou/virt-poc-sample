@@ -23,7 +23,7 @@ KubeDescheduler가 노드 부하를 감지하여 VM을 자동으로 재배치하
 │  Migration 완료 → nodeSelector 제거    │              │
 └─────────────────────────────────┘     └──────────────┘
 
-3단계: 트리거 VM을 NODE1에 배포 → CPU > 60% 초과
+3단계: 트리거 VM을 NODE1에 배포 → CPU > 70% 초과
 ┌─────────────────────────────────┐     ┌──────────────┐
 │  NODE1                          │     │  NODE2, ...  │
 │                                 │     │              │
@@ -32,7 +32,7 @@ KubeDescheduler가 노드 부하를 감지하여 VM을 자동으로 재배치하
 │  ● vm-fixed    (250m CPU) [evict=false] │     │      │
 │  ● vm-trigger  (계산된 CPU)     │     │              │
 │                                 │     │              │
-│  CPU 사용률 > 60%  ← 임계값 초과 │     │              │
+│  CPU 사용률 > 70%  ← 임계값 초과 │     │              │
 └─────────────────────────────────┘     └──────────────┘
 
 4단계: Descheduler 발동 (60초 이내)
@@ -91,9 +91,9 @@ spec:
 | 구분 | CPU | Memory | Pods |
 |------|-----|--------|------|
 | **underutilized** (이동 목적지) | < 40% | < 40% | < 40% |
-| **overutilized** (이동 원점) | > 60% | > 60% | > 60% |
+| **overutilized** (이동 원점) | > 70% | > 70% | > 70% |
 
-NODE1의 CPU requests 합계가 Allocatable의 **60% 초과** 시 → overutilized 판정 → vm-1, vm-2 Live Migration 발동
+NODE1의 CPU requests 합계가 Allocatable의 **70% 초과** 시 → overutilized 판정 → vm-1, vm-2 Live Migration 발동
 
 ---
 

@@ -339,9 +339,17 @@ auto_detect_cluster() {
             -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
         DETECTED_IFACES=""
         if [ -n "$FIRST_WORKER_FOR_NNS" ]; then
+            # br-ex에 물린(controller=br-ex) 인터페이스 목록 수집
+            local brex_slaves
+            brex_slaves=$(oc get nns "$FIRST_WORKER_FOR_NNS" \
+                -o jsonpath='{range .status.currentState.interfaces[*]}{.name}{" "}{.controller}{"\n"}{end}' \
+                2>/dev/null | awk '$2=="br-ex"{print $1}' | tr '\n' '|' | sed 's/|$//' || true)
+            # state=up 인 ethernet 인터페이스 중 br-ex 및 그 slave 제외
             DETECTED_IFACES=$(oc get nns "$FIRST_WORKER_FOR_NNS" \
-                -o jsonpath='{range .status.currentState.interfaces[?(@.type=="ethernet")]}{.name}{"\n"}{end}' \
-                2>/dev/null | grep -vE '^(br-ex|ovs-system)' | tr '\n' ' ' | xargs || true)
+                -o jsonpath='{range .status.currentState.interfaces[*]}{.name}{" "}{.type}{" "}{.state}{"\n"}{end}' \
+                2>/dev/null | awk '$2=="ethernet" && $3=="up"{print $1}' | \
+                grep -vE "^(br-ex|ovs-system)${brex_slaves:+|${brex_slaves}}" | \
+                tr '\n' ' ' | xargs || true)
         fi
         # 방법 2: oc debug node (폴백, 느림 ~30초)
         if [ -z "$DETECTED_IFACES" ] && [ -n "$FIRST_WORKER_FOR_NNS" ]; then
@@ -355,9 +363,10 @@ metadata:
 EOF"
             fi
             print_info "NodeNetworkState 없음 → oc debug node 로 인터페이스 감지 중 (약 30초)..."
+            # state UP + br-ex/ovs-system에 종속되지 않은 NIC만 포함
             DETECTED_IFACES=$(oc debug node/"$FIRST_WORKER_FOR_NNS" -- \
                 chroot /host ip -o link show 2>/dev/null | \
-                awk -F': ' '{print $2}' | \
+                awk '/[Ss]tate UP/ && !/master ovs-system/ && !/master br-ex/ {split($2,a,"@"); gsub(/:$/,"",a[1]); print a[1]}' | \
                 grep -vE '^(lo|ovs-system|br-ex|br-int|genev_sys|veth|tun|docker|ovn)' | \
                 grep -E '^(ens|eth|eno|enp|em|bond)' | tr '\n' ' ' | xargs || true)
         fi
@@ -417,6 +426,7 @@ ask "API 서버 URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUST
 print_step_header "[01]" "Template — DataVolume / DataSource / Template 등록"
 
 ask "VM 이미지 업로드에 사용할 스토리지클래스" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
+ask "poc-golden.qcow2 이미지 다운로드 URL" "http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2" GOLDEN_IMAGE_URL
 
 # =============================================================================
 # [02] Network — NNCP / NAD / VM 생성
@@ -588,6 +598,9 @@ SECONDARY_IP_PREFIX=${SECONDARY_IP_PREFIX}
 
 # 스토리지클래스
 STORAGE_CLASS=${STORAGE_CLASS}
+
+# Golden Image URL (DataVolume HTTP import)
+GOLDEN_IMAGE_URL=${GOLDEN_IMAGE_URL}
 
 # VDDK 이미지
 VDDK_IMAGE=${VDDK_IMAGE}

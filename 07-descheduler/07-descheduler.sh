@@ -117,7 +117,7 @@ step_vms() {
     print_step "2/5  VM 3개 배포"
 
     # vm-1, vm-2: descheduler 대상 / vm-fixed: annotation으로 descheduler 제외
-    for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-fixed; do
+    for VM in poc-descheduler-vm-fixed poc-descheduler-vm-1 poc-descheduler-vm-2 ; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
             print_ok "VM $VM 이미 존재 — 스킵"
             continue
@@ -172,7 +172,13 @@ step_vms() {
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
         print_ok "VM $VM 배포 완료 (cpu: ${VM_CPU_REQUEST})"
 
-        # Running 대기 후 nodeSelector 제거
+        # vm-fixed 는 nodeSelector 유지 (노드 고정 + descheduler 제외 대상)
+        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
+            print_ok "  → nodeSelector 유지 (poc-descheduler-vm-fixed 는 ${NODE1} 고정)"
+            continue
+        fi
+
+        # vm-1, vm-2: Running 대기 후 nodeSelector 제거 (descheduler 자유 대상)
         print_info "  → Running 대기 후 nodeSelector 제거..."
         local retries=36
         local i=0
@@ -215,6 +221,7 @@ metadata:
   name: cluster
   namespace: openshift-kube-descheduler-operator
 spec:
+  mode: Automatic
   managementState: Managed
   deschedulingIntervalSeconds: 60
   profiles:
@@ -273,7 +280,7 @@ EOF
 
     print_info "  managementState: Managed"
     print_info "  Profile        : LifecycleAndUtilization"
-    print_info "  Threshold      : High (underutilized <40%, overutilized >60%)"
+    print_info "  Threshold      : High (underutilized <40%, overutilized >70%)"
     print_info "  Interval       : 60초"
     print_info "  Namespace      : ${NS}"
 }
@@ -329,17 +336,17 @@ step_trigger_vm() {
     print_info "  Allocatable Mem  : ${ALLOC_MEM_MIB}Mi"
     print_info "  Used CPU requests: ${USED_CPU}m  (${CPU_PCT}%)"
     print_info "  Used Mem requests: ${USED_MEM_MIB}Mi (${MEM_PCT}%)"
-    print_info "  Descheduler 임계값: overutilized > 60%"
+    print_info "  Descheduler 임계값: overutilized > 70%"
 
-    # 61% 초과를 위해 필요한 추가 CPU requests 계산
-    THRESHOLD_CPU=$((ALLOC_CPU * 61 / 100))
+    # 71% 초과를 위해 필요한 추가 CPU requests 계산
+    THRESHOLD_CPU=$((ALLOC_CPU * 71 / 100))
     NEEDED_CPU=$((THRESHOLD_CPU - USED_CPU))
 
-    THRESHOLD_MEM=$((ALLOC_MEM_MIB * 61 / 100))
+    THRESHOLD_MEM=$((ALLOC_MEM_MIB * 71 / 100))
     NEEDED_MEM=$((THRESHOLD_MEM - USED_MEM_MIB))
 
     if [ "$NEEDED_CPU" -le 0 ]; then
-        print_warn "이미 CPU 61% 초과 상태 — 소규모 트리거 VM 배포"
+        print_warn "이미 CPU 71% 초과 상태 — 소규모 트리거 VM 배포"
         TRIGGER_CPU="250m"
     else
         TRIGGER_CPU="${NEEDED_CPU}m"
@@ -352,7 +359,7 @@ step_trigger_vm() {
     fi
 
     print_ok "트리거 VM 리소스 산출"
-    print_info "  TRIGGER_CPU : ${TRIGGER_CPU}  (노드 ${NODE1} CPU를 61% 이상으로)"
+    print_info "  TRIGGER_CPU : ${TRIGGER_CPU}  (노드 ${NODE1} CPU를 71% 이상으로)"
     print_info "  TRIGGER_MEM : ${TRIGGER_MEM}"
 
     if oc get vm poc-descheduler-vm-trigger -n "$NS" &>/dev/null; then
@@ -405,7 +412,7 @@ metadata:
   name: poc-kubedescheduler
 spec:
   title: "POC KubeDescheduler 설정"
-  description: "LifecycleAndUtilization 프로파일로 과부하 노드의 VM을 자동 재배치합니다. High 임계값: underutilized<40%, overutilized>60%. Kube Descheduler Operator 설치 후 적용하세요."
+  description: "LifecycleAndUtilization 프로파일로 과부하 노드의 VM을 자동 재배치합니다. High 임계값: underutilized<40%, overutilized>70%. Kube Descheduler Operator 설치 후 적용하세요."
   targetResource:
     apiVersion: operator.openshift.io/v1
     kind: KubeDescheduler

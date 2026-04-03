@@ -22,11 +22,12 @@ fi
 
 TARGET_NS="openshift-virtualization-os-images"
 DV_NAME="poc-golden"
-DS_NAME="poc"
+DS_NAME="poc-golden"
 TEMPLATE_NAME="poc"
 TEMPLATE_NS="openshift"
 DISK_SIZE="30Gi"
 STORAGE_CLASS="${STORAGE_CLASS}"
+GOLDEN_IMAGE_URL="${GOLDEN_IMAGE_URL:-http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2}"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -74,72 +75,70 @@ preflight() {
 
 }
 
-step_import() {
-    # qcow2 파일
-    if [ -n "${1:-}" ]; then
-        IMAGE_PATH="$1"
-    else
-        IMAGE_PATH="${SCRIPT_DIR}/../vm-images/rhel9-poc-golden.qcow2"
-    fi
-
-    if [ ! -f "$IMAGE_PATH" ]; then
-        print_error "이미지 파일을 찾을 수 없습니다: $IMAGE_PATH"
-    	print_ok "이미지 파일을 다운로드 합니다."
-	wget -O $IMAGE_PATH http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2
-    fi
-
-    if [ ! -f "$IMAGE_PATH" ]; then
-        print_error "이미지 파일을 찾을 수 없습니다: $IMAGE_PATH"
-	echo "wget -O $IMAGE_PATH http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2 하여 파일을 저장하세요."
-	echo "혹은 https://mega.nz/file/qpAnGZoJ#-P_M8SkNvL_X8wktZQ5cE-KcwSjrDwrcxPxf1Nyvqvw 를 클릭하여 다운로드 받고 vm-images 에 저장하세요."
-        exit 1
-    fi
-    print_ok "이미지 파일: $IMAGE_PATH ($(du -sh "$IMAGE_PATH" | cut -f1))"
-}
-
 # =============================================================================
-# 1단계: DataVolume 업로드
+# 1단계: DataVolume 생성 (HTTP URL import)
 # =============================================================================
-step_upload() {
-    print_step "1/4  DataVolume 업로드 (poc-golden)"
+step_datavolume() {
+    print_step "1/4  DataVolume 생성 (poc-golden, HTTP import)"
 
     local phase
     phase=$(oc get dv "$DV_NAME" -n "$TARGET_NS" \
         -o jsonpath='{.status.phase}' 2>/dev/null || true)
 
     if [ "$phase" = "Succeeded" ]; then
-        print_ok "DataVolume $DV_NAME 이미 존재합니다 (Succeeded) — 업로드 스킵"
+        print_ok "DataVolume $DV_NAME 이미 존재합니다 (Succeeded) — 스킵"
         return
     elif [ -n "$phase" ]; then
-        print_warn "DataVolume $DV_NAME 상태: $phase — 재업로드합니다"
+        print_warn "DataVolume $DV_NAME 상태: $phase — 재생성합니다"
         oc delete dv "$DV_NAME" -n "$TARGET_NS" --ignore-not-found
         oc delete pvc "$DV_NAME" -n "$TARGET_NS" --ignore-not-found
     fi
 
-    print_info "업로드 시작 (시간이 걸릴 수 있습니다)..."
-    virtctl image-upload dv "$DV_NAME" \
-        --image-path="$IMAGE_PATH" \
-        --size="$DISK_SIZE" \
-        --storage-class="${STORAGE_CLASS}" \
-        --access-mode=ReadWriteMany \
-        --volume-mode=block \
-        -n "$TARGET_NS" \
-        --insecure \
-        --force-bind
+    print_info "DataVolume 생성 URL: ${GOLDEN_IMAGE_URL}"
 
-    print_ok "DataVolume 업로드 완료"
+    cat > datavolume-poc-golden.yaml <<EOF
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  annotations:
+    cdi.kubevirt.io/storage.bind.immediate.requested: 'true'
+    cdi.kubevirt.io/storage.usePopulator: 'true'
+  name: ${DV_NAME}
+  namespace: ${TARGET_NS}
+  labels:
+    instancetype.kubevirt.io/default-preference: rhel.9
+    instancetype.kubevirt.io/default-preference-kind: VirtualMachineClusterPreference
+spec:
+  source:
+    http:
+      url: '${GOLDEN_IMAGE_URL}'
+  storage:
+    accessModes:
+      - ReadWriteMany
+    resources:
+      requests:
+        storage: ${DISK_SIZE}
+    storageClassName: ${STORAGE_CLASS}
+    volumeMode: Block
+EOF
+    echo "생성된 파일: datavolume-poc-golden.yaml"
+    oc apply -f datavolume-poc-golden.yaml
+    print_ok "DataVolume $DV_NAME 생성 완료 (HTTP import 진행 중)"
 }
 
 # =============================================================================
-# 2단계: DataSource 등록
+# 2단계: DataSource 등록 및 PVC Bound 대기
 # =============================================================================
 step_datasource() {
-    print_step "2/4  DataSource 등록 (poc)"
+    print_step "2/4  DataSource 등록 및 PVC Bound 대기 (poc-golden)"
 
-    cat > datasource-poc.yaml <<EOF
+    cat > datasource-poc-golden.yaml <<EOF
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataSource
 metadata:
+  labels:
+    instancetype.kubevirt.io/default-preference: rhel.9
+    instancetype.kubevirt.io/default-preference-kind: VirtualMachineClusterPreference
   name: ${DS_NAME}
   namespace: ${TARGET_NS}
 spec:
@@ -148,17 +147,27 @@ spec:
       name: ${DV_NAME}
       namespace: ${TARGET_NS}
 EOF
-    echo "생성된 파일: datasource-poc.yaml"
-    oc apply -f datasource-poc.yaml
+    echo "생성된 파일: datasource-poc-golden.yaml"
+    oc apply -f datasource-poc-golden.yaml
+    print_ok "DataSource $DS_NAME 생성 완료"
 
-    local ready
-    ready=$(oc get datasource "$DS_NAME" -n "$TARGET_NS" \
-        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)
-    if [ "$ready" = "True" ]; then
-        print_ok "DataSource $DS_NAME Ready"
-    else
-        print_ok "DataSource $DS_NAME 생성 완료 (상태: ${ready:-Unknown})"
-    fi
+    # DataSource 존재 여부 확인 후 PVC Bound 대기
+    print_info "PVC $DV_NAME 가 Bound 될 때까지 대기합니다 (HTTP import 중)..."
+    local pvc_phase dv_phase progress
+    while true; do
+        pvc_phase=$(oc get pvc "$DV_NAME" -n "$TARGET_NS" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        if [ "$pvc_phase" = "Bound" ]; then
+            print_ok "PVC $DV_NAME Bound 확인 — Template 생성을 진행합니다."
+            break
+        fi
+        dv_phase=$(oc get dv "$DV_NAME" -n "$TARGET_NS" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        progress=$(oc get dv "$DV_NAME" -n "$TARGET_NS" \
+            -o jsonpath='{.status.progress}' 2>/dev/null || true)
+        print_info "PVC: ${pvc_phase:-Unknown}, DV: ${dv_phase:-Unknown}${progress:+, 진행률: $progress} — 30초 후 재확인..."
+        sleep 30
+    done
 }
 
 # =============================================================================
@@ -173,159 +182,24 @@ apiVersion: template.openshift.io/v1
 metadata:
   name: poc
   namespace: openshift
-  uid: ccc5a64b-869d-4c28-bd2a-e05d5f8cee2e
-  resourceVersion: '1445617'
-  creationTimestamp: '2026-04-03T05:53:52Z'
   labels:
-    app.kubernetes.io/part-of: hyperconverged-cluster
-    template.kubevirt.io/architecture: amd64
     flavor.template.kubevirt.io/small: 'true'
-    template.kubevirt.io/version: v0.34.1
-    app.kubernetes.io/version: 4.20.8
-    template.kubevirt.io/type: vm
-    vm.kubevirt.io/template: rhel8-server-small
-    app.kubernetes.io/component: templating
-    app.kubernetes.io/managed-by: ssp-operator
-    os.template.kubevirt.io/rhel8.0: 'true'
-    os.template.kubevirt.io/rhel8.1: 'true'
-    os.template.kubevirt.io/rhel8.2: 'true'
-    app.kubernetes.io/name: custom-templates
-    os.template.kubevirt.io/rhel8.10: 'true'
-    os.template.kubevirt.io/rhel8.3: 'true'
-    os.template.kubevirt.io/rhel8.4: 'true'
-    os.template.kubevirt.io/rhel8.5: 'true'
-    vm.kubevirt.io/template.namespace: openshift
-    os.template.kubevirt.io/rhel8.6: 'true'
+    os.template.kubevirt.io/rhel9: 'true'
     workload.template.kubevirt.io/server: 'true'
-    os.template.kubevirt.io/rhel8.7: 'true'
-    os.template.kubevirt.io/rhel8.8: 'true'
-    os.template.kubevirt.io/rhel8.9: 'true'
+    template.kubevirt.io/type: base
   annotations:
-    template.kubevirt.io/provider: ''
-    template.kubevirt.io/provider-url: 'https://www.redhat.com'
-    template.kubevirt.io/containerdisks: |
-      registry.redhat.io/rhel8/rhel-guest-image
-    template.kubevirt.io/version: v1alpha1
-    openshift.io/display-name: ' MYRed Hat Enterprise Linux 8 VM'
-    openshift.io/documentation-url: 'https://github.com/kubevirt/common-templates'
-    template.kubevirt.io/images: |
-      https://access.redhat.com/downloads/content/479/ver=/rhel---8/8.6/x86_64/product-software
-    operator-sdk/primary-resource-type: SSP.ssp.kubevirt.io
-    defaults.template.kubevirt.io/disk: rootdisk
-    name.os.template.kubevirt.io/rhel8.0: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.1: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.2: Red Hat Enterprise Linux 8.0 or higher
-    template.kubevirt.io/editable: |
-      /objects[0].spec.template.spec.domain.cpu.sockets
-      /objects[0].spec.template.spec.domain.cpu.cores
-      /objects[0].spec.template.spec.domain.cpu.threads
-      /objects[0].spec.template.spec.domain.memory.guest
-      /objects[0].spec.template.spec.domain.devices.disks
-      /objects[0].spec.template.spec.volumes
-      /objects[0].spec.template.spec.networks
-    template.openshift.io/bindable: 'false'
-    name.os.template.kubevirt.io/rhel8.3: Red Hat Enterprise Linux 8.0 or higher
-    openshift.kubevirt.io/pronounceable-suffix-for-name-expression: 'true'
-    operator-sdk/primary-resource: openshift-cnv/ssp-kubevirt-hyperconverged
-    name.os.template.kubevirt.io/rhel8.4: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.5: Red Hat Enterprise Linux 8.0 or higher
-    tags: 'hidden,kubevirt,virtualmachine,linux,rhel'
-    name.os.template.kubevirt.io/rhel8.6: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.7: Red Hat Enterprise Linux 8.0 or higher
-    template.kubevirt.io/provider-support-level: Full
-    name.os.template.kubevirt.io/rhel8.8: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.9: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.10: Red Hat Enterprise Linux 8.0 or higher
-    description: Template for Red Hat Enterprise Linux 8 VM or newer. A PVC with the RHEL disk image must be available.
-    openshift.io/support-url: 'https://github.com/kubevirt/common-templates/issues'
+    openshift.io/display-name: 'POC VM'
+    description: Template for PoC
     iconClass: icon-rhel
-    openshift.io/provider-display-name: ''
-  managedFields:
-    - manager: Mozilla
-      operation: Update
-      apiVersion: template.openshift.io/v1
-      time: '2026-04-03T05:54:08Z'
-      fieldsType: FieldsV1
-      fieldsV1:
-        'f:metadata':
-          'f:annotations':
-            'f:template.kubevirt.io/editable': {}
-            'f:operator-sdk/primary-resource': {}
-            'f:operator-sdk/primary-resource-type': {}
-            'f:defaults.template.kubevirt.io/disk': {}
-            'f:name.os.template.kubevirt.io/rhel8.0': {}
-            'f:template.kubevirt.io/provider-support-level': {}
-            'f:name.os.template.kubevirt.io/rhel8.1': {}
-            'f:description': {}
-            'f:name.os.template.kubevirt.io/rhel8.10': {}
-            'f:name.os.template.kubevirt.io/rhel8.2': {}
-            'f:template.openshift.io/bindable': {}
-            'f:name.os.template.kubevirt.io/rhel8.3': {}
-            'f:name.os.template.kubevirt.io/rhel8.4': {}
-            'f:iconClass': {}
-            'f:openshift.kubevirt.io/pronounceable-suffix-for-name-expression': {}
-            'f:name.os.template.kubevirt.io/rhel8.5': {}
-            'f:name.os.template.kubevirt.io/rhel8.6': {}
-            'f:tags': {}
-            .: {}
-            'f:name.os.template.kubevirt.io/rhel8.7': {}
-            'f:template.kubevirt.io/provider': {}
-            'f:name.os.template.kubevirt.io/rhel8.8': {}
-            'f:template.kubevirt.io/provider-url': {}
-            'f:name.os.template.kubevirt.io/rhel8.9': {}
-            'f:template.kubevirt.io/containerdisks': {}
-            'f:openshift.io/support-url': {}
-            'f:openshift.io/provider-display-name': {}
-            'f:template.kubevirt.io/images': {}
-            'f:openshift.io/display-name': {}
-            'f:template.kubevirt.io/version': {}
-            'f:openshift.io/documentation-url': {}
-          'f:labels':
-            'f:os.template.kubevirt.io/rhel8.0': {}
-            'f:os.template.kubevirt.io/rhel8.1': {}
-            'f:os.template.kubevirt.io/rhel8.2': {}
-            'f:os.template.kubevirt.io/rhel8.3': {}
-            'f:os.template.kubevirt.io/rhel8.4': {}
-            'f:vm.kubevirt.io/template.namespace': {}
-            'f:app.kubernetes.io/managed-by': {}
-            'f:os.template.kubevirt.io/rhel8.5': {}
-            'f:os.template.kubevirt.io/rhel8.6': {}
-            'f:os.template.kubevirt.io/rhel8.7': {}
-            'f:os.template.kubevirt.io/rhel8.8': {}
-            'f:os.template.kubevirt.io/rhel8.9': {}
-            'f:os.template.kubevirt.io/rhel8.10': {}
-            'f:app.kubernetes.io/name': {}
-            .: {}
-            'f:app.kubernetes.io/part-of': {}
-            'f:template.kubevirt.io/architecture': {}
-            'f:workload.template.kubevirt.io/server': {}
-            'f:flavor.template.kubevirt.io/small': {}
-            'f:app.kubernetes.io/version': {}
-            'f:template.kubevirt.io/type': {}
-            'f:vm.kubevirt.io/template': {}
-            'f:template.kubevirt.io/version': {}
-            'f:app.kubernetes.io/component': {}
-        'f:objects': {}
-        'f:parameters': {}
+    tags: 'hidden,kubevirt,virtualmachine,linux,rhel'
+    template.kubevirt.io/provider: 'Red Hat'
 objects:
   - apiVersion: kubevirt.io/v1
     kind: VirtualMachine
     metadata:
-      annotations:
-        vm.kubevirt.io/validations: |
-          [
-            {
-              "name": "minimal-required-memory",
-              "path": "jsonpath::.spec.domain.memory.guest",
-              "rule": "integer",
-              "message": "This VM requires more memory.",
-              "min": 1610612736
-            }
-          ]
       labels:
         app: '\${NAME}'
         vm.kubevirt.io/template: poc
-        vm.kubevirt.io/template.revision: '1'
         vm.kubevirt.io/template.namespace: openshift
       name: '\${NAME}'
     spec:
@@ -346,15 +220,10 @@ objects:
       runStrategy: Halted
       template:
         metadata:
-          annotations:
-            vm.kubevirt.io/flavor: small
-            vm.kubevirt.io/os: rhel8
-            vm.kubevirt.io/workload: server
           labels:
             kubevirt.io/domain: '\${NAME}'
             kubevirt.io/size: small
         spec:
-          architecture: amd64
           domain:
             cpu:
               cores: 1
@@ -477,10 +346,8 @@ main() {
 
     preflight "${1:-}"
 
-#    step_import
-#    step_upload
-#    step_datasource
-
+    step_datavolume
+    step_datasource
     step_template
     step_consoleyamlsamples
     print_summary
