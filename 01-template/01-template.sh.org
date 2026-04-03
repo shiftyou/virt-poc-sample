@@ -72,9 +72,6 @@ preflight() {
     fi
     print_ok "virtctl: $(virtctl version --client 2>/dev/null | sed -n 's/.*GitVersion:"v\([^"]*\)".*/\1/p' | head -1 || echo 'found')"
 
-}
-
-step_import() {
     # qcow2 파일
     if [ -n "${1:-}" ]; then
         IMAGE_PATH="$1"
@@ -168,145 +165,43 @@ step_template() {
     print_step "3/4  Template 등록 (poc @ openshift)"
 
     cat > template-poc.yaml <<EOF
-kind: Template
 apiVersion: template.openshift.io/v1
+kind: Template
 metadata:
   name: poc
   namespace: openshift
-  uid: ccc5a64b-869d-4c28-bd2a-e05d5f8cee2e
-  resourceVersion: '1445617'
-  creationTimestamp: '2026-04-03T05:53:52Z'
   labels:
     app.kubernetes.io/part-of: hyperconverged-cluster
-    template.kubevirt.io/architecture: amd64
     flavor.template.kubevirt.io/small: 'true'
-    template.kubevirt.io/version: v0.34.1
-    app.kubernetes.io/version: 4.20.8
+    template.kubevirt.io/version: v0.31.1
     template.kubevirt.io/type: vm
-    vm.kubevirt.io/template: rhel8-server-small
+    vm.kubevirt.io/template: rhel9-server-small
     app.kubernetes.io/component: templating
     app.kubernetes.io/managed-by: ssp-operator
-    os.template.kubevirt.io/rhel8.0: 'true'
-    os.template.kubevirt.io/rhel8.1: 'true'
-    os.template.kubevirt.io/rhel8.2: 'true'
-    app.kubernetes.io/name: custom-templates
-    os.template.kubevirt.io/rhel8.10: 'true'
-    os.template.kubevirt.io/rhel8.3: 'true'
-    os.template.kubevirt.io/rhel8.4: 'true'
-    os.template.kubevirt.io/rhel8.5: 'true'
+    os.template.kubevirt.io/rhel9.0: 'true'
+    os.template.kubevirt.io/rhel9.1: 'true'
+    os.template.kubevirt.io/rhel9.2: 'true'
+    os.template.kubevirt.io/rhel9.3: 'true'
+    os.template.kubevirt.io/rhel9.4: 'true'
+    os.template.kubevirt.io/rhel9.5: 'true'
     vm.kubevirt.io/template.namespace: openshift
-    os.template.kubevirt.io/rhel8.6: 'true'
+    app.kubernetes.io/name: custom-templates
     workload.template.kubevirt.io/server: 'true'
-    os.template.kubevirt.io/rhel8.7: 'true'
-    os.template.kubevirt.io/rhel8.8: 'true'
-    os.template.kubevirt.io/rhel8.9: 'true'
   annotations:
-    template.kubevirt.io/provider: ''
-    template.kubevirt.io/provider-url: 'https://www.redhat.com'
-    template.kubevirt.io/containerdisks: |
-      registry.redhat.io/rhel8/rhel-guest-image
-    template.kubevirt.io/version: v1alpha1
-    openshift.io/display-name: ' MYRed Hat Enterprise Linux 8 VM'
-    openshift.io/documentation-url: 'https://github.com/kubevirt/common-templates'
-    template.kubevirt.io/images: |
-      https://access.redhat.com/downloads/content/479/ver=/rhel---8/8.6/x86_64/product-software
-    operator-sdk/primary-resource-type: SSP.ssp.kubevirt.io
-    defaults.template.kubevirt.io/disk: rootdisk
-    name.os.template.kubevirt.io/rhel8.0: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.1: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.2: Red Hat Enterprise Linux 8.0 or higher
-    template.kubevirt.io/editable: |
-      /objects[0].spec.template.spec.domain.cpu.sockets
-      /objects[0].spec.template.spec.domain.cpu.cores
-      /objects[0].spec.template.spec.domain.cpu.threads
-      /objects[0].spec.template.spec.domain.memory.guest
-      /objects[0].spec.template.spec.domain.devices.disks
-      /objects[0].spec.template.spec.volumes
-      /objects[0].spec.template.spec.networks
-    template.openshift.io/bindable: 'false'
-    name.os.template.kubevirt.io/rhel8.3: Red Hat Enterprise Linux 8.0 or higher
-    openshift.kubevirt.io/pronounceable-suffix-for-name-expression: 'true'
-    operator-sdk/primary-resource: openshift-cnv/ssp-kubevirt-hyperconverged
-    name.os.template.kubevirt.io/rhel8.4: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.5: Red Hat Enterprise Linux 8.0 or higher
+    openshift.io/display-name: POC VM
+    description: Template for Red Hat Enterprise Linux 9 VM or newer.
     tags: 'hidden,kubevirt,virtualmachine,linux,rhel'
-    name.os.template.kubevirt.io/rhel8.6: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.7: Red Hat Enterprise Linux 8.0 or higher
-    template.kubevirt.io/provider-support-level: Full
-    name.os.template.kubevirt.io/rhel8.8: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.9: Red Hat Enterprise Linux 8.0 or higher
-    name.os.template.kubevirt.io/rhel8.10: Red Hat Enterprise Linux 8.0 or higher
-    description: Template for Red Hat Enterprise Linux 8 VM or newer. A PVC with the RHEL disk image must be available.
-    openshift.io/support-url: 'https://github.com/kubevirt/common-templates/issues'
     iconClass: icon-rhel
-    openshift.io/provider-display-name: ''
-  managedFields:
-    - manager: Mozilla
-      operation: Update
-      apiVersion: template.openshift.io/v1
-      time: '2026-04-03T05:54:08Z'
-      fieldsType: FieldsV1
-      fieldsV1:
-        'f:metadata':
-          'f:annotations':
-            'f:template.kubevirt.io/editable': {}
-            'f:operator-sdk/primary-resource': {}
-            'f:operator-sdk/primary-resource-type': {}
-            'f:defaults.template.kubevirt.io/disk': {}
-            'f:name.os.template.kubevirt.io/rhel8.0': {}
-            'f:template.kubevirt.io/provider-support-level': {}
-            'f:name.os.template.kubevirt.io/rhel8.1': {}
-            'f:description': {}
-            'f:name.os.template.kubevirt.io/rhel8.10': {}
-            'f:name.os.template.kubevirt.io/rhel8.2': {}
-            'f:template.openshift.io/bindable': {}
-            'f:name.os.template.kubevirt.io/rhel8.3': {}
-            'f:name.os.template.kubevirt.io/rhel8.4': {}
-            'f:iconClass': {}
-            'f:openshift.kubevirt.io/pronounceable-suffix-for-name-expression': {}
-            'f:name.os.template.kubevirt.io/rhel8.5': {}
-            'f:name.os.template.kubevirt.io/rhel8.6': {}
-            'f:tags': {}
-            .: {}
-            'f:name.os.template.kubevirt.io/rhel8.7': {}
-            'f:template.kubevirt.io/provider': {}
-            'f:name.os.template.kubevirt.io/rhel8.8': {}
-            'f:template.kubevirt.io/provider-url': {}
-            'f:name.os.template.kubevirt.io/rhel8.9': {}
-            'f:template.kubevirt.io/containerdisks': {}
-            'f:openshift.io/support-url': {}
-            'f:openshift.io/provider-display-name': {}
-            'f:template.kubevirt.io/images': {}
-            'f:openshift.io/display-name': {}
-            'f:template.kubevirt.io/version': {}
-            'f:openshift.io/documentation-url': {}
-          'f:labels':
-            'f:os.template.kubevirt.io/rhel8.0': {}
-            'f:os.template.kubevirt.io/rhel8.1': {}
-            'f:os.template.kubevirt.io/rhel8.2': {}
-            'f:os.template.kubevirt.io/rhel8.3': {}
-            'f:os.template.kubevirt.io/rhel8.4': {}
-            'f:vm.kubevirt.io/template.namespace': {}
-            'f:app.kubernetes.io/managed-by': {}
-            'f:os.template.kubevirt.io/rhel8.5': {}
-            'f:os.template.kubevirt.io/rhel8.6': {}
-            'f:os.template.kubevirt.io/rhel8.7': {}
-            'f:os.template.kubevirt.io/rhel8.8': {}
-            'f:os.template.kubevirt.io/rhel8.9': {}
-            'f:os.template.kubevirt.io/rhel8.10': {}
-            'f:app.kubernetes.io/name': {}
-            .: {}
-            'f:app.kubernetes.io/part-of': {}
-            'f:template.kubevirt.io/architecture': {}
-            'f:workload.template.kubevirt.io/server': {}
-            'f:flavor.template.kubevirt.io/small': {}
-            'f:app.kubernetes.io/version': {}
-            'f:template.kubevirt.io/type': {}
-            'f:vm.kubevirt.io/template': {}
-            'f:template.kubevirt.io/version': {}
-            'f:app.kubernetes.io/component': {}
-        'f:objects': {}
-        'f:parameters': {}
+    template.kubevirt.io/version: v1alpha1
+    defaults.template.kubevirt.io/disk: rootdisk
+    template.openshift.io/bindable: 'false'
+    openshift.kubevirt.io/pronounceable-suffix-for-name-expression: 'true'
+    name.os.template.kubevirt.io/rhel9.0: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.1: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.2: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.3: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.4: Red Hat Enterprise Linux 9.0 or higher
+    name.os.template.kubevirt.io/rhel9.5: Red Hat Enterprise Linux 9.0 or higher
 objects:
   - apiVersion: kubevirt.io/v1
     kind: VirtualMachine
@@ -324,6 +219,7 @@ objects:
           ]
       labels:
         app: '\${NAME}'
+        kubevirt.io/dynamic-credentials-support: 'true'
         vm.kubevirt.io/template: poc
         vm.kubevirt.io/template.revision: '1'
         vm.kubevirt.io/template.namespace: openshift
@@ -340,6 +236,7 @@ objects:
               name: '\${DATA_SOURCE_NAME}'
               namespace: '\${DATA_SOURCE_NAMESPACE}'
             storage:
+              storageClassName: ${STORAGE_CLASS}
               resources:
                 requests:
                   storage: 30Gi
@@ -348,7 +245,7 @@ objects:
         metadata:
           annotations:
             vm.kubevirt.io/flavor: small
-            vm.kubevirt.io/os: rhel8
+            vm.kubevirt.io/os: rhel9
             vm.kubevirt.io/workload: server
           labels:
             kubevirt.io/domain: '\${NAME}'
@@ -373,6 +270,12 @@ objects:
                   model: virtio
                   name: default
               rng: {}
+            features:
+              smm:
+                enabled: true
+            firmware:
+              bootloader:
+                efi: {}
             memory:
               guest: 2Gi
           networks:
@@ -394,10 +297,10 @@ parameters:
   - name: NAME
     description: VM name
     generate: expression
-    from: 'rhel8-[a-z0-9]{16}'
+    from: 'poc-[a-z0-9]{16}'
   - name: DATA_SOURCE_NAME
     description: Name of the DataSource to clone
-    value: poc-golden
+    value: poc
   - name: DATA_SOURCE_NAMESPACE
     description: Namespace of the DataSource
     value: openshift-virtualization-os-images
@@ -476,11 +379,8 @@ main() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight "${1:-}"
-
-#    step_import
-#    step_upload
-#    step_datasource
-
+    step_upload
+    step_datasource
     step_template
     step_consoleyamlsamples
     print_summary
