@@ -235,13 +235,14 @@ objects:
               resources:
                 requests:
                   storage: 30Gi
-      runStrategy: Halted
+      runStrategy: Always
       template:
         metadata:
           annotations:
             vm.kubevirt.io/flavor: small
             vm.kubevirt.io/os: rhel9
             vm.kubevirt.io/workload: server
+            descheduler.alpha.kubernetes.io/evict: "true"
           labels:
             kubevirt.io/domain: '\${NAME}'
             kubevirt.io/size: small
