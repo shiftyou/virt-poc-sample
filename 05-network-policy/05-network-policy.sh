@@ -366,9 +366,9 @@ step_vms() {
         ]'
 
         # cloud-init networkData — 기존 cloudinitdisk 볼륨에 networkData 추가 (VM 시작 전)
-        # NS1 → .11/24, NS2 → .12/24
+        # NS1 → .51/24, NS2 → .52/24
         local ip_suffix
-        if [ "$NS" = "$NS1" ]; then ip_suffix="11"; else ip_suffix="12"; fi
+        if [ "$NS" = "$NS1" ]; then ip_suffix="51"; else ip_suffix="52"; fi
 
         local ci_idx
         ci_idx=$(oc get vm "$VM_NAME" -n "$NS" \
