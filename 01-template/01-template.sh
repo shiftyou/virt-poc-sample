@@ -285,7 +285,7 @@ parameters:
   - name: NAME
     description: VM name
     generate: expression
-    from: 'rhel8-[a-z0-9]{16}'
+    from: 'poc-[a-z0-9]{16}'
   - name: DATA_SOURCE_NAME
     description: Name of the DataSource to clone
     value: poc-golden
@@ -294,9 +294,12 @@ parameters:
     value: openshift-virtualization-os-images
   - name: CLOUD_USER_PASSWORD
     description: Randomized password for the cloud-init user cloud-user
-    generate: expression
-    from: '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}'
+    value: redhat
 EOF
+
+#    generate: expression
+#    from: '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}'
+
     echo "생성된 파일: template-poc.yaml"
     oc apply -f template-poc.yaml
 

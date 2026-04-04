@@ -586,7 +586,7 @@ step_vm() {
         return
     fi
 
-    local ip_suffixes=(10 11)
+    local ip_suffixes=(21 22)
     local idx=0
 
     for suffix in 1 2; do
@@ -842,8 +842,8 @@ print_summary() {
     echo -e "  VM 상태   : ${CYAN}oc get vm,vmi -n ${NAD_NAMESPACE}${NC}"
     echo ""
     echo -e "  VM IP (eth1):"
-    echo -e "    poc-network-vm-1 : ${CYAN}${SECONDARY_IP_PREFIX}.10/24${NC}"
-    echo -e "    poc-network-vm-2 : ${CYAN}${SECONDARY_IP_PREFIX}.11/24${NC}"
+    echo -e "    poc-network-vm-1 : ${CYAN}${SECONDARY_IP_PREFIX}.21/24${NC}"
+    echo -e "    poc-network-vm-2 : ${CYAN}${SECONDARY_IP_PREFIX}.22/24${NC}"
     echo ""
 }
 
