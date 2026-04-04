@@ -211,7 +211,7 @@ step_vm() {
         print_ok "VM $VM_NAME 이미 존재 — 스킵"
     else
         oc process -n openshift poc -p NAME="$VM_NAME" | \
-            sed 's/  running: false/  runStrategy: Halted/' | \
+            sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' | \
             oc apply -n "$NS" -f -
         print_ok "VM $VM_NAME 생성 완료"
     fi

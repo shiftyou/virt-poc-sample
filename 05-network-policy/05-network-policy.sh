@@ -356,7 +356,7 @@ step_vms() {
         fi
 
         oc process -n openshift poc -p NAME="$VM_NAME" | \
-            sed 's/  running: false/  runStrategy: Halted/' > "${VM_NAME}-${NS}.yaml"
+            sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM_NAME}-${NS}.yaml"
         echo "생성된 파일: ${VM_NAME}-${NS}.yaml"
         oc apply -n "$NS" -f "${VM_NAME}-${NS}.yaml"
 

@@ -187,7 +187,7 @@ step_vms() {
         fi
 
         oc process -n openshift poc -p NAME="$VM" | \
-        sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
+        sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
         ensure_runstrategy "$VM" "$NS"

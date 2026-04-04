@@ -601,7 +601,7 @@ step_vm() {
 
         local vm_yaml="${SCRIPT_DIR}/vm-${VM_NAME}.yaml"
         oc process -n openshift poc -p NAME="$VM_NAME" | \
-            sed 's/  running: false/  runStrategy: Halted/' > "${vm_yaml}"
+            sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${vm_yaml}"
         echo "생성된 파일: ${vm_yaml}"
         oc apply -n "$NAD_NAMESPACE" -f "${vm_yaml}"
 
