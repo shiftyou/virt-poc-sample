@@ -59,7 +59,7 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# YAML 미리보기 후 확인하고 적용
+# YAML 미리보기 후 적용
 confirm_and_apply() {
     local file="$1"
     echo ""
@@ -67,8 +67,6 @@ confirm_and_apply() {
     echo "────────────────────────────────────────"
     cat "$file"
     echo "────────────────────────────────────────"
-    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
-    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "취소되었습니다."; exit 0; }
     oc apply -f "$file"
 }
 
