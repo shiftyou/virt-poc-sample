@@ -37,6 +37,18 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
+confirm_and_apply() {
+    local file="$1"
+    echo ""
+    print_info "적용할 YAML:"
+    echo "────────────────────────────────────────"
+    cat "$file"
+    echo "────────────────────────────────────────"
+    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
+    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    oc apply -f "$file"
+}
+
 # spec.running(deprecated) -> spec.runStrategy 마이그레이션
 # oc patch vm 전에 호출하여 admission webhook 경고 제거
 ensure_runstrategy() {
@@ -123,7 +135,7 @@ spec:
     spec:
       remediationStrategy: ResourceDeletion
 EOF
-    oc apply -f snr-template.yaml
+    confirm_and_apply snr-template.yaml
     print_ok "SelfNodeRemediationTemplate poc-snr-template 생성 완료"
 }
 
@@ -154,10 +166,10 @@ spec:
       status: "False"
       duration: 300s
     - type: Ready
-      status: Unknown
+      status: "Unknown"
       duration: 300s
 EOF
-    oc apply -f nhc-snr.yaml
+    confirm_and_apply nhc-snr.yaml
     print_ok "NodeHealthCheck poc-snr-nhc 생성 완료"
     print_info "  조건: Ready=False 또는 Unknown 300초 이상 → SNR 발동"
 }
@@ -217,7 +229,7 @@ print_summary() {
     echo -e "    ${CYAN}oc get selfnoderemediation -A${NC}"
     echo -e "    ${CYAN}oc get nodes -w${NC}"
     echo ""
-    echo -e "  자세한 내용: 08-snr.md 참조"
+    echo -e "  자세한 내용: 15-snr.md 참조"
     echo ""
 }
 
