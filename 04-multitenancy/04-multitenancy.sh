@@ -156,25 +156,35 @@ step_namespaces() {
 step_rbac() {
     print_step "RBAC 설정"
 
+    # RoleBinding(네임스페이스 한정) — ClusterRoleBinding(클러스터 전체)이 아님
+    # admin ClusterRole을 특정 NS에만 바인딩 → 해당 NS 내 리소스만 관리 가능
     echo ""
-    printf "  %-10s  %-20s  %s\n" "사용자" "네임스페이스" "역할"
-    echo "  ──────────────────────────────────────────────"
+    printf "  %-10s  %-30s  %s\n" "사용자" "네임스페이스" "역할"
+    echo "  ──────────────────────────────────────────────────────"
 
     oc adm policy add-role-to-user admin "$USER1" -n "$NS1" 2>/dev/null
-    printf "  %-10s  %-20s  %s\n" "$USER1" "$NS1" "admin  (모든 권한)"
-    print_ok "${USER1} → ${NS1} [admin]"
+    printf "  %-10s  %-30s  %s\n" "$USER1" "$NS1" "admin  (해당 NS 한정)"
+    print_ok "${USER1} → ${NS1} [admin, NS 한정]"
 
     oc adm policy add-role-to-user admin "$USER2" -n "$NS2" 2>/dev/null
-    printf "  %-10s  %-20s  %s\n" "$USER2" "$NS2" "admin  (모든 권한)"
-    print_ok "${USER2} → ${NS2} [admin]"
+    printf "  %-10s  %-30s  %s\n" "$USER2" "$NS2" "admin  (해당 NS 한정)"
+    print_ok "${USER2} → ${NS2} [admin, NS 한정]"
 
     oc adm policy add-role-to-user view "$USER3" -n "$NS1" 2>/dev/null
-    printf "  %-10s  %-20s  %s\n" "$USER3" "$NS1" "view   (읽기 전용)"
+    printf "  %-10s  %-30s  %s\n" "$USER3" "$NS1" "view   (읽기 전용)"
     print_ok "${USER3} → ${NS1} [view]"
 
     oc adm policy add-role-to-user view "$USER4" -n "$NS2" 2>/dev/null
-    printf "  %-10s  %-20s  %s\n" "$USER4" "$NS2" "view   (읽기 전용)"
+    printf "  %-10s  %-30s  %s\n" "$USER4" "$NS2" "view   (읽기 전용)"
     print_ok "${USER4} → ${NS2} [view]"
+
+    # DataSource 참조 권한 — VM 생성 시 openshift-virtualization-os-images의
+    # DataSource를 sourceRef로 사용하므로 해당 NS에 view 권한 필요
+    oc adm policy add-role-to-user view "$USER1" -n "$DATASOURCE_NS" 2>/dev/null
+    print_ok "${USER1} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
+
+    oc adm policy add-role-to-user view "$USER2" -n "$DATASOURCE_NS" 2>/dev/null
+    print_ok "${USER2} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
 }
 
 # =============================================================================
@@ -335,6 +345,12 @@ cleanup() {
     oc delete namespace "$NS1" --ignore-not-found
     oc delete namespace "$NS2" --ignore-not-found
 
+    print_info "DataSource NS RoleBinding 삭제..."
+    for user in "$USER1" "$USER2"; do
+        oc adm policy remove-role-from-user view "$user" \
+            -n "$DATASOURCE_NS" 2>/dev/null || true
+    done
+
     print_info "User / Identity 삭제..."
     for user in "$USER1" "$USER2" "$USER3" "$USER4"; do
         oc delete user "$user" --ignore-not-found 2>/dev/null || true
@@ -361,10 +377,10 @@ print_summary() {
     echo -e "  ${CYAN}━━ 사용자 / 권한 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     printf "  %-8s  %-20s  %-18s  %s\n" "사용자" "네임스페이스" "역할" "비밀번호"
     echo "  ─────────────────────────────────────────────────────────────"
-    printf "  %-8s  %-24s  %-18s  %s\n" "$USER1" "$NS1" "admin (모든 권한)"    "$DEFAULT_PASS"
-    printf "  %-8s  %-24s  %-18s  %s\n" "$USER2" "$NS2" "admin (모든 권한)"    "$DEFAULT_PASS"
-    printf "  %-8s  %-24s  %-18s  %s\n" "$USER3" "$NS1" "view  (읽기 전용)"   "$DEFAULT_PASS"
-    printf "  %-8s  %-24s  %-18s  %s\n" "$USER4" "$NS2" "view  (읽기 전용)"   "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-22s  %s\n" "$USER1" "$NS1" "admin (해당 NS 한정)"  "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-22s  %s\n" "$USER2" "$NS2" "admin (해당 NS 한정)"  "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-22s  %s\n" "$USER3" "$NS1" "view  (읽기 전용)"    "$DEFAULT_PASS"
+    printf "  %-8s  %-24s  %-22s  %s\n" "$USER4" "$NS2" "view  (읽기 전용)"    "$DEFAULT_PASS"
     echo ""
     echo -e "  ${CYAN}━━ Console 로그인 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  URL: ${BLUE}https://${console_url}${NC}"
