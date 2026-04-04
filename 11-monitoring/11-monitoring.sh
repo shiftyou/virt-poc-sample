@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 10-monitoring.sh
+# 11-monitoring.sh
 #
 # 모니터링 실습 환경 구성 (Grafana + Cluster Observability Operator)
 #   1. poc-monitoring 네임스페이스 생성
@@ -9,7 +9,7 @@
 #   4. poc 템플릿 VM + node-exporter Service 배포 (COO + Virt 필요)
 #   5. COO MonitoringStack + ServiceMonitor + PrometheusRule 배포 (COO 필요)
 #
-# 사용법: ./10-monitoring.sh
+# 사용법: ./11-monitoring.sh
 # =============================================================================
 
 set -euo pipefail

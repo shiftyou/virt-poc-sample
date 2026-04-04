@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# 05-resource-quota.sh
+# 06-resource-quota.sh
 #
 # ResourceQuota 실습 환경 구성
 #   1. poc-resource-quota 네임스페이스 생성
 #   2. CPU / Memory / Pod / PVC 등 ResourceQuota 적용
 #   3. VM 2개 배포 (Quota 내 통과) → 3번째 VM 생성 시도 → Quota 초과 거부
 #
-# 사용법: ./05-resource-quota.sh
+# 사용법: ./06-resource-quota.sh
 # =============================================================================
 
 set -euo pipefail

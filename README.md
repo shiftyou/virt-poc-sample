@@ -49,6 +49,8 @@ cd virt-poc-sample
 | Node Maintenance | [node-maintenance-operator.md](00-operator/node-maintenance-operator.md) | 노드 유지보수 사용 시 |
 | Grafana | [grafana-operator.md](00-operator/grafana-operator.md) | 모니터링 대시보드 사용 시 |
 | Cluster Observability Operator (COO) | OperatorHub → "Cluster Observability Operator" | 네임스페이스 독립 모니터링 사용 시 |
+| OpenShift Logging | OperatorHub → "Red Hat OpenShift Logging" | Audit 로그 수집 사용 시 |
+| Loki Operator | OperatorHub → "Loki Operator" | 로그 저장소(LokiStack) 사용 시 |
 
 ---
 
@@ -74,6 +76,7 @@ cd virt-poc-sample
 | 16 | [16-far](16-far/16-far.md) | FAR 실습 — NHC가 비정상 노드 감지 → FenceAgentsRemediation으로 IPMI/BMC 전원 재시작 |
 | 17 | [17-add-node](17-add-node/17-add-node.md) | 워커 노드 제거 후 재조인 — kubelet 중지·노드 오브젝트 삭제·CSR 승인·재조인 확인 |
 | 18 | [18-hyperconverged](18-hyperconverged/18-hyperconverged.md) | HyperConverged 설정 — CPU Overcommit 비율·Live Migration 설정·Feature Gates |
+| 19 | [19-logging](19-logging/19-logging.md) | Audit Logging 실습 — APIServer Audit Policy 설정·ClusterLogging·LokiStack·ClusterLogForwarder 구성 |
 | 20 | [20-upgrade](20-upgrade/20-upgrade.md) | Airgap 환경 OCP 4.20→4.21 업그레이드 — oc-mirror·IDMS·OSUS·ClusterVersion 설정 |
 
 > 번호 순서가 실행 순서입니다.

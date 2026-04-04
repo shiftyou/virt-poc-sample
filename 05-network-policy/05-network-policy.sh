@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 04-network-policy.sh
+# 05-network-policy.sh
 #
 # NetworkPolicy / MultiNetworkPolicy 실습 환경 구성
 #
@@ -14,7 +14,7 @@
 #      - NAD: ovn-k8s-cni-overlay (OVN Localnet)
 #      - 정책: k8s.cni.cncf.io/v1beta1 MultiNetworkPolicy (secondary NIC / eth1)
 #
-# 사용법: ./04-network-policy.sh
+# 사용법: ./05-network-policy.sh
 # =============================================================================
 
 set -euo pipefail

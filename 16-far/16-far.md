@@ -40,17 +40,17 @@ NHC (감지) → FenceAgentsRemediationTemplate (IPMI fencing)
 - Node Health Check Operator 설치 (`00-operator/nhc-operator.md` 참조)
 - 워커 노드에 IPMI/BMC 접근 가능
 - `env.conf`에 `FENCE_AGENT_IP`, `FENCE_AGENT_USER`, `FENCE_AGENT_PASS` 설정
-- `15-far.sh` 실행 완료
+- `16-far.sh` 실행 완료
 
 ---
 
 ## 구성 개요
 
-| 리소스 | 역할 |
-|--------|------|
-| FenceAgentsRemediationTemplate | IPMI fencing 방법 정의 |
-| NodeHealthCheck | 노드 상태 감지 + FAR 트리거 조건 |
-| poc-far-vm-1, vm-2 | 복구 대상 VM (NODE1에 배치) |
+| 리소스 | 네임스페이스 | 역할 |
+|--------|------------|------|
+| Secret `poc-far-credentials` | `openshift-workload-availability` | IPMI `--password` 보안 보관 |
+| FenceAgentsRemediationTemplate | `openshift-workload-availability` | IPMI fencing 방법 정의 |
+| NodeHealthCheck | cluster-scoped | 노드 상태 감지 + FAR 트리거 조건 |
 
 ---
 
@@ -65,29 +65,62 @@ NHC (감지) → FenceAgentsRemediationTemplate (IPMI fencing)
 
 ---
 
+## IPMI Credentials Secret
+
+비밀번호는 Secret으로 분리 관리합니다. `--password` 키에 IPMI 비밀번호를 저장합니다.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: poc-far-credentials
+  namespace: openshift-workload-availability
+stringData:
+  --password: "<FENCE_AGENT_PASS>"
+```
+
+```bash
+oc create secret generic poc-far-credentials \
+  -n openshift-workload-availability \
+  --from-literal=--password=<FENCE_AGENT_PASS>
+```
+
+---
+
 ## FenceAgentsRemediationTemplate
 
 ```yaml
 apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
 kind: FenceAgentsRemediationTemplate
 metadata:
+  annotations:
+    remediation.medik8s.io/multiple-templates-support: "true"
   name: poc-far-template
   namespace: openshift-workload-availability
 spec:
   template:
     spec:
       agent: fence_ipmilan
-      sharedparameters:
-        --ip: "<FENCE_AGENT_IP>"
-        --username: "<FENCE_AGENT_USER>"
-        --lanplus: ""
-        --action: "reboot"
       nodeparameters:
-        --ipport:
-          <node-name>: "623"
+        --ip:
+          <worker-node-fqdn-1>: <bmc-ip-1>
+          <worker-node-fqdn-2>: <bmc-ip-2>
+          <worker-node-fqdn-3>: <bmc-ip-3>
+      remediationStrategy: ResourceDeletion
+      retrycount: 5
+      retryinterval: 5s
+      sharedSecretName: poc-far-credentials
+      sharedparameters:
+        --action: reboot
+        --lanplus: ""
+        --username: <FENCE_AGENT_USER>
+      timeout: 1m0s
 ```
 
-`agent`: IPMI 환경에 따라 `fence_ipmilan`, `fence_idrac`, `fence_ilo` 등 선택
+- `nodeparameters[--ip]`: 노드 FQDN → BMC IP 매핑 (노드별 BMC IP 지정)
+- `sharedSecretName`: `--password`가 담긴 Secret 이름
+- `sharedparameters`: 모든 노드에 공통 적용되는 파라미터 (비밀번호 제외)
+- `agent`: IPMI 환경에 따라 `fence_ipmilan`, `fence_idrac`, `fence_ilo` 등 선택
 
 ---
 

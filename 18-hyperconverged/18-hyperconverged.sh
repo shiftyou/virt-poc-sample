@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# 17-hyperconverged.sh
+# 18-hyperconverged.sh
 #
 # HyperConverged 설정 실습
 #   1. 현재 HyperConverged 설정 출력
 #   2. CPU Overcommit 비율 확인 및 안내
 #
-# 사용법: ./17-hyperconverged.sh
+# 사용법: ./18-hyperconverged.sh
 # =============================================================================
 
 set -euo pipefail
