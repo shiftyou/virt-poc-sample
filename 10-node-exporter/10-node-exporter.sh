@@ -53,6 +53,13 @@ preflight() {
         print_ok "네임스페이스 $NS 생성 완료"
     fi
 
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        exit 77
+    fi
+    print_ok "OpenShift Virtualization Operator 확인"
+
     if ! oc get template poc -n openshift &>/dev/null; then
         print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
         exit 1

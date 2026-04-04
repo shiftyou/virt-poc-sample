@@ -85,6 +85,13 @@ preflight() {
     fi
     print_ok "대상 노드: $NODE1"
 
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        exit 77
+    fi
+    print_ok "OpenShift Virtualization Operator 확인"
+
     if [ "${DESCHEDULER_INSTALLED:-false}" != "true" ]; then
         print_warn "Kube Descheduler Operator 미설치 → 건너뜁니다."
         print_warn "  설치 가이드: 00-operator/descheduler-operator.md"

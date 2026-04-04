@@ -67,6 +67,13 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        exit 77
+    fi
+    print_ok "OpenShift Virtualization Operator 확인"
+
     if ! command -v htpasswd &>/dev/null; then
         print_error "htpasswd 명령이 없습니다."
         print_info "설치: dnf install -y httpd-tools"
