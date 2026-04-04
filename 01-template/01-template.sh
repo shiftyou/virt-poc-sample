@@ -186,7 +186,6 @@ metadata:
     flavor.template.kubevirt.io/small: 'true'
     os.template.kubevirt.io/rhel9: 'true'
     workload.template.kubevirt.io/server: 'true'
-    template.kubevirt.io/type: base
   annotations:
     openshift.io/display-name: 'POC VM'
     description: Template for PoC

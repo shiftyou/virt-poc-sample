@@ -277,8 +277,8 @@ step_vms() {
         [ -n "$STORAGE_CLASS" ] && print_info "StorageClass 자동 감지: ${STORAGE_CLASS}"
     fi
 
-    create_vm "$NS1" "vm-poc-mt1"
-    create_vm "$NS2" "vm-poc-mt2"
+    create_vm "$NS1" "poc-mt-vm-1"
+    create_vm "$NS2" "poc-mt-vm-2"
 
     # 기동 대기
     echo ""

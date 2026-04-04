@@ -1,0 +1,73 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    app: poc-descheduler-vm-trigger
+    vm.kubevirt.io/template: poc
+    vm.kubevirt.io/template.namespace: openshift
+  name: poc-descheduler-vm-trigger
+  namespace: poc-descheduler
+spec:
+  dataVolumeTemplates:
+  - apiVersion: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    metadata:
+      name: poc-descheduler-vm-trigger
+    spec:
+      sourceRef:
+        kind: DataSource
+        name: poc-golden
+        namespace: openshift-virtualization-os-images
+      storage:
+        resources:
+          requests:
+            storage: 30Gi
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: poc-descheduler-vm-trigger
+        kubevirt.io/size: small
+    spec:
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+          - disk:
+              bus: virtio
+            name: rootdisk
+          - disk:
+              bus: virtio
+            name: cloudinitdisk
+          interfaces:
+          - masquerade: {}
+            model: virtio
+            name: default
+          rng: {}
+        memory:
+          guest: 2Gi
+        resources:
+          requests:
+            cpu: 2841m
+            memory: 19271Mi
+      evictionStrategy: LiveMigrate
+      networks:
+      - name: default
+        pod: {}
+      nodeSelector:
+        kubernetes.io/hostname: worker-cluster-w26rf-1
+      terminationGracePeriodSeconds: 180
+      volumes:
+      - dataVolume:
+          name: poc-descheduler-vm-trigger
+        name: rootdisk
+      - cloudInitNoCloud:
+          userData: |-
+            #cloud-config
+            user: cloud-user
+            password: ms7f-o4ob-ubqw
+            chpasswd: { expire: False }
+        name: cloudinitdisk
