@@ -212,7 +212,16 @@ metadata:
   annotations:
     k8s.v1.cni.cncf.io/resourceName: bridge.network.kubevirt.io/${BRIDGE_NAME}
 spec:
-  config: '{"cniVersion":"0.3.1","name":"${NAD_NAME}","type":"cnv-bridge","bridge":"${BRIDGE_NAME}","macspoofchk":true,"ipam":{}}'
+  config: |-
+    {
+        "cniVersion": "0.3.1",
+        "name": "${NAD_NAME}",
+        "type": "bridge",
+        "bridge": "${BRIDGE_NAME}",
+        "ipam": {},
+        "macspoofchk": true,
+        "preserveDefaultVlan": false
+    }
 EOF
         else
             cat > "nad-${NS}.yaml" <<EOF
