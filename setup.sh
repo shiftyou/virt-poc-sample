@@ -538,6 +538,15 @@ else
 fi
 
 # =============================================================================
+# [09] Alert — VM Stop 알림
+# =============================================================================
+print_step_header "[09]" "Alert — VM Stop 알림 (PrometheusRule / OpenShift Console)"
+echo ""
+print_info "Alert 은 OpenShift Console → Observe → Alerting 에서 확인합니다."
+ask "감시할 VM 이름" "poc-alert-vm" ALERT_VM_NAME
+ask "감시할 VM 네임스페이스" "poc-alert" ALERT_VM_NS
+
+# =============================================================================
 # [13·14·16] Node — 노드 유지보수 / SNR / Add Node
 # =============================================================================
 print_step_header "[13·14·16]" "Node — 노드 유지보수 / SNR / Add Node"
@@ -601,6 +610,10 @@ STORAGE_CLASS=${STORAGE_CLASS}
 
 # Golden Image URL (DataVolume HTTP import)
 GOLDEN_IMAGE_URL=${GOLDEN_IMAGE_URL}
+
+# Alert 설정 (09-alert)
+ALERT_VM_NAME=${ALERT_VM_NAME}
+ALERT_VM_NS=${ALERT_VM_NS}
 
 # VDDK 이미지
 VDDK_IMAGE=${VDDK_IMAGE}

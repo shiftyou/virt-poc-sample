@@ -21,6 +21,8 @@ fi
 
 NS="poc-alert"
 VM_NAME="poc-alert-vm"
+ALERT_VM_NAME="${ALERT_VM_NAME:-${VM_NAME}}"   # 감시할 특정 VM 이름 (env.conf 또는 환경변수로 재정의 가능)
+ALERT_VM_NS="${ALERT_VM_NS:-${NS}}"            # 감시할 특정 VM 네임스페이스
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -67,7 +69,7 @@ step_namespace() {
 }
 
 step_user_workload_monitoring() {
-    print_step "2/4  User-defined Project Monitoring 활성화"
+    print_step "2/5  User-defined Project Monitoring 활성화"
 
     local current
     current=$(oc get configmap cluster-monitoring-config \
@@ -112,7 +114,7 @@ EOF
 }
 
 step_prometheus_rule() {
-    print_step "3/4  PrometheusRule 배포 (VM 알림 규칙)"
+    print_step "3/5  PrometheusRule 배포 (VM 알림 규칙)"
 
     cat > poc-vm-alerts.yaml <<EOF
 apiVersion: monitoring.coreos.com/v1
@@ -122,12 +124,24 @@ metadata:
   namespace: ${NS}
   labels:
     role: alert-rules
-    openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus
 spec:
   groups:
     - name: poc-vm-availability
       interval: 30s
       rules:
+        - alert: VMStoppedByName
+          expr: |
+            (
+              kubevirt_vm_info{name="${ALERT_VM_NAME}", namespace="${ALERT_VM_NS}"}
+            ) unless on(name, namespace) (
+              kubevirt_vmi_info{name="${ALERT_VM_NAME}", namespace="${ALERT_VM_NS}"}
+            )
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "지정 VM {{ \$labels.name }} 이 중지되었습니다"
+            description: "네임스페이스 {{ \$labels.namespace }}의 VM {{ \$labels.name }}이 중지 상태입니다. VMI가 존재하지 않습니다. 즉시 확인이 필요합니다."
         - alert: VMStopped
           expr: |
             kubevirt_vmi_phase_count{phase="succeeded"} > 0
@@ -220,15 +234,24 @@ print_summary() {
     echo ""
     echo -e "  Alert 상태 확인:"
     echo -e "    ${CYAN}OpenShift Console → Observe → Alerting → Alert Rules${NC}"
+    echo -e "    ${CYAN}oc get prometheusrule -n ${NS}${NC}"
+    echo ""
+    echo -e "  감시 중인 특정 VM:"
+    echo -e "    이름      : ${CYAN}${ALERT_VM_NAME}${NC}"
+    echo -e "    네임스페이스: ${CYAN}${ALERT_VM_NS}${NC}"
+    echo -e "    변경하려면  : ${CYAN}ALERT_VM_NAME=<vm> ALERT_VM_NS=<ns> ./09-alert.sh${NC}"
     echo ""
     echo -e "  Alert 유발 테스트 (예시):"
-    echo -e "    ${CYAN}# VMStopped — VM을 정지시켜 Succeeded 상태로 유발${NC}"
+    echo -e "    ${CYAN}# VMStoppedByName — 지정 VM 정지 시 1분 후 발동${NC}"
+    echo -e "    ${CYAN}virtctl stop ${ALERT_VM_NAME} -n ${ALERT_VM_NS}${NC}"
+    echo ""
+    echo -e "    ${CYAN}# VMStopped — 네임스페이스 내 임의 VM 정지 시 발동${NC}"
     echo -e "    ${CYAN}virtctl stop ${VM_NAME} -n ${NS}${NC}"
     echo ""
     echo -e "    ${CYAN}# 복구${NC}"
-    echo -e "    ${CYAN}virtctl start ${VM_NAME} -n ${NS}${NC}"
+    echo -e "    ${CYAN}virtctl start ${ALERT_VM_NAME} -n ${ALERT_VM_NS}${NC}"
     echo ""
-    echo -e "  자세한 내용: 08-alert.md 참조"
+    echo -e "  자세한 내용: 09-alert.md 참조"
     echo ""
 }
 

@@ -5,8 +5,8 @@
 # Descheduler 실습 환경 구성
 #   1. poc-descheduler 네임스페이스 생성
 #   2. poc 템플릿으로 3개 VM 배포
-#      - vm-1, vm-2 : nodeSelector로 NODE1에 배치 → Running 후 nodeSelector 제거
-#      - vm-fixed   : annotation으로 descheduler 제외
+#      - vm-1, vm-2, vm-3 : nodeSelector로 NODE1에 배치 → Running 후 nodeSelector 제거
+#      - vm-fixed         : NODE1 고정 + descheduler evict 제외
 #   3. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
 #   4. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
 #   5. 트리거 VM을 TEST_NODE에 배포 → 노드 임계값 초과 → Descheduler 발동
@@ -111,13 +111,13 @@ step_namespace() {
 }
 
 # =============================================================================
-# 2단계: 3개 VM 배포 (nodeSelector 없이 아무 노드에나 기동)
+# 2단계: 4개 VM 배포
 # =============================================================================
 step_vms() {
-    print_step "2/5  VM 3개 배포"
+    print_step "2/5  VM 4개 배포"
 
-    # vm-1, vm-2: descheduler 대상 / vm-fixed: annotation으로 descheduler 제외
-    for VM in poc-descheduler-vm-fixed poc-descheduler-vm-1 poc-descheduler-vm-2 ; do
+    # vm-1, vm-2, vm-3: descheduler 대상 / vm-fixed: nodeSelector 고정 + evict 제외
+    for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-3 poc-descheduler-vm-fixed; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
             print_ok "VM $VM 이미 존재 — 스킵"
             continue
@@ -131,54 +131,51 @@ step_vms() {
 
         ensure_runstrategy "$VM" "$NS"
 
-        # 모든 VM: nodeSelector로 NODE1에 배치
+        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
+            # vm-fixed: NODE1 고정 + descheduler evict 제외
+            oc patch vm "$VM" -n "$NS" --type=merge -p "{
+              \"spec\": {
+                \"template\": {
+                  \"metadata\": {
+                    \"annotations\": {
+                      \"descheduler.alpha.kubernetes.io/evict\": \"false\"
+                    }
+                  },
+                  \"spec\": {
+                    \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
+                    \"evictionStrategy\": \"LiveMigrate\"
+                  }
+                }
+              }
+            }"
+            print_info "  → nodeSelector: ${NODE1} 고정, descheduler evict 제외"
+            virtctl start "$VM" -n "$NS" 2>/dev/null || true
+            print_ok "VM $VM 배포 완료 (nodeSelector 유지)"
+            continue
+        fi
+
+        # vm-1, vm-2, vm-3: nodeSelector로 NODE1 배치 + descheduler evict 허용
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
             \"template\": {
+              \"metadata\": {
+                \"annotations\": {
+                  \"descheduler.alpha.kubernetes.io/evict\": \"true\"
+                }
+              },
               \"spec\": {
                 \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
-                \"evictionStrategy\": \"LiveMigrate\",
-                \"domain\": {
-                  \"resources\": {
-                    \"requests\": {
-                      \"cpu\": \"${VM_CPU_REQUEST}\",
-                      \"memory\": \"${VM_MEM_REQUEST}\"
-                    }
-                  }
-                }
+                \"evictionStrategy\": \"LiveMigrate\"
               }
             }
           }
         }"
-        print_info "  → nodeSelector: ${NODE1} 설정"
-
-        # vm-fixed: descheduler 제외 annotation 추가
-        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
-            ensure_runstrategy "$VM" "$NS"
-            oc patch vm "$VM" -n "$NS" --type=merge -p '{
-              "spec": {
-                "template": {
-                  "metadata": {
-                    "annotations": {
-                      "descheduler.alpha.kubernetes.io/evict": "false"
-                    }
-                  }
-                }
-              }
-            }'
-            print_info "  → descheduler.alpha.kubernetes.io/evict: false 적용"
-        fi
+        print_info "  → nodeSelector: ${NODE1} 설정, descheduler evict 허용"
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 배포 완료 (cpu: ${VM_CPU_REQUEST})"
+        print_ok "VM $VM 배포 완료"
 
-        # vm-fixed 는 nodeSelector 유지 (노드 고정 + descheduler 제외 대상)
-        if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
-            print_ok "  → nodeSelector 유지 (poc-descheduler-vm-fixed 는 ${NODE1} 고정)"
-            continue
-        fi
-
-        # vm-1, vm-2: Running 대기 후 nodeSelector 제거 (descheduler 자유 대상)
+        # Running 대기 후 nodeSelector 제거 (descheduler 자유 대상)
         print_info "  → Running 대기 후 nodeSelector 제거..."
         local retries=36
         local i=0
@@ -362,41 +359,39 @@ step_trigger_vm() {
     print_info "  TRIGGER_CPU : ${TRIGGER_CPU}  (노드 ${NODE1} CPU를 71% 이상으로)"
     print_info "  TRIGGER_MEM : ${TRIGGER_MEM}"
 
-    if oc get vm poc-descheduler-vm-trigger -n "$NS" &>/dev/null; then
-        print_ok "트리거 VM 이미 존재 — 스킵"
-        return
-    fi
+    local TRIGGER_YAML="${SCRIPT_DIR}/poc-descheduler-vm-trigger.yaml"
+    local TRIGGER_BASE="${SCRIPT_DIR}/poc-descheduler-vm-trigger-base.yaml"
 
+    # base yaml 생성 (클러스터 적용 없이)
     oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" | \
-        sed 's/  running: false/  runStrategy: Halted/' > "poc-descheduler-vm-trigger.yaml"
-    echo "생성된 파일: poc-descheduler-vm-trigger.yaml"
-    oc apply -n "$NS" -f "poc-descheduler-vm-trigger.yaml"
+        sed 's/  running: false/  runStrategy: Halted/' > "${TRIGGER_BASE}"
 
-    ensure_runstrategy poc-descheduler-vm-trigger "$NS"
-    oc patch vm poc-descheduler-vm-trigger -n "$NS" --type=merge -p "{
-      \"spec\": {
-        \"template\": {
+    # nodeSelector + evictionStrategy + resources 를 dry-run 으로 병합 → 최종 yaml 저장
+    oc patch -f "${TRIGGER_BASE}" --dry-run=client --type=merge \
+        -p "{
           \"spec\": {
-            \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
-            \"evictionStrategy\": \"LiveMigrate\",
-            \"domain\": {
-              \"resources\": {
-                \"requests\": {
-                  \"cpu\": \"${TRIGGER_CPU}\",
-                  \"memory\": \"${TRIGGER_MEM}\"
+            \"template\": {
+              \"spec\": {
+                \"nodeSelector\": {\"kubernetes.io/hostname\": \"${NODE1}\"},
+                \"evictionStrategy\": \"LiveMigrate\",
+                \"domain\": {
+                  \"resources\": {
+                    \"requests\": {
+                      \"cpu\": \"${TRIGGER_CPU}\",
+                      \"memory\": \"${TRIGGER_MEM}\"
+                    }
+                  }
                 }
               }
             }
           }
-        }
-      }
-    }"
+        }" -o yaml > "${TRIGGER_YAML}" 2>/dev/null || mv "${TRIGGER_BASE}" "${TRIGGER_YAML}"
 
-    virtctl start poc-descheduler-vm-trigger -n "$NS" 2>/dev/null || true
-    print_ok "트리거 VM poc-descheduler-vm-trigger 배포 완료"
-    print_info "  → Descheduler 가 ${NODE1} 를 overutilized 로 감지하면"
-    print_info "    vm-1, vm-2 가 다른 노드로 Live Migration 됩니다."
-    print_info "    vm-fixed 는 annotation 으로 보호되어 이동되지 않습니다."
+    rm -f "${TRIGGER_BASE}"
+    echo "생성된 파일: ${TRIGGER_YAML}"
+    print_ok "트리거 VM yaml 저장 완료 — 준비되면 수동으로 적용하세요:"
+    print_info "  oc apply -n ${NS} -f ${TRIGGER_YAML}"
+    print_info "  virtctl start poc-descheduler-vm-trigger -n ${NS}"
 }
 
 # =============================================================================
@@ -453,10 +448,15 @@ print_summary() {
     echo -e "  Descheduler 동작 확인 (60초 후):"
     echo -e "    ${CYAN}oc get vmi -n ${NS} -o wide --watch${NC}"
     echo ""
-    echo -e "  예상 결과:"
+    echo -e "  트리거 VM 수동 적용 (준비되면 실행):"
+    echo -e "    ${CYAN}oc apply -n ${NS} -f ${SCRIPT_DIR}/poc-descheduler-vm-trigger.yaml${NC}"
+    echo -e "    ${CYAN}virtctl start poc-descheduler-vm-trigger -n ${NS}${NC}"
+    echo ""
+    echo -e "  예상 결과 (트리거 VM 적용 후 60초 이내):"
     echo -e "    poc-descheduler-vm-1       → 다른 노드로 Migration"
     echo -e "    poc-descheduler-vm-2       → 다른 노드로 Migration"
-    echo -e "    poc-descheduler-vm-fixed   → ${NODE1} 유지 (annotation 보호)"
+    echo -e "    poc-descheduler-vm-3       → 다른 노드로 Migration"
+    echo -e "    poc-descheduler-vm-fixed   → ${NODE1} 유지 (evict 제외)"
     echo -e "    poc-descheduler-vm-trigger → ${NODE1} 유지 (가장 최근 배포)"
     echo ""
     echo -e "  자세한 내용: 06-descheduler.md 참조"
