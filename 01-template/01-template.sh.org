@@ -183,34 +183,15 @@ metadata:
   name: poc
   namespace: openshift
   labels:
-    template.kubevirt.io/architecture: amd64
     flavor.template.kubevirt.io/small: 'true'
-    template.kubevirt.io/type: vm
-    vm.kubevirt.io/template: poc
-    app.kubernetes.io/component: templating
-    app.kubernetes.io/name: custom-templates
-    vm.kubevirt.io/template.namespace: openshift
+    os.template.kubevirt.io/rhel9: 'true'
     workload.template.kubevirt.io/server: 'true'
   annotations:
-    template.kubevirt.io/provider: ''
-    template.kubevirt.io/provider-url: 'https://www.redhat.com'
     openshift.io/display-name: 'POC VM'
-    defaults.template.kubevirt.io/disk: rootdisk
-    template.kubevirt.io/editable: |
-      /objects[0].spec.template.spec.domain.cpu.sockets
-      /objects[0].spec.template.spec.domain.cpu.cores
-      /objects[0].spec.template.spec.domain.cpu.threads
-      /objects[0].spec.template.spec.domain.memory.guest
-      /objects[0].spec.template.spec.domain.devices.disks
-      /objects[0].spec.template.spec.volumes
-      /objects[0].spec.template.spec.networks
-    template.openshift.io/bindable: 'false'
-    openshift.kubevirt.io/pronounceable-suffix-for-name-expression: 'true'
-    tags: 'hidden,kubevirt,virtualmachine,linux,rhel'
-    template.kubevirt.io/provider-support-level: Full
-    description: Template for POC
+    description: Template for PoC
     iconClass: icon-rhel
-    openshift.io/provider-display-name: ''
+    tags: 'hidden,kubevirt,virtualmachine,linux,rhel'
+    template.kubevirt.io/provider: 'Red Hat'
 objects:
   - apiVersion: kubevirt.io/v1
     kind: VirtualMachine
@@ -238,10 +219,6 @@ objects:
       runStrategy: Halted
       template:
         metadata:
-          annotations:
-            vm.kubevirt.io/flavor: small
-            vm.kubevirt.io/os: rhel9
-            vm.kubevirt.io/workload: server
           labels:
             kubevirt.io/domain: '\${NAME}'
             kubevirt.io/size: small
