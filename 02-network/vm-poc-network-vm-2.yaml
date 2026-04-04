@@ -38,10 +38,11 @@
                         }
                     }
                 ],
-                "runStrategy": "Halted",
+                "runStrategy": "Always",
                 "template": {
                     "metadata": {
                         "annotations": {
+                            "descheduler.alpha.kubernetes.io/evict": "true",
                             "vm.kubevirt.io/flavor": "small",
                             "vm.kubevirt.io/os": "rhel9",
                             "vm.kubevirt.io/workload": "server"

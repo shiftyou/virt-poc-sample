@@ -8,11 +8,11 @@
             "kind": "VirtualMachine",
             "metadata": {
                 "labels": {
-                    "app": "poc-network-vm-1",
+                    "app": "poc-mt-vm-2",
                     "vm.kubevirt.io/template": "poc",
                     "vm.kubevirt.io/template.namespace": "openshift"
                 },
-                "name": "poc-network-vm-1"
+                "name": "poc-mt-vm-2"
             },
             "spec": {
                 "dataVolumeTemplates": [
@@ -20,7 +20,7 @@
                         "apiVersion": "cdi.kubevirt.io/v1beta1",
                         "kind": "DataVolume",
                         "metadata": {
-                            "name": "poc-network-vm-1"
+                            "name": "poc-mt-vm-2"
                         },
                         "spec": {
                             "sourceRef": {
@@ -48,7 +48,7 @@
                             "vm.kubevirt.io/workload": "server"
                         },
                         "labels": {
-                            "kubevirt.io/domain": "poc-network-vm-1",
+                            "kubevirt.io/domain": "poc-mt-vm-2",
                             "kubevirt.io/size": "small"
                         }
                     },
@@ -97,7 +97,7 @@
                         "volumes": [
                             {
                                 "dataVolume": {
-                                    "name": "poc-network-vm-1"
+                                    "name": "poc-mt-vm-2"
                                 },
                                 "name": "rootdisk"
                             },
