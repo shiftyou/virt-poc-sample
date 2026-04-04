@@ -110,6 +110,8 @@ check_operators() {
     GRAFANA_INSTALLED=false
     COO_INSTALLED=false
     ODF_INSTALLED=false
+    LOGGING_INSTALLED=false
+    LOKI_INSTALLED=false
 
     if check_oc 2>/dev/null; then
         oc get csv -A 2>/dev/null > /tmp/_poc_csv.txt || true
@@ -129,6 +131,8 @@ check_operators() {
         grep -qi "grafana-operator"               /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         grep -qi "cluster-observability-operator" /tmp/_poc_csv.txt 2>/dev/null && COO_INSTALLED=true
         grep -qi "odf-operator\|ocs-operator"     /tmp/_poc_csv.txt 2>/dev/null && ODF_INSTALLED=true
+        grep -qi "cluster-logging"                /tmp/_poc_csv.txt 2>/dev/null && LOGGING_INSTALLED=true
+        grep -qi "loki-operator"                  /tmp/_poc_csv.txt 2>/dev/null && LOKI_INSTALLED=true
         rm -f /tmp/_poc_csv.txt
         # NMState CR 인스턴스 존재 여부 별도 확인
         NMSTATE_CR_EXISTS=false
@@ -210,6 +214,16 @@ check_operators() {
         echo -e "  $ok Self Node Remediation Operator     → SNR 구성 가능"
     else
         echo -e "  $ng Self Node Remediation Operator     → SNR 구성 건너뜀  (00-operator/snr-operator.md)"
+    fi
+    if [ "$LOGGING_INSTALLED" = "true" ]; then
+        echo -e "  $ok OpenShift Logging Operator         → 로그 수집 구성 가능"
+    else
+        echo -e "  $ng OpenShift Logging Operator         → 미설치"
+    fi
+    if [ "$LOKI_INSTALLED" = "true" ]; then
+        echo -e "  $ok Loki Operator                      → LokiStack 구성 가능"
+    else
+        echo -e "  $ng Loki Operator                      → 미설치"
     fi
     echo "  ──────────────────────────────────────────────────────────"
     echo ""
@@ -740,6 +754,8 @@ NMO_INSTALLED=${NMO_INSTALLED:-false}
 NHC_INSTALLED=${NHC_INSTALLED:-false}
 SNR_INSTALLED=${SNR_INSTALLED:-false}
 ODF_INSTALLED=${ODF_INSTALLED:-false}
+LOGGING_INSTALLED=${LOGGING_INSTALLED:-false}
+LOKI_INSTALLED=${LOKI_INSTALLED:-false}
 EOF
 
 print_ok "env.conf 파일이 생성되었습니다: $ENV_FILE"

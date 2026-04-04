@@ -132,7 +132,7 @@ step_vms() {
 
         # poc 템플릿으로 VM 생성
         oc process -n openshift poc -p NAME="$VM" | \
-        sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
+        sed 's/runStrategy: Halted/runStrategy: Always/' > "${VM}.yaml"
         echo "생성된 파일: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
@@ -371,7 +371,7 @@ step_trigger_vm() {
 
     # base yaml 생성 (클러스터 적용 없이)
     oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" | \
-        sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${TRIGGER_BASE}"
+        sed 's/runStrategy: Halted/runStrategy: Always/' > "${TRIGGER_BASE}"
 
     # nodeSelector + evictionStrategy + resources 를 dry-run 으로 병합 → 최종 yaml 저장
     oc patch -f "${TRIGGER_BASE}" --dry-run=client --type=merge \

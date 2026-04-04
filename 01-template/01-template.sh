@@ -235,7 +235,7 @@ objects:
               resources:
                 requests:
                   storage: 30Gi
-      runStrategy: Always
+      runStrategy: Halted
       template:
         metadata:
           annotations:

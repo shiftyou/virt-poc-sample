@@ -117,27 +117,24 @@ preflight() {
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
     # OpenShift Logging Operator 확인
-    if oc get csv -n "${LOGGING_NS}" 2>/dev/null | grep -qi "cluster-logging"; then
+    if [ "${LOGGING_INSTALLED:-false}" = "true" ]; then
         HAS_LOGGING=true
         print_ok "OpenShift Logging Operator 확인"
-    elif oc get csv -A 2>/dev/null | grep -qi "cluster-logging"; then
-        HAS_LOGGING=true
-        print_ok "OpenShift Logging Operator 확인 (전체 네임스페이스)"
     else
         HAS_LOGGING=false
-        print_warn "OpenShift Logging Operator 미설치"
-        print_warn "  → APIServer Audit Policy만 구성합니다."
-        print_warn "  → 전체 로그 수집을 원하면 00-operator에서 Logging Operator를 설치하세요."
+        print_warn "OpenShift Logging Operator 미설치 → 건너뜁니다."
+        print_warn "  설치 가이드: 00-operator/"
+        exit 77
     fi
 
     # Loki Operator 확인
-    if oc get csv -A 2>/dev/null | grep -qi "loki-operator"; then
+    if [ "${LOKI_INSTALLED:-false}" = "true" ]; then
         HAS_LOKI=true
         print_ok "Loki Operator 확인"
     else
         HAS_LOKI=false
         print_warn "Loki Operator 미설치 → LokiStack 생성을 건너뜁니다."
-        if $HAS_LOGGING; then
+        if [ "$HAS_LOGGING" = "true" ]; then
             print_warn "  → ClusterLogForwarder는 Loki 없이 기본 출력(default)만 사용합니다."
         fi
     fi

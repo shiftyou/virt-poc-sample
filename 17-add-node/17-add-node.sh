@@ -60,7 +60,10 @@ preflight() {
 
     # 워커 노드 목록 표시 및 선택
     local workers
-    mapfile -t workers < <(oc get nodes -l node-role.kubernetes.io/worker \
+    workers=()
+    while IFS= read -r line; do
+        workers+=("$line")
+    done < <(oc get nodes -l node-role.kubernetes.io/worker \
         --no-headers -o custom-columns=NAME:.metadata.name | sort)
 
     echo ""
