@@ -210,10 +210,12 @@ create_vm() {
 
     local vm_yaml="${SCRIPT_DIR}/${vm_name}.yaml"
     oc process -n openshift poc -p NAME="$vm_name" | \
+        sed 's/runStrategy: Halted/runStrategy: Always/' | \
         sed 's/  running: false/  runStrategy: Always/' > "${vm_yaml}"
     echo "생성된 파일: ${vm_yaml}"
     oc apply -n "$ns" -f "${vm_yaml}"
-    print_ok "VM 생성: ${CYAN}${vm_name}${NC} (namespace: ${ns})"
+    virtctl start "$vm_name" -n "$ns" 2>/dev/null || true
+    print_ok "VM 생성 및 시작: ${CYAN}${vm_name}${NC} (namespace: ${ns})"
 }
 
 step_vms() {
