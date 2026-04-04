@@ -472,9 +472,9 @@ if [ -n "$_EXISTING_NNCPS" ]; then
         fi
     done
     echo ""
-    echo -n -e "${YELLOW}  기존 NNCP를 그대로 사용하시겠습니까? (y/N): ${NC}"
+    echo -n -e "${YELLOW}  기존 NNCP를 그대로 사용하시겠습니까? (Y/n): ${NC}"
     read _use_existing
-    if [[ "${_use_existing:-}" =~ ^[Yy]$ ]]; then
+    if [[ ! "${_use_existing:-}" =~ ^[Nn]$ ]]; then
         _USE_EXISTING_NNCP=true
         _NNCP_COUNT=$(echo "$_EXISTING_NNCPS" | wc -l | tr -d ' ')
         _FIRST_NNCP=$(echo "$_EXISTING_NNCPS" | head -1)
