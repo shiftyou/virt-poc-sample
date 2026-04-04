@@ -326,7 +326,7 @@ EOF
 }
 
 step_nncp_ovn_localnet() {
-    print_step "1/4  NNCP — OVN Localnet bridge-mappings (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
+    print_step "1/4  NNCP — OVN Localnet bridge-mappings (${OVN_LOCALNET_NAME} → br-ex)"
 
     cat > nncp-${NNCP_NAME}.yaml <<EOF
 apiVersion: nmstate.io/v1
@@ -341,6 +341,57 @@ spec:
       bridge-mappings:
         - localnet: ${OVN_LOCALNET_NAME}
           bridge: br-ex
+          state: present
+EOF
+    echo ""
+    print_info "적용할 NNCP YAML:"
+    echo "────────────────────────────────────────"
+    cat nncp-${NNCP_NAME}.yaml
+    echo "────────────────────────────────────────"
+    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
+    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    oc apply -f nncp-${NNCP_NAME}.yaml
+    _wait_nncp "$NNCP_NAME"
+}
+
+step_nncp_ovn_localnet_vlan() {
+    print_step "1/4  NNCP — OVN Localnet + VLAN ${VLAN_ID} (${BRIDGE_INTERFACE}.${VLAN_ID} → ${BRIDGE_NAME} → ${OVN_LOCALNET_NAME})"
+
+    cat > nncp-${NNCP_NAME}.yaml <<EOF
+apiVersion: nmstate.io/v1
+kind: NodeNetworkConfigurationPolicy
+metadata:
+  name: ${NNCP_NAME}
+spec:
+  nodeSelector:
+    node-role.kubernetes.io/worker: ''
+  desiredState:
+    interfaces:
+      - name: ${BRIDGE_NAME}
+        description: Linux bridge with VLAN subinterface ${BRIDGE_INTERFACE}.${VLAN_ID} as a port
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: ${BRIDGE_INTERFACE}.${VLAN_ID}
+      - name: ${BRIDGE_INTERFACE}.${VLAN_ID}
+        description: VLAN ${VLAN_ID} subinterface on ${BRIDGE_INTERFACE}
+        type: vlan
+        state: up
+        vlan:
+          base-iface: ${BRIDGE_INTERFACE}
+          id: ${VLAN_ID}
+    ovn:
+      bridge-mappings:
+        - localnet: ${OVN_LOCALNET_NAME}
+          bridge: ${BRIDGE_NAME}
           state: present
 EOF
     echo ""
@@ -369,7 +420,7 @@ step_nncp() {
         1) step_nncp_linux_bridge ;;
         2) step_nncp_ovn_localnet ;;
         3) step_nncp_linux_bridge_vlan ;;
-        4) step_nncp_ovn_localnet ;;
+        4) step_nncp_ovn_localnet_vlan ;;
     esac
 }
 
@@ -455,10 +506,10 @@ spec:
   config: |-
     {
         "cniVersion": "0.3.1",
-        "name": "${OVN_LOCALNET_NAME}",
+        "name": "${NAD_NAME}",
         "type": "ovn-k8s-cni-overlay",
         "topology": "localnet",
-        "netAttachDefName": "${NAD_NAMESPACE}/${NAD_NAME}"
+        "physicalNetworkName": "${OVN_LOCALNET_NAME}"
     }
 EOF
     echo "생성된 파일: nad-${NAD_NAME}.yaml"
@@ -480,10 +531,10 @@ spec:
   config: |-
     {
         "cniVersion": "0.3.1",
-        "name": "${OVN_LOCALNET_NAME}",
+        "name": "${NAD_NAME}",
         "type": "ovn-k8s-cni-overlay",
         "topology": "localnet",
-        "netAttachDefName": "${NAD_NAMESPACE}/${NAD_NAME}",
+        "physicalNetworkName": "${OVN_LOCALNET_NAME}",
         "vlanID": ${VLAN_ID}
     }
 EOF
