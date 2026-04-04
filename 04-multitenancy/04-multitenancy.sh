@@ -80,6 +80,12 @@ preflight() {
         exit 1
     fi
     print_ok "htpasswd 명령 확인"
+
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_warn "poc Template 없음 — VM은 생성되지 않습니다. (01-template 먼저 실행 필요)"
+    else
+        print_ok "poc Template 확인"
+    fi
 }
 
 # =============================================================================
@@ -197,64 +203,16 @@ create_vm() {
         return 0
     fi
 
-    oc apply -f - <<EOF
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
-metadata:
-  name: ${vm_name}
-  namespace: ${ns}
-  labels:
-    app: ${vm_name}
-spec:
-  runStrategy: Always
-  template:
-    metadata:
-      labels:
-        kubevirt.io/domain: ${vm_name}
-    spec:
-      domain:
-        cpu:
-          cores: 1
-          sockets: 1
-          threads: 1
-        devices:
-          disks:
-          - name: rootdisk
-            disk:
-              bus: virtio
-          - name: cloudinitdisk
-            disk:
-              bus: virtio
-        resources:
-          requests:
-            memory: 2Gi
-      volumes:
-      - name: rootdisk
-        dataVolume:
-          name: ${vm_name}-rootdisk
-      - name: cloudinitdisk
-        cloudInitNoCloud:
-          userData: |
-            #cloud-config
-            user: cloud-user
-            password: changeme
-            chpasswd: { expire: False }
-  dataVolumeTemplates:
-  - metadata:
-      name: ${vm_name}-rootdisk
-    spec:
-      sourceRef:
-        kind: DataSource
-        name: ${DATASOURCE_NAME}
-        namespace: ${DATASOURCE_NS}
-      storage:
-        accessModes:
-        - ReadWriteMany
-        resources:
-          requests:
-            storage: 30Gi
-        storageClassName: ${STORAGE_CLASS}
-EOF
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_warn "poc Template 없음 — ${vm_name} 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        return 0
+    fi
+
+    local vm_yaml="${SCRIPT_DIR}/${vm_name}.yaml"
+    oc process -n openshift poc -p NAME="$vm_name" | \
+        sed 's/  running: false/  runStrategy: Always/' > "${vm_yaml}"
+    echo "생성된 파일: ${vm_yaml}"
+    oc apply -n "$ns" -f "${vm_yaml}"
     print_ok "VM 생성: ${CYAN}${vm_name}${NC} (namespace: ${ns})"
 }
 
@@ -287,15 +245,15 @@ step_vms() {
     local i=0
     while [ "$i" -lt "$retries" ]; do
         local s1 s2
-        s1=$(oc get vmi vm-poc-mt1 -n "$NS1" \
+        s1=$(oc get vmi poc-mt-vm-1 -n "$NS1" \
             -o jsonpath='{.status.phase}' 2>/dev/null || echo "-")
-        s2=$(oc get vmi vm-poc-mt2 -n "$NS2" \
+        s2=$(oc get vmi poc-mt-vm-2 -n "$NS2" \
             -o jsonpath='{.status.phase}' 2>/dev/null || echo "-")
 
         if [ "$s1" = "Running" ] && [ "$s2" = "Running" ]; then
             echo ""
-            print_ok "vm-poc-mt1 (${NS1}) → Running"
-            print_ok "vm-poc-mt2 (${NS2}) → Running"
+            print_ok "poc-mt-vm-1 (${NS1}) → Running"
+            print_ok "poc-mt-vm-2 (${NS2}) → Running"
             break
         fi
         printf "  대기 중... mt1=%s  mt2=%s  (%d/%d)\r" \

@@ -243,3 +243,40 @@ oc patch kubedescheduler cluster \
 # VM 및 네임스페이스 삭제
 oc delete namespace poc-descheduler
 ```
+
+---
+
+## DevKubeVirtRelieveAndMigrate 프로필
+
+`DevKubeVirtRelieveAndMigrate` 프로필을 사용할 경우, Descheduler가 PSI(Pressure Stall Information) 기반으로 노드 압력을 감지하여 VM을 자동 이동시킵니다.
+이 프로필을 사용하려면 워커 노드에서 커널 파라미터 `psi=1`이 활성화되어 있어야 합니다.
+
+아래 MachineConfig를 먼저 적용하세요:
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+  name: 99-openshift-machineconfig-worker-psi-karg
+  labels:
+    machineconfiguration.openshift.io/role: worker
+spec:
+  kernelArguments:
+  - psi=1
+EOF
+```
+
+> **주의**: MachineConfig 적용 시 Machine Config Operator가 워커 노드를 순차적으로 재시작(drain → reboot → uncordon)합니다.
+> 모든 워커 노드 재시작이 완료된 후(`oc get mcp worker` 상태가 `UPDATED=True`) Descheduler를 구성하세요.
+
+```bash
+# MachineConfigPool 상태 확인 (UPDATED=True 될 때까지 대기)
+oc get mcp worker -w
+
+# KubeDescheduler에 DevKubeVirtRelieveAndMigrate 프로필 적용
+oc patch kubedescheduler cluster \
+  -n openshift-kube-descheduler-operator \
+  --type=merge \
+  -p '{"spec":{"profiles":["DevKubeVirtRelieveAndMigrate"]}}'
+```

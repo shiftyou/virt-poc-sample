@@ -385,59 +385,16 @@ step_vm() {
         return
     fi
 
-    local sc="${STORAGE_CLASS:-}"
-    if [ -z "$sc" ]; then
-        sc=$(oc get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' 2>/dev/null || true)
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_warn "poc Template 없음 — VM 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        return
     fi
 
-    cat > poc-oadp-vm.yaml <<EOF
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
-metadata:
-  name: poc-oadp-vm
-  namespace: ${VM_NS}
-spec:
-  runStrategy: Always
-  template:
-    spec:
-      domain:
-        cpu:
-          cores: 1
-          sockets: 1
-          threads: 1
-        devices:
-          disks:
-            - disk:
-                bus: virtio
-              name: rootdisk
-          interfaces:
-            - masquerade: {}
-              model: virtio
-              name: default
-        memory:
-          guest: 2Gi
-      networks:
-        - name: default
-          pod: {}
-      volumes:
-        - dataVolume:
-            name: poc-oadp-vm
-          name: rootdisk
-  dataVolumeTemplates:
-    - metadata:
-        name: poc-oadp-vm
-      spec:
-        sourceRef:
-          kind: DataSource
-          name: poc
-          namespace: openshift-virtualization-os-images
-        storage:
-          resources:
-            requests:
-              storage: 30Gi
-          storageClassName: ${sc}
-EOF
-    confirm_and_apply poc-oadp-vm.yaml
+    local vm_yaml="${SCRIPT_DIR}/poc-oadp-vm.yaml"
+    oc process -n openshift poc -p NAME="poc-oadp-vm" | \
+        sed 's/  running: false/  runStrategy: Always/' > "${vm_yaml}"
+    echo "생성된 파일: ${vm_yaml}"
+    confirm_and_apply "${vm_yaml}"
     print_ok "VM poc-oadp-vm 생성 완료 → ns: ${VM_NS}"
     print_info "  VM 상태 확인: oc get vm -n ${VM_NS}"
 }

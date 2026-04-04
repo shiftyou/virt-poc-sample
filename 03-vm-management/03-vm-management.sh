@@ -19,6 +19,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 VM_NS="poc-vm"
+NNCP_NAME="${NNCP_NAME:-poc-bridge-nncp}"
 BRIDGE_NAME="${BRIDGE_NAME}"
 SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
@@ -59,16 +60,64 @@ preflight() {
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
     # NNCP / Bridge 확인
-    if ! oc get nncp poc-bridge-nncp &>/dev/null; then
-        print_warn "NNCP poc-bridge-nncp 를 찾을 수 없습니다. 02-network 를 먼저 실행하세요."
+    if ! oc get nncp "$NNCP_NAME" &>/dev/null; then
+        print_warn "NNCP '${NNCP_NAME}' 를 찾을 수 없습니다."
+        # 현재 존재하는 NNCP 목록 표시 후 선택
+        local _all_nncps
+        _all_nncps=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep -v '^$' || true)
+        if [ -n "$_all_nncps" ]; then
+            print_info "현재 클러스터에 존재하는 NNCP 목록:"
+            echo ""
+            printf "    %-35s %-15s %-20s %s\n" "NNCP 이름" "타입" "Bridge 이름" "NIC"
+            echo "    ────────────────────────────────────────────────────────────────────────"
+            for _n in $_all_nncps; do
+                local _b _nic _ob
+                _b=$(oc get nncp "$_n" \
+                    -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+                    2>/dev/null || true)
+                if [ -n "$_b" ]; then
+                    _nic=$(oc get nncp "$_n" \
+                        -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
+                        2>/dev/null || true)
+                    printf "    %-35s %-15s %-20s %s\n" "$_n" "linux-bridge" "$_b" "${_nic:-N/A}"
+                else
+                    _ob=$(oc get nncp "$_n" \
+                        -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
+                        2>/dev/null || true)
+                    if [ -n "$_ob" ]; then
+                        printf "    %-35s %-15s %-20s %s\n" "$_n" "ovn-localnet" "$_ob" "-"
+                    else
+                        printf "    %-35s %-15s %-20s %s\n" "$_n" "unknown" "-" "-"
+                    fi
+                fi
+            done
+            echo ""
+            local _first_nncp
+            _first_nncp=$(echo "$_all_nncps" | head -1)
+            read -r -p "  사용할 NNCP 이름을 입력하세요 [기본값: ${_first_nncp}]: " _input_nncp
+            [ -z "$_input_nncp" ] && _input_nncp="$_first_nncp"
+            NNCP_NAME="$_input_nncp"
+            # 선택된 NNCP에서 bridge 이름 추출
+            local _new_br
+            _new_br=$(oc get nncp "$NNCP_NAME" \
+                -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+                2>/dev/null || true)
+            [ -z "$_new_br" ] && _new_br=$(oc get nncp "$NNCP_NAME" \
+                -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
+                2>/dev/null || true)
+            [ -n "$_new_br" ] && BRIDGE_NAME="$_new_br"
+            print_ok "NNCP '${NNCP_NAME}' 사용 (bridge: ${BRIDGE_NAME})"
+        else
+            print_warn "사용 가능한 NNCP가 없습니다. 02-network 를 먼저 실행하세요."
+        fi
     else
         local status
-        status=$(oc get nncp poc-bridge-nncp \
+        status=$(oc get nncp "$NNCP_NAME" \
             -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
         if [ "$status" = "True" ]; then
-            print_ok "NNCP poc-bridge-nncp Available"
+            print_ok "NNCP ${NNCP_NAME} Available"
         else
-            print_warn "NNCP poc-bridge-nncp 상태: ${status:-Unknown}"
+            print_warn "NNCP ${NNCP_NAME} 상태: ${status:-Unknown}"
         fi
     fi
 }
@@ -87,11 +136,26 @@ step_namespace() {
     fi
 }
 
+# spec.running(deprecated) → spec.runStrategy 마이그레이션
+ensure_runstrategy() {
+    local vm="$1" ns="$2"
+    local running
+    running=$(oc get vm "$vm" -n "$ns" \
+        -o jsonpath='{.spec.running}' 2>/dev/null || true)
+    [ -z "$running" ] && return 0
+    local rs="Halted"
+    [ "$running" = "true" ] && rs="Always"
+    oc patch vm "$vm" -n "$ns" --type=json -p "[
+      {\"op\":\"remove\",\"path\":\"/spec/running\"},
+      {\"op\":\"add\",\"path\":\"/spec/runStrategy\",\"value\":\"${rs}\"}
+    ]" &>/dev/null || true
+}
+
 # =============================================================================
 # 2단계: NAD 등록
 # =============================================================================
 step_nad() {
-    print_step "2/3  NAD — NetworkAttachmentDefinition 등록 (${VM_NS})"
+    print_step "2/4  NAD — NetworkAttachmentDefinition 등록 (${VM_NS})"
 
     cat > nad-vm-bridge.yaml <<EOF
 apiVersion: k8s.cni.cncf.io/v1
@@ -111,10 +175,72 @@ EOF
 }
 
 # =============================================================================
-# 3단계: ConsoleYAMLSample 등록
+# 3단계: VM 생성 (poc 템플릿 + poc-bridge-nad)
+# =============================================================================
+step_vm() {
+    print_step "3/4  VM 생성 (poc 템플릿 + poc-bridge-nad)"
+
+    if ! oc get template poc -n openshift &>/dev/null; then
+        print_warn "poc Template 없음 — VM 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        return
+    fi
+
+    local VM_NAME="poc-vm"
+
+    if oc get vm "$VM_NAME" -n "$VM_NS" &>/dev/null; then
+        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+        return
+    fi
+
+    local vm_yaml="${SCRIPT_DIR}/vm-${VM_NAME}.yaml"
+    oc process -n openshift poc -p NAME="$VM_NAME" | \
+        sed 's/  running: false/  runStrategy: Halted/' > "${vm_yaml}"
+    echo "생성된 파일: ${vm_yaml}"
+    oc apply -n "$VM_NS" -f "${vm_yaml}"
+
+    ensure_runstrategy "$VM_NAME" "$VM_NS"
+
+    # 보조 NIC (poc-bridge-nad) 추가
+    oc patch vm "$VM_NAME" -n "$VM_NS" --type=json -p='[
+      {
+        "op": "add",
+        "path": "/spec/template/spec/domain/devices/interfaces/-",
+        "value": {"name": "bridge-net", "bridge": {}, "model": "virtio"}
+      },
+      {
+        "op": "add",
+        "path": "/spec/template/spec/networks/-",
+        "value": {"name": "bridge-net", "multus": {"networkName": "poc-bridge-nad"}}
+      }
+    ]'
+
+    # cloud-init networkData — eth1 정적 IP (03번 → .31/24)
+    local ci_idx
+    ci_idx=$(oc get vm "$VM_NAME" -n "$VM_NS" \
+        -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' 2>/dev/null | \
+        grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
+    [ -n "$ci_idx" ] && ci_idx=$(( ci_idx - 1 ))
+
+    if [ -n "$ci_idx" ]; then
+        oc patch vm "$VM_NAME" -n "$VM_NS" --type=json -p="[
+          {\"op\": \"add\",
+           \"path\": \"/spec/template/spec/volumes/${ci_idx}/cloudInitNoCloud/networkData\",
+           \"value\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.31/24\\n    gateway4: ${SECONDARY_IP_PREFIX}.1\\n    nameservers:\\n      addresses:\\n        - 8.8.8.8\\n\"}
+        ]"
+        print_ok "networkData 추가 완료 (eth1: ${SECONDARY_IP_PREFIX}.31/24)"
+    else
+        print_warn "cloudinitdisk 볼륨을 찾지 못했습니다. networkData 미설정."
+    fi
+
+    virtctl start "$VM_NAME" -n "$VM_NS" 2>/dev/null || true
+    print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: poc-bridge-nad, IP: ${SECONDARY_IP_PREFIX}.31/24)"
+}
+
+# =============================================================================
+# 4단계: ConsoleYAMLSample 등록
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "3/3  ConsoleYAMLSample 등록"
+    print_step "4/4  ConsoleYAMLSample 등록"
 
     cat > consoleyamlsample-virtualmachine.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -238,6 +364,7 @@ main() {
     preflight
     step_namespace
     step_nad
+    step_vm
     step_consoleyamlsamples
     print_summary
 }

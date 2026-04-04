@@ -433,19 +433,96 @@ ask "poc-golden.qcow2 이미지 다운로드 URL" "http://krssa.ddns.net/vm-imag
 # =============================================================================
 print_step_header "[02]" "Network — NNCP / NAD / VM 생성"
 
-if [ -n "${DETECTED_IFACES:-}" ]; then
-    print_info "감지된 인터페이스 목록: $DETECTED_IFACES"
-else
-    print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
+# NNCP 감지 및 선택
+NNCP_NAME="br-poc-nncp"
+_USE_EXISTING_NNCP=false
+
+_EXISTING_NNCPS=""
+if command -v oc &>/dev/null && oc whoami &>/dev/null 2>&1; then
+    _EXISTING_NNCPS=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep -v '^$' || true)
 fi
-ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
-ask "생성할 Linux Bridge 이름" "br1" BRIDGE_NAME
+
+if [ -n "$_EXISTING_NNCPS" ]; then
+    echo ""
+    print_info "현재 클러스터에 존재하는 NNCP 목록:"
+    echo ""
+    printf "  %-35s %-15s %-20s %s\n" "NNCP 이름" "타입" "Bridge 이름" "NIC"
+    echo "  ────────────────────────────────────────────────────────────────────────────"
+    for _nncp in $_EXISTING_NNCPS; do
+        _br=$(oc get nncp "$_nncp" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+            2>/dev/null || true)
+        if [ -n "$_br" ]; then
+            _nic=$(oc get nncp "$_nncp" \
+                -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
+                2>/dev/null || true)
+            printf "  %-35s %-15s %-20s %s\n" "$_nncp" "linux-bridge" "$_br" "${_nic:-N/A}"
+        else
+            _ovn_br=$(oc get nncp "$_nncp" \
+                -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
+                2>/dev/null || true)
+            if [ -n "$_ovn_br" ]; then
+                _ovn_net=$(oc get nncp "$_nncp" \
+                    -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].localnet}' \
+                    2>/dev/null || true)
+                printf "  %-35s %-15s %-20s %s\n" "$_nncp" "ovn-localnet" "$_ovn_br" "(localnet: ${_ovn_net:-N/A})"
+            else
+                printf "  %-35s %-15s %-20s %s\n" "$_nncp" "unknown" "-" "-"
+            fi
+        fi
+    done
+    echo ""
+    echo -n -e "${YELLOW}  기존 NNCP를 그대로 사용하시겠습니까? (y/N): ${NC}"
+    read _use_existing
+    if [[ "${_use_existing:-}" =~ ^[Yy]$ ]]; then
+        _USE_EXISTING_NNCP=true
+        _NNCP_COUNT=$(echo "$_EXISTING_NNCPS" | wc -l | tr -d ' ')
+        _FIRST_NNCP=$(echo "$_EXISTING_NNCPS" | head -1)
+        if [ "$_NNCP_COUNT" -gt 1 ]; then
+            echo -n -e "${YELLOW}  사용할 NNCP 이름을 입력하세요 [기본값: ${_FIRST_NNCP}]: ${NC}"
+            read _sel_nncp
+            [ -z "$_sel_nncp" ] && _sel_nncp="$_FIRST_NNCP"
+        else
+            _sel_nncp="$_FIRST_NNCP"
+        fi
+        NNCP_NAME="$_sel_nncp"
+        # 선택된 NNCP에서 bridge 이름 및 NIC 추출
+        _sel_br=$(oc get nncp "$NNCP_NAME" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+            2>/dev/null || true)
+        _sel_nic=$(oc get nncp "$NNCP_NAME" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
+            2>/dev/null || true)
+        if [ -z "$_sel_br" ]; then
+            _sel_br=$(oc get nncp "$NNCP_NAME" \
+                -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
+                2>/dev/null || true)
+            _sel_nic="br-ex"
+        fi
+        [ -n "$_sel_br" ]  && BRIDGE_NAME="$_sel_br"      || BRIDGE_NAME="${BRIDGE_NAME:-br-poc}"
+        [ -n "$_sel_nic" ] && BRIDGE_INTERFACE="$_sel_nic" || BRIDGE_INTERFACE="${DETECTED_IFACE:-ens4}"
+        print_ok "선택: ${NNCP_NAME}  (bridge: ${BRIDGE_NAME}, NIC: ${BRIDGE_INTERFACE})"
+    fi
+fi
+
+if [ "$_USE_EXISTING_NNCP" = "false" ]; then
+    echo ""
+    if [ -n "${DETECTED_IFACES:-}" ]; then
+        print_info "감지된 인터페이스 목록: $DETECTED_IFACES"
+    else
+        print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
+    fi
+    ask "새로 생성할 NNCP 이름" "br-poc-nncp" NNCP_NAME
+    ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
+    ask "생성할 Linux Bridge 이름" "br-poc" BRIDGE_NAME
+fi
+
 echo ""
 print_info "VLAN ID는 02-network 방식 3(Linux Bridge + VLAN) 또는 4(OVN Localnet + VLAN) 선택 시 사용됩니다."
 ask "VLAN ID (VLAN filtering / OVN Localnet + VLAN 사용 시)" "100" VLAN_ID
 echo ""
 print_info "SECONDARY_IP_PREFIX: secondary NIC(eth1) cloud-init 정적 IP 할당 시 사용하는 네트워크 프리픽스입니다."
-print_info "  예) 192.168.100 → poc-network-vm: .10/24, NS1 VM: .11/24, NS2 VM: .12/24"
+print_info "  예) 192.168.100 → 02-network VM: .21, .22 / 03-vm: .31 / 05-network-policy: .51, .52"
 ask "Secondary NIC IP 프리픽스 (cloud-init networkData)" "192.168.100" SECONDARY_IP_PREFIX
 
 # =============================================================================
@@ -600,6 +677,7 @@ CLUSTER_DOMAIN=${CLUSTER_DOMAIN}
 CLUSTER_API=${CLUSTER_API}
 
 # 네트워크 설정
+NNCP_NAME=${NNCP_NAME}
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
 VLAN_ID=${VLAN_ID}
