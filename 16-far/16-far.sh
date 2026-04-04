@@ -46,7 +46,7 @@ confirm_and_apply() {
     cat "$file"
     echo "────────────────────────────────────────"
     read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
-    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "취소되었습니다."; exit 0; }
     oc apply -f "$file"
 }
 
