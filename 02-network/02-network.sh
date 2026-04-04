@@ -269,7 +269,13 @@ spec:
           port:
             - name: ${BRIDGE_INTERFACE}
 EOF
-    echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
+    echo ""
+    print_info "적용할 NNCP YAML:"
+    echo "────────────────────────────────────────"
+    cat nncp-${NNCP_NAME}.yaml
+    echo "────────────────────────────────────────"
+    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
+    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
     oc apply -f nncp-${NNCP_NAME}.yaml
     _wait_nncp "$NNCP_NAME"
 }
@@ -308,7 +314,13 @@ spec:
                       min: 1
                       max: 4094
 EOF
-    echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
+    echo ""
+    print_info "적용할 NNCP YAML:"
+    echo "────────────────────────────────────────"
+    cat nncp-${NNCP_NAME}.yaml
+    echo "────────────────────────────────────────"
+    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
+    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
     oc apply -f nncp-${NNCP_NAME}.yaml
     _wait_nncp "$NNCP_NAME"
 }
@@ -331,7 +343,13 @@ spec:
           bridge: br-ex
           state: present
 EOF
-    echo "생성된 파일: nncp-${NNCP_NAME}.yaml"
+    echo ""
+    print_info "적용할 NNCP YAML:"
+    echo "────────────────────────────────────────"
+    cat nncp-${NNCP_NAME}.yaml
+    echo "────────────────────────────────────────"
+    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
+    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
     oc apply -f nncp-${NNCP_NAME}.yaml
     _wait_nncp "$NNCP_NAME"
 }
