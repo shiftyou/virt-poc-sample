@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# 12-oadp.sh
+# 13-oadp.sh
 #
 # OADP 실습 환경 구성
 #   1. OADP Operator 네임스페이스 확인 (기본: openshift-adp)
@@ -17,7 +17,7 @@
 #   - OADP Operator 설치 필수 (기본 네임스페이스: openshift-adp)
 #   - 백엔드: MinIO 커뮤니티 버전 배포 + 설정 완료, 또는 ODF Operator 설치
 #
-# 사용법: ./12-oadp.sh
+# 사용법: ./13-oadp.sh
 # =============================================================================
 
 set -euo pipefail
@@ -58,6 +58,19 @@ print_ok()    { echo -e "${GREEN}[ OK ]${NC} $1"; }
 print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
+
+# YAML 미리보기 후 확인하고 적용
+confirm_and_apply() {
+    local file="$1"
+    echo ""
+    print_info "적용할 YAML:"
+    echo "────────────────────────────────────────"
+    cat "$file"
+    echo "────────────────────────────────────────"
+    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
+    [[ "${confirm,,}" != "y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    oc apply -f "$file"
+}
 
 preflight() {
     print_step "사전 확인"
@@ -227,8 +240,7 @@ stringData:
     aws_access_key_id=${S3_ACCESS_KEY}
     aws_secret_access_key=${S3_SECRET_KEY}
 EOF
-    echo "생성된 파일: cloud-credentials-secret.yaml"
-    oc apply -f cloud-credentials-secret.yaml
+    confirm_and_apply cloud-credentials-secret.yaml
     print_ok "cloud-credentials Secret 생성 완료 → ns: ${NS}"
 }
 
@@ -285,15 +297,16 @@ metadata:
   namespace: ${NS}
 spec:
   configuration:
+    nodeAgent:
+      enable: true
+      uploaderType: restic
     velero:
       defaultPlugins:
-        - csi
-        - openshift
         - aws
+        - openshift
         - kubevirt
+        - csi
       disableFsBackup: false
-      featureFlags:
-        - EnableCSI
   logFormat: text
   backupLocations:
     - velero:
@@ -301,7 +314,7 @@ spec:
         default: true
         objectStorage:
           bucket: ${S3_BUCKET}
-          prefix: velero
+          prefix: oadp
         config:
           profile: default
           region: ${S3_REGION}
@@ -312,8 +325,7 @@ spec:
           key: cloud
           name: cloud-credentials
 EOF
-    echo "생성된 파일: poc-dpa.yaml"
-    oc apply -f poc-dpa.yaml
+    confirm_and_apply poc-dpa.yaml
     print_ok "DataProtectionApplication poc-dpa 배포 완료 → ns: ${NS}"
 }
 
@@ -425,8 +437,7 @@ spec:
               storage: 30Gi
           storageClassName: ${sc}
 EOF
-    echo "생성된 파일: poc-oadp-vm.yaml"
-    oc apply -f poc-oadp-vm.yaml
+    confirm_and_apply poc-oadp-vm.yaml
     print_ok "VM poc-oadp-vm 생성 완료 → ns: ${VM_NS}"
     print_info "  VM 상태 확인: oc get vm -n ${VM_NS}"
 }
@@ -459,8 +470,7 @@ spec:
   ttl: 720h0m0s
   snapshotVolumes: true
 EOF
-        echo "생성된 파일: poc-oadp-backup.yaml"
-        oc apply -f poc-oadp-backup.yaml
+        confirm_and_apply poc-oadp-backup.yaml
         print_ok "Backup poc-oadp-backup 생성 완료 → ns: ${NS}"
     fi
 
@@ -502,7 +512,7 @@ print_summary() {
     echo -e "  복원 실행 (백업 완료 후):"
     echo -e "    ${CYAN}oc apply -f poc-oadp-restore.yaml${NC}"
     echo ""
-    echo -e "  자세한 내용: 12-oadp.md 참조"
+    echo -e "  자세한 내용: 13-oadp.md 참조"
     echo ""
 }
 
