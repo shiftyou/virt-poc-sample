@@ -687,13 +687,111 @@ EOF
 
 ### Grafana 접속
 
-```bash
-# Route 확인
-oc get route -n poc-monitoring | grep grafana
+`11-monitoring.sh` 실행 시 Route가 자동 생성됩니다. 수동으로 생성이 필요한 경우:
 
+```bash
+oc apply -f - <<'EOF'
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: poc-grafana-route
+  namespace: poc-monitoring
+spec:
+  to:
+    kind: Service
+    name: poc-grafana-service
+  port:
+    targetPort: grafana
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+EOF
+```
+
+```bash
 # 접속 URL 출력
 echo "https://$(oc get route poc-grafana-route -n poc-monitoring \
   -o jsonpath='{.spec.host}')"
+```
+
+**로그인 계정 확인:**
+
+```bash
+# env.conf 의 GRAFANA_ADMIN_PASS 값 (기본값: grafana123)
+oc get secret grafana-admin-credentials -n poc-monitoring \
+  -o jsonpath='{.data.GF_SECURITY_ADMIN_USER}' | base64 -d && echo
+oc get secret grafana-admin-credentials -n poc-monitoring \
+  -o jsonpath='{.data.GF_SECURITY_ADMIN_PASSWORD}' | base64 -d && echo
+```
+
+---
+
+### VM 상태 모니터링
+
+Grafana에서 KubeVirt 메트릭으로 VM 상태를 모니터링합니다.
+Prometheus DataSource가 연동된 상태에서 **Explore** 또는 대시보드에서 아래 PromQL을 사용합니다.
+
+**주요 메트릭:**
+
+```promql
+# VM 실행 상태 (Running VM 수)
+sum(kubevirt_vmi_phase_count{phase="Running"})
+
+# VM별 CPU 사용률
+rate(kubevirt_vmi_vcpu_seconds_total[5m])
+
+# VM 메모리 사용량
+kubevirt_vmi_memory_used_bytes
+
+# VM 메모리 여유량
+kubevirt_vmi_memory_available_bytes
+
+# VM 네트워크 수신
+rate(kubevirt_vmi_network_receive_bytes_total[5m])
+
+# VM 네트워크 송신
+rate(kubevirt_vmi_network_transmit_bytes_total[5m])
+
+# VM 디스크 읽기
+rate(kubevirt_vmi_storage_read_traffic_bytes_total[5m])
+
+# VM 디스크 쓰기
+rate(kubevirt_vmi_storage_write_traffic_bytes_total[5m])
+
+# Live Migration 상태
+kubevirt_vmi_migration_phase_transition_time_from_creation_seconds
+```
+
+**Grafana.com 공식 KubeVirt 대시보드 임포트:**
+
+```bash
+oc apply -f - <<'EOF'
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: kubevirt-overview
+  namespace: poc-monitoring
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: poc-grafana
+  grafanaCom:
+    id: 11625    # KubeVirt 공식 대시보드
+EOF
+```
+
+또는 Grafana UI에서 직접 임포트:
+1. **Dashboards → Import**
+2. **Grafana.com Dashboard ID**: `11625` 입력 후 **Load**
+3. DataSource: **Prometheus** 선택 → **Import**
+
+**OpenShift Console에서 VM 상태 확인 (Grafana 없이):**
+
+```bash
+# Console > Virtualization > VirtualMachines > 개별 VM > Metrics 탭
+# 또는 CLI
+oc get vmi -A
+oc get vmim -A   # Live Migration 상태
 ```
 
 ---

@@ -37,6 +37,7 @@ MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minio123}"
 AUDIT_PROFILE=""
 HAS_LOGGING=false
 HAS_LOKI=false
+LOGGING_V6=false
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -138,6 +139,15 @@ preflight() {
             print_warn "  → ClusterLogForwarder는 Loki 없이 기본 출력(default)만 사용합니다."
         fi
     fi
+
+    # Logging 버전 감지 (v6에서 ClusterLogging CRD 제거됨)
+    if ! oc get crd clusterloggings.logging.openshift.io &>/dev/null; then
+        LOGGING_V6=true
+        print_ok "OpenShift Logging v6 감지 (observability.openshift.io/v1 사용)"
+    else
+        LOGGING_V6=false
+        print_ok "OpenShift Logging v5 감지 (logging.openshift.io/v1 사용)"
+    fi
 }
 
 # =============================================================================
@@ -191,6 +201,11 @@ step_namespace() {
 step_cluster_logging() {
     print_step "3/5  ClusterLogging 인스턴스 생성"
 
+    if [ "$LOGGING_V6" = "true" ]; then
+        print_info "Logging v6 — ClusterLogging CR 없음, 건너뜁니다."
+        return
+    fi
+
     if oc get clusterlogging "${CL_NAME}" -n "${LOGGING_NS}" &>/dev/null; then
         print_ok "ClusterLogging '${CL_NAME}' 이미 존재합니다 — 건너뜁니다."
         return
@@ -199,7 +214,7 @@ step_cluster_logging() {
     local log_store_type="lokistack"
     local log_store_block=""
 
-    if $HAS_LOKI; then
+    if [ "$HAS_LOKI" = "true" ]; then
         log_store_block="  logStore:
     type: lokistack
     lokiStack:
@@ -242,21 +257,44 @@ step_loki_secret() {
         return
     fi
 
-    print_info "MinIO S3 Secret 생성 중..."
+    local s3_endpoint s3_bucket s3_access_key s3_secret_key s3_region s3_backend
+
+    if [ "${ODF_INSTALLED:-false}" = "true" ] && [ -n "${ODF_S3_ENDPOINT:-}" ]; then
+        s3_backend="ODF MCG"
+        s3_endpoint="${ODF_S3_ENDPOINT}"
+        s3_bucket="${ODF_S3_BUCKET:-loki}"
+        s3_access_key="${ODF_S3_ACCESS_KEY}"
+        s3_secret_key="${ODF_S3_SECRET_KEY}"
+        s3_region="${ODF_S3_REGION:-us-east-1}"
+    elif [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ]; then
+        s3_backend="MinIO"
+        s3_endpoint="${MINIO_ENDPOINT}"
+        s3_bucket="${MINIO_BUCKET:-loki}"
+        s3_access_key="${MINIO_ACCESS_KEY}"
+        s3_secret_key="${MINIO_SECRET_KEY}"
+        s3_region="us-east-1"
+    else
+        print_error "S3 백엔드를 찾을 수 없습니다."
+        print_warn "  ODF_INSTALLED=${ODF_INSTALLED:-false}, MINIO_INSTALLED=${MINIO_INSTALLED:-false}"
+        print_warn "  env.conf 에서 ODF_S3_* 또는 MINIO_* 변수를 확인하세요."
+        exit 1
+    fi
+
+    print_info "${s3_backend} S3 Secret 생성 중..."
     oc create secret generic logging-loki-s3 \
         -n "${LOGGING_NS}" \
-        --from-literal=access_key_id="${MINIO_ACCESS_KEY}" \
-        --from-literal=access_key_secret="${MINIO_SECRET_KEY}" \
-        --from-literal=bucketnames="${MINIO_BUCKET}" \
-        --from-literal=endpoint="${MINIO_ENDPOINT}" \
-        --from-literal=region="us-east-1"
-    print_ok "S3 Secret 'logging-loki-s3' 생성 완료"
-    print_info "  endpoint : ${MINIO_ENDPOINT}"
-    print_info "  bucket   : ${MINIO_BUCKET}"
+        --from-literal=access_key_id="${s3_access_key}" \
+        --from-literal=access_key_secret="${s3_secret_key}" \
+        --from-literal=bucketnames="${s3_bucket}" \
+        --from-literal=endpoint="${s3_endpoint}" \
+        --from-literal=region="${s3_region}"
+    print_ok "S3 Secret 'logging-loki-s3' 생성 완료 (${s3_backend})"
+    print_info "  endpoint : ${s3_endpoint}"
+    print_info "  bucket   : ${s3_bucket}"
 }
 
 step_loki_stack() {
-    print_step "4/5  LokiStack 생성 (MinIO S3 사용)"
+    print_step "4/5  LokiStack 생성"
 
     if oc get lokistack "${LOKI_NAME}" -n "${LOGGING_NS}" &>/dev/null; then
         print_ok "LokiStack '${LOKI_NAME}' 이미 존재합니다 — 건너뜁니다."
@@ -314,18 +352,30 @@ step_log_forwarder() {
     if oc get clusterlogforwarder "${CLF_NAME}" -n "${LOGGING_NS}" &>/dev/null; then
         print_warn "ClusterLogForwarder '${CLF_NAME}' 이미 존재합니다."
         read -r -p "기존 설정을 덮어쓰시겠습니까? [y/N]: " overwrite
-        [[ "${overwrite,,}" != "y" ]] && { print_info "건너뜁니다."; return; }
+        [[ "$overwrite" != "y" && "$overwrite" != "Y" ]] && { print_info "건너뜁니다."; return; }
     fi
 
-    local output_section
-    if $HAS_LOKI; then
-        output_section='  outputs:
+    if [ "$LOGGING_V6" = "true" ]; then
+        # v6: observability.openshift.io/v1, ServiceAccount 필요
+        if ! oc get serviceaccount collector -n "${LOGGING_NS}" &>/dev/null; then
+            oc create serviceaccount collector -n "${LOGGING_NS}"
+            print_ok "ServiceAccount collector 생성"
+        fi
+        for role in collect-application-logs collect-infrastructure-logs collect-audit-logs; do
+            oc adm policy add-cluster-role-to-user "${role}" \
+                -z collector -n "${LOGGING_NS}" 2>/dev/null || true
+        done
+        print_ok "collector ServiceAccount 권한 부여"
+
+        local output_section
+        if [ "$HAS_LOKI" = "true" ]; then
+            output_section="  outputs:
     - name: loki-storage
       type: lokiStack
       lokiStack:
         target:
-          name: '${LOKI_NAME}'
-          namespace: '${LOGGING_NS}'
+          name: ${LOKI_NAME}
+          namespace: ${LOGGING_NS}
         authentication:
           token:
             from: serviceAccount
@@ -336,19 +386,63 @@ step_log_forwarder() {
         - infrastructure
         - audit
       outputRefs:
-        - loki-storage'
-    else
-        output_section='  pipelines:
+        - loki-storage"
+        else
+            output_section="  pipelines:
     - name: all-to-default
       inputRefs:
         - application
         - infrastructure
         - audit
       outputRefs:
-        - default'
-    fi
+        - default"
+        fi
 
-    cat > "${SCRIPT_DIR}/cluster-log-forwarder.yaml" <<EOF
+        cat > "${SCRIPT_DIR}/cluster-log-forwarder.yaml" <<EOF
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: ${CLF_NAME}
+  namespace: ${LOGGING_NS}
+spec:
+  serviceAccount:
+    name: collector
+${output_section}
+EOF
+    else
+        # v5: logging.openshift.io/v1
+        local output_section
+        if [ "$HAS_LOKI" = "true" ]; then
+            output_section="  outputs:
+    - name: loki-storage
+      type: lokiStack
+      lokiStack:
+        target:
+          name: ${LOKI_NAME}
+          namespace: ${LOGGING_NS}
+        authentication:
+          token:
+            from: serviceAccount
+  pipelines:
+    - name: all-to-loki
+      inputRefs:
+        - application
+        - infrastructure
+        - audit
+      outputRefs:
+        - loki-storage"
+        else
+            output_section="  pipelines:
+    - name: all-to-default
+      inputRefs:
+        - application
+        - infrastructure
+        - audit
+      outputRefs:
+        - default"
+        fi
+
+        cat > "${SCRIPT_DIR}/cluster-log-forwarder.yaml" <<EOF
 apiVersion: logging.openshift.io/v1
 kind: ClusterLogForwarder
 metadata:
@@ -357,6 +451,7 @@ metadata:
 spec:
 ${output_section}
 EOF
+    fi
 
     confirm_and_apply "${SCRIPT_DIR}/cluster-log-forwarder.yaml"
     print_ok "ClusterLogForwarder '${CLF_NAME}' 적용 완료"
@@ -378,7 +473,7 @@ step_verify() {
     oc get co kube-apiserver 2>/dev/null | \
         awk 'NR==1{printf "    %-30s %-10s %-12s %-12s\n",$1,$2,$3,$4} NR>1{printf "    %-30s %-10s %-12s %-12s\n",$1,$2,$3,$4}' || true
 
-    if $HAS_LOGGING; then
+    if [ "$HAS_LOGGING" = "true" ]; then
         echo ""
         echo -e "${CYAN}  [ ClusterLogging ]${NC}"
         oc get clusterlogging -n "${LOGGING_NS}" 2>/dev/null | \
@@ -389,7 +484,7 @@ step_verify() {
         oc get clusterlogforwarder -n "${LOGGING_NS}" 2>/dev/null | \
             awk '{printf "    %s\n", $0}' || echo "    (없음)"
 
-        if $HAS_LOKI; then
+        if [ "$HAS_LOKI" = "true" ]; then
             echo ""
             echo -e "${CYAN}  [ LokiStack ]${NC}"
             oc get lokistack -n "${LOGGING_NS}" 2>/dev/null | \
@@ -405,7 +500,7 @@ step_verify() {
     echo ""
     print_info "Audit 로그 실시간 확인 (예시):"
     echo -e "    ${CYAN}oc adm node-logs --role=master --path=kube-apiserver/ | grep audit${NC}"
-    if $HAS_LOGGING; then
+    if [ "$HAS_LOGGING" = "true" ]; then
         echo -e "    ${CYAN}oc logs -n ${LOGGING_NS} -l component=collector --tail=20${NC}"
     fi
     echo ""
@@ -425,10 +520,10 @@ main() {
 
     step_audit_policy
 
-    if $HAS_LOGGING; then
+    if [ "$HAS_LOGGING" = "true" ]; then
         step_namespace
         step_cluster_logging
-        if $HAS_LOKI; then
+        if [ "$HAS_LOKI" = "true" ]; then
             step_loki_stack
         else
             print_step "4/5  LokiStack 생성"

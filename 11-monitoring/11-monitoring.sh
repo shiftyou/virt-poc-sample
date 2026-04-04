@@ -124,6 +124,8 @@ step_grafana() {
     fi
     print_step "2/5  Grafana 인스턴스 배포"
 
+    local grafana_pass="${GRAFANA_ADMIN_PASS:-grafana123}"
+
     if oc get grafana poc-grafana -n "$NS" &>/dev/null; then
         print_ok "Grafana poc-grafana 이미 존재 — 스킵"
     else
@@ -143,28 +145,62 @@ spec:
       enabled: "false"
     security:
       admin_user: admin
-      admin_password: ${GRAFANA_ADMIN_PASS:-grafana123}
-  ingress:
-    enabled: true
+      admin_password: ${grafana_pass}
 EOF
         oc apply -f /tmp/poc-grafana.yaml
-        print_ok "Grafana poc-grafana 배포 완료"
+        print_ok "Grafana poc-grafana 배포 완료 (admin 비밀번호: ${grafana_pass})"
     fi
 
-    # Grafana SA에 cluster-monitoring-view 권한 부여
-    print_info "Prometheus 접근 권한 설정 중..."
-    local retries=12
+    # Grafana Pod Ready 대기
+    print_info "Grafana Pod 준비 대기 중..."
+    local retries=24
     local i=0
-    while [ $i -lt $retries ]; do
-        if oc get sa poc-grafana-sa -n "$NS" &>/dev/null; then
+    while [ "$i" -lt "$retries" ]; do
+        local ready
+        ready=$(oc get pods -n "$NS" -l "app=grafana,grafana=poc-grafana" \
+            --no-headers 2>/dev/null | awk '{print $2}' | head -1)
+        if [ "${ready}" = "1/1" ]; then
+            print_ok "Grafana Pod Ready"
             break
         fi
-        printf "  [%d/%d] Grafana SA 생성 대기 중...\r" "$((i+1))" "$retries"
+        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${ready:--}"
         sleep 5
         i=$((i+1))
     done
     echo ""
 
+    # OpenShift Route 생성 (ingress 대신 Route 직접 생성)
+    if oc get route poc-grafana-route -n "$NS" &>/dev/null; then
+        print_ok "Route poc-grafana-route 이미 존재 — 스킵"
+    else
+        cat > /tmp/poc-grafana-route.yaml <<EOF
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: poc-grafana-route
+  namespace: ${NS}
+spec:
+  to:
+    kind: Service
+    name: poc-grafana-service
+  port:
+    targetPort: grafana
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+EOF
+        oc apply -f /tmp/poc-grafana-route.yaml
+        print_ok "Route poc-grafana-route 생성 완료"
+    fi
+
+    local grafana_url
+    grafana_url=$(oc get route poc-grafana-route -n "$NS" \
+        -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+    [ -n "$grafana_url" ] && print_ok "Grafana URL: https://${grafana_url}"
+    print_info "  로그인: admin / ${grafana_pass}"
+
+    # Grafana SA에 cluster-monitoring-view 권한 부여
+    print_info "Prometheus 접근 권한 설정 중..."
     oc create clusterrolebinding grafana-cluster-monitoring-view \
         --clusterrole=cluster-monitoring-view \
         --serviceaccount="${NS}:poc-grafana-sa" 2>/dev/null || \
