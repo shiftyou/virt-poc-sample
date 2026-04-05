@@ -211,7 +211,7 @@ EOF
     local i=0
     while [ "$i" -lt "$retries" ]; do
         local ready
-        ready=$(oc get pods -n "$NS" -l "app=grafana,grafana=poc-grafana" \
+        ready=$(oc get pods -n "$NS" -l "app=poc-grafana" \
             --no-headers 2>/dev/null | awk '{print $2}' | head -1)
         if [ "${ready}" = "1/1" ]; then
             print_ok "Grafana Pod Ready"
