@@ -621,6 +621,7 @@ step_dashboard() {
       },
       "title": "VM 목록",
       "transformations": [
+        {"id": "merge", "options": {}},
         {"id": "labelsToFields", "options": {"mode": "columns"}},
         {
           "id": "organize",
