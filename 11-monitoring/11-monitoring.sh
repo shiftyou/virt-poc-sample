@@ -566,7 +566,7 @@ step_dashboard() {
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "count(kubevirt_vmi_info{namespace=~\"$namespace\"}) or vector(0)",
+          "expr": "count(kubevirt_vmi_info) or vector(0)",
           "legendFormat": "Total",
           "refId": "A"
         }
@@ -643,7 +643,7 @@ step_dashboard() {
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "kubevirt_vmi_info{namespace=~\"$namespace\", name=~\"$vm\"}",
+          "expr": "kubevirt_vmi_info",
           "instant": true,
           "legendFormat": "{{name}}",
           "refId": "A"
