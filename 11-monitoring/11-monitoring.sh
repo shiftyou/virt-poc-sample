@@ -81,6 +81,31 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
+    # env.conf에 없으면 클러스터 CSV에서 자동 감지
+    if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
+        if oc get csv --all-namespaces --no-headers 2>/dev/null \
+            | grep -qi "grafana-operator"; then
+            GRAFANA_INSTALLED=true
+            print_ok "Grafana 커뮤니티 Operator 자동 감지 (CSV)"
+        fi
+    fi
+
+    if [ "${COO_INSTALLED:-false}" != "true" ]; then
+        if oc get csv --all-namespaces --no-headers 2>/dev/null \
+            | grep -qi "cluster-observability-operator"; then
+            COO_INSTALLED=true
+            print_ok "Cluster Observability Operator 자동 감지 (CSV)"
+        fi
+    fi
+
+    if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
+        if oc get csv --all-namespaces --no-headers 2>/dev/null \
+            | grep -qi "kubevirt-hyperconverged"; then
+            VIRT_INSTALLED=true
+            print_ok "OpenShift Virtualization 자동 감지 (CSV)"
+        fi
+    fi
+
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ] && [ "${COO_INSTALLED:-false}" != "true" ]; then
         print_warn "Grafana Operator 및 Cluster Observability Operator 모두 미설치 → 건너뜁니다."
         step_install_grafana_guide
@@ -111,7 +136,36 @@ step_namespace() {
     print_step "1/5  네임스페이스 생성 (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        local ns_phase
+        ns_phase=$(oc get namespace "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+
+        if [ "$ns_phase" = "Terminating" ]; then
+            print_warn "네임스페이스 $NS 가 Terminating 상태 — 삭제 완료 대기 중..."
+            local retries=36
+            local i=0
+            while [ "$i" -lt "$retries" ]; do
+                if ! oc get namespace "$NS" &>/dev/null; then
+                    print_ok "네임스페이스 삭제 완료"
+                    break
+                fi
+                printf "  [%d/%d] Terminating 대기 중...\r" "$((i+1))" "$retries"
+                sleep 5
+                i=$((i+1))
+            done
+            echo ""
+
+            if oc get namespace "$NS" &>/dev/null; then
+                print_error "네임스페이스 $NS 가 여전히 Terminating 상태입니다."
+                print_info "수동 확인: oc get namespace $NS -o yaml"
+                print_info "Finalizer 강제 제거: oc patch namespace $NS -p '{\"metadata\":{\"finalizers\":[]}}' --type=merge"
+                exit 1
+            fi
+
+            oc new-project "$NS" > /dev/null
+            print_ok "네임스페이스 $NS 재생성 완료"
+        else
+            print_ok "네임스페이스 $NS 이미 존재 (Active) — 스킵"
+        fi
     else
         oc new-project "$NS" > /dev/null
         print_ok "네임스페이스 $NS 생성 완료"
@@ -122,7 +176,7 @@ step_grafana() {
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "2/5  Grafana 인스턴스 배포"
+    print_step "2/6  Grafana 인스턴스 배포"
 
     local grafana_pass="${GRAFANA_ADMIN_PASS:-grafana123}"
 
@@ -179,6 +233,8 @@ kind: Route
 metadata:
   name: poc-grafana-route
   namespace: ${NS}
+  labels:
+    app: grafana
 spec:
   to:
     kind: Service
@@ -212,7 +268,7 @@ step_datasource() {
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "3/5  Prometheus DataSource 연동"
+    print_step "3/6  Prometheus DataSource 연동"
 
     # ServiceAccount 토큰 생성
     TOKEN=$(oc create token poc-grafana-sa -n "$NS" --duration=8760h 2>/dev/null || true)
@@ -249,11 +305,638 @@ EOF
     print_ok "Prometheus DataSource 연동 완료"
 }
 
+step_dashboard() {
+    if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
+        return
+    fi
+    print_step "4/6  VM 전체 현황 대시보드 배포"
+
+    if oc get grafanadashboard poc-vm-overview -n "$NS" &>/dev/null; then
+        print_ok "GrafanaDashboard poc-vm-overview 이미 존재 — 스킵"
+        return
+    fi
+
+    # Dashboard JSON ($-확장 방지: single-quoted heredoc 사용)
+    cat > /tmp/poc-vm-dashboard.json << 'DASHBOARD_EOF'
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "OpenShift Virtualization 전체 VM 운영 현황 모니터링",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["kubevirt", "vm", "poc", "openshift-virtualization"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "데이터소스",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "definition": "label_values(kubevirt_vmi_info, namespace)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "네임스페이스",
+        "multi": true,
+        "name": "namespace",
+        "options": [],
+        "query": {"query": "label_values(kubevirt_vmi_info, namespace)", "refId": "Q"},
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "definition": "label_values(kubevirt_vmi_info{namespace=~\"$namespace\"}, name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "VM 이름",
+        "multi": true,
+        "name": "vm",
+        "options": [],
+        "query": {"query": "label_values(kubevirt_vmi_info{namespace=~\"$namespace\"}, name)", "refId": "Q"},
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "KubeVirt VM 전체 현황",
+  "uid": "poc-vm-overview",
+  "version": 1,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "title": "VM 상태 요약",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"fixedColor": "green", "mode": "fixed"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "title": "실행 중 (Running)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\", phase=\"Running\"}) or vector(0)",
+          "legendFormat": "Running",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"fixedColor": "yellow", "mode": "fixed"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "yellow", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "title": "일시정지 (Paused)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\", phase=\"Paused\"}) or vector(0)",
+          "legendFormat": "Paused",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"fixedColor": "red", "mode": "fixed"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1},
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "title": "중지됨 (Stopped / Failed)",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\", phase=~\"Stopped|Failed\"}) or vector(0)",
+          "legendFormat": "Stopped/Failed",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"fixedColor": "blue", "mode": "fixed"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1},
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "title": "전체 VMI",
+      "type": "stat",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\"}) or vector(0)",
+          "legendFormat": "Total",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+      "id": 101,
+      "title": "VM 인벤토리",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {
+            "align": "auto",
+            "cellOptions": {"type": "auto"},
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "ready"},
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {"options": {"true":  {"color": "green", "index": 0, "text": "Ready"}},  "type": "value"},
+                  {"options": {"false": {"color": "red",   "index": 1, "text": "Not Ready"}}, "type": "value"}
+                ]
+              },
+              {"id": "custom.cellOptions", "value": {"type": "color-text"}}
+            ]
+          },
+          {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},  "properties": [{"id": "custom.hidden", "value": true}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 6},
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
+        "showHeader": true,
+        "sortBy": [{"desc": false, "displayName": "namespace"}]
+      },
+      "title": "VM 목록",
+      "transformations": [
+        {"id": "labelsToFields", "options": {"mode": "columns"}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"__name__": true, "job": true, "instance": true},
+            "indexByName": {},
+            "renameByName": {
+              "namespace": "네임스페이스",
+              "name":      "VM 이름",
+              "node":      "노드",
+              "ready":     "Ready 상태",
+              "os":        "OS",
+              "workload":  "워크로드"
+            }
+          }
+        }
+      ],
+      "type": "table",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "kubevirt_vmi_info{namespace=~\"$namespace\", name=~\"$vm\"}",
+          "instant": true,
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+      "id": 102,
+      "title": "CPU",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 15},
+      "id": 6,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "CPU 사용률 (vCPU seconds/s)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(kubevirt_vmi_cpu_usage_seconds_total{namespace=~\"$namespace\", name=~\"$vm\"}[5m])",
+          "legendFormat": "{{namespace}}/{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 103,
+      "title": "메모리",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "id": 7,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "메모리 사용량 (Resident)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "kubevirt_vmi_memory_resident_bytes{namespace=~\"$namespace\", name=~\"$vm\"}",
+          "legendFormat": "{{namespace}}/{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.9}]},
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "id": 8,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "메모리 사용률 (%)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "kubevirt_vmi_memory_resident_bytes{namespace=~\"$namespace\", name=~\"$vm\"} / (kubevirt_vmi_memory_resident_bytes{namespace=~\"$namespace\", name=~\"$vm\"} + kubevirt_vmi_memory_available_bytes{namespace=~\"$namespace\", name=~\"$vm\"})",
+          "legendFormat": "{{namespace}}/{{name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 104,
+      "title": "네트워크 I/O",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+      "id": 9,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "네트워크 수신 (RX)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(kubevirt_vmi_network_receive_bytes_total{namespace=~\"$namespace\", name=~\"$vm\"}[5m])",
+          "legendFormat": "{{namespace}}/{{name}} [{{interface}}]",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
+      "id": 10,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "네트워크 송신 (TX)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(kubevirt_vmi_network_transmit_bytes_total{namespace=~\"$namespace\", name=~\"$vm\"}[5m])",
+          "legendFormat": "{{namespace}}/{{name}} [{{interface}}]",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
+      "id": 105,
+      "title": "스토리지 I/O",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 42},
+      "id": 11,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "스토리지 읽기 (Read)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(kubevirt_vmi_storage_read_traffic_bytes_total{namespace=~\"$namespace\", name=~\"$vm\"}[5m])",
+          "legendFormat": "{{namespace}}/{{name}} [{{drive}}]",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text",
+            "axisLabel": "", "axisPlacement": "auto", "barAlignment": 0,
+            "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never",
+            "spanNulls": false, "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 42},
+      "id": 12,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "스토리지 쓰기 (Write)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "expr": "rate(kubevirt_vmi_storage_write_traffic_bytes_total{namespace=~\"$namespace\", name=~\"$vm\"}[5m])",
+          "legendFormat": "{{namespace}}/{{name}} [{{drive}}]",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
+DASHBOARD_EOF
+
+    # YAML 래퍼 생성 (bash 변수 ${NS} 사용)
+    {
+        printf 'apiVersion: grafana.integreatly.org/v1beta1\n'
+        printf 'kind: GrafanaDashboard\n'
+        printf 'metadata:\n'
+        printf '  name: poc-vm-overview\n'
+        printf '  namespace: %s\n' "${NS}"
+        printf '  labels:\n'
+        printf '    app: poc-grafana\n'
+        printf 'spec:\n'
+        printf '  instanceSelector:\n'
+        printf '    matchLabels:\n'
+        printf '      dashboards: poc-grafana\n'
+        printf '  json: |\n'
+        sed 's/^/    /' /tmp/poc-vm-dashboard.json
+    } > /tmp/poc-vm-dashboard.yaml
+
+    oc apply -f /tmp/poc-vm-dashboard.yaml
+    print_ok "GrafanaDashboard poc-vm-overview 배포 완료"
+    print_info "  대시보드: Grafana → Dashboards → KubeVirt VM 전체 현황"
+}
+
 step_vm() {
     if [ "${COO_INSTALLED:-false}" != "true" ] || [ "${VIRT_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "4/5  poc 템플릿 VM 생성 (${VM_NAME})"
+    print_step "5/6  poc 템플릿 VM 생성 (${VM_NAME})"
 
     if ! oc get template poc -n openshift &>/dev/null; then
         print_warn "poc Template 없음 — 01-template 을 먼저 실행하세요. VM 생성 건너뜁니다."
@@ -361,7 +1044,7 @@ step_coo() {
     if [ "${COO_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "5/5  Cluster Observability Operator (COO) 구성"
+    print_step "6/6  Cluster Observability Operator (COO) 구성"
 
     # MonitoringStack CRD 확인
     if ! oc get crd monitoringstacks.monitoring.rhobs &>/dev/null; then
@@ -524,8 +1207,8 @@ EOF
 
 print_summary() {
     local grafana_route
-    grafana_route=$(oc get route -n "$NS" -l app=grafana \
-        -o jsonpath='{.items[0].spec.host}' 2>/dev/null || echo "")
+    grafana_route=$(oc get route poc-grafana-route -n "$NS" \
+        -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -537,6 +1220,7 @@ print_summary() {
         if [ -n "$grafana_route" ]; then
             echo -e "  Grafana URL : ${CYAN}https://${grafana_route}${NC}"
             echo -e "  계정        : admin / ${GRAFANA_ADMIN_PASS:-grafana123}"
+            echo -e "  VM 대시보드 : ${CYAN}https://${grafana_route}/d/poc-vm-overview${NC}"
         else
             echo -e "  Grafana Route: ${CYAN}oc get route -n ${NS}${NC}"
         fi
@@ -582,6 +1266,7 @@ main() {
     step_namespace
     step_grafana
     step_datasource
+    step_dashboard
     step_vm
     step_coo
     print_summary
