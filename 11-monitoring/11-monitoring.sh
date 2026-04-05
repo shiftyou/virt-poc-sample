@@ -609,37 +609,34 @@ step_dashboard() {
               {"id": "custom.cellOptions", "value": {"type": "color-text"}}
             ]
           },
-          {"matcher": {"id": "byName", "options": "Value"}, "properties": [{"id": "custom.hidden", "value": true}]},
-          {"matcher": {"id": "byName", "options": "Time"},  "properties": [{"id": "custom.hidden", "value": true}]}
+          {"matcher": {"id": "byName", "options": "Value"},    "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},     "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "__name__"}, "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "job"},      "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "instance"}, "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "endpoint"}, "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "service"},  "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "pod"},      "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "container"},"properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "namespace"}, "properties": [{"id": "displayName", "value": "네임스페이스"}]},
+          {"matcher": {"id": "byName", "options": "name"},      "properties": [{"id": "displayName", "value": "VM 이름"}]},
+          {"matcher": {"id": "byName", "options": "node"},      "properties": [{"id": "displayName", "value": "노드"}]},
+          {"matcher": {"id": "byName", "options": "ready"},     "properties": [{"id": "displayName", "value": "Ready 상태"}]},
+          {"matcher": {"id": "byName", "options": "os"},        "properties": [{"id": "displayName", "value": "OS"}]},
+          {"matcher": {"id": "byName", "options": "workload"},  "properties": [{"id": "displayName", "value": "워크로드"}]}
         ]
       },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 6},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6},
       "id": 5,
       "options": {
         "cellHeight": "sm",
         "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
         "showHeader": true,
-        "sortBy": [{"desc": false, "displayName": "namespace"}]
+        "sortBy": [{"desc": false, "displayName": "네임스페이스"}]
       },
-      "title": "VM 목록",
+      "title": "VM 목록 (클러스터 전체)",
       "transformations": [
-        {"id": "merge", "options": {}},
-        {"id": "labelsToFields", "options": {"mode": "columns"}},
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {"__name__": true, "job": true, "instance": true},
-            "indexByName": {},
-            "renameByName": {
-              "namespace": "네임스페이스",
-              "name":      "VM 이름",
-              "node":      "노드",
-              "ready":     "Ready 상태",
-              "os":        "OS",
-              "workload":  "워크로드"
-            }
-          }
-        }
+        {"id": "merge", "options": {}}
       ],
       "type": "table",
       "targets": [
@@ -647,7 +644,8 @@ step_dashboard() {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
           "expr": "kubevirt_vmi_info",
           "instant": true,
-          "legendFormat": "{{name}}",
+          "format": "table",
+          "legendFormat": "",
           "refId": "A"
         }
       ]
@@ -972,6 +970,26 @@ DASHBOARD_EOF
 
     oc create -f /tmp/poc-vm-dashboard.yaml
     print_ok "GrafanaDashboard poc-vm-overview 배포 완료"
+
+    # Grafana Operator 동기화 대기 (최대 90초)
+    print_info "  Grafana 대시보드 동기화 대기 중..."
+    local synced=false
+    for i in $(seq 1 18); do
+        sleep 5
+        local conditions
+        conditions=$(oc get grafanadashboard poc-vm-overview -n "${NS}" -o jsonpath='{.status.conditions[*].type}' 2>/dev/null || true)
+        if echo "${conditions}" | grep -q "Synchronized"; then
+            synced=true
+            break
+        fi
+        printf "    대기 중... (%ds)\n" $((i * 5))
+    done
+
+    if [ "${synced}" = "true" ]; then
+        print_ok "  대시보드 동기화 완료"
+    else
+        print_warn "  동기화 확인 불가 — Grafana에서 직접 확인하세요 (resyncPeriod: 5m)"
+    fi
     print_info "  대시보드: Grafana → Dashboards → KubeVirt VM 전체 현황"
 }
 
