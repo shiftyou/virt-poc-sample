@@ -383,7 +383,7 @@ step_dashboard() {
   "templating": {
     "list": [
       {
-        "current": {},
+        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
         "hide": 0,
         "includeAll": false,
         "label": "데이터소스",
@@ -465,12 +465,12 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "실행 중 (Running)",
+      "title": "실행 중 (Running) — 클러스터 전체",
       "type": "stat",
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\", phase=\"Running\"}) or vector(0)",
+          "expr": "sum(kubevirt_vmi_phase_count{phase=\"Running\"}) or vector(0)",
           "legendFormat": "Running",
           "refId": "A"
         }
@@ -497,12 +497,12 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "일시정지 (Paused)",
+      "title": "일시정지 (Paused) — 클러스터 전체",
       "type": "stat",
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\", phase=\"Paused\"}) or vector(0)",
+          "expr": "sum(kubevirt_vmi_phase_count{phase=\"Paused\"}) or vector(0)",
           "legendFormat": "Paused",
           "refId": "A"
         }
@@ -529,13 +529,13 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "중지됨 (Stopped / Failed)",
+      "title": "비정상 VMI (Pending / Failed) — 클러스터 전체",
       "type": "stat",
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\", phase=~\"Stopped|Failed\"}) or vector(0)",
-          "legendFormat": "Stopped/Failed",
+          "expr": "sum(kubevirt_vmi_phase_count{phase=~\"Scheduling|Scheduled|Pending|Failed\"}) or vector(0)",
+          "legendFormat": "비정상 (Pending/Failed 등)",
           "refId": "A"
         }
       ]
@@ -561,12 +561,12 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "전체 VMI",
+      "title": "전체 활성 VMI — 클러스터 전체",
       "type": "stat",
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{namespace=~\"$namespace\"}) or vector(0)",
+          "expr": "sum(kubevirt_vmi_phase_count) or vector(0)",
           "legendFormat": "Total",
           "refId": "A"
         }
