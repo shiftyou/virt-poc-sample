@@ -38,7 +38,7 @@
                         }
                     }
                 ],
-                "runStrategy": "Always",
+                "runStrategy": "Halted",
                 "template": {
                     "metadata": {
                         "annotations": {

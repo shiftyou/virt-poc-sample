@@ -1,0 +1,26 @@
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: instance
+  namespace: openshift-logging
+spec:
+  serviceAccount:
+    name: collector
+  outputs:
+    - name: loki-storage
+      type: lokiStack
+      lokiStack:
+        target:
+          name: logging-loki
+          namespace: openshift-logging
+        authentication:
+          token:
+            from: serviceAccount
+  pipelines:
+    - name: all-to-loki
+      inputRefs:
+        - application
+        - infrastructure
+        - audit
+      outputRefs:
+        - loki-storage
