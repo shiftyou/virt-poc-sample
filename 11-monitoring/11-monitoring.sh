@@ -470,7 +470,7 @@ step_dashboard() {
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{phase=\"Running\"}) or vector(0)",
+          "expr": "sum(kubevirt_vmi_phase_count{phase=~\"Running|running\"}) or vector(0)",
           "legendFormat": "Running",
           "refId": "A"
         }
@@ -502,7 +502,7 @@ step_dashboard() {
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{phase=\"Paused\"}) or vector(0)",
+          "expr": "sum(kubevirt_vmi_phase_count{phase=~\"Paused|paused\"}) or vector(0)",
           "legendFormat": "Paused",
           "refId": "A"
         }
@@ -534,7 +534,7 @@ step_dashboard() {
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count{phase=~\"Scheduling|Scheduled|Pending|Failed\"}) or vector(0)",
+          "expr": "sum(kubevirt_vmi_phase_count{phase!~\"Running|running|Paused|paused\"}) or vector(0)",
           "legendFormat": "비정상 (Pending/Failed 등)",
           "refId": "A"
         }
@@ -566,7 +566,7 @@ step_dashboard() {
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "expr": "sum(kubevirt_vmi_phase_count) or vector(0)",
+          "expr": "count(kubevirt_vmi_info{namespace=~\"$namespace\"}) or vector(0)",
           "legendFormat": "Total",
           "refId": "A"
         }
@@ -1174,7 +1174,7 @@ spec:
       interval: 30s
       rules:
         - alert: VMNotRunning
-          expr: kubevirt_vmi_phase_count{phase!="Running"} > 0
+          expr: kubevirt_vmi_phase_count{phase!~"Running|running|Paused|paused"} > 0
           for: 5m
           labels:
             severity: warning
