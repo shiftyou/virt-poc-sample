@@ -255,13 +255,39 @@ EOF
     [ -n "$grafana_url" ] && print_ok "Grafana URL: https://${grafana_url}"
     print_info "  로그인: admin / ${grafana_pass}"
 
-    # Grafana SA에 cluster-monitoring-view 권한 부여
+    # Grafana SA 생성 대기 (Grafana Operator가 SA를 비동기로 생성)
+    print_info "ServiceAccount poc-grafana-sa 생성 대기 중..."
+    local sa_retries=24
+    local si=0
+    while [ "$si" -lt "$sa_retries" ]; do
+        if oc get serviceaccount poc-grafana-sa -n "$NS" &>/dev/null; then
+            print_ok "ServiceAccount poc-grafana-sa 확인"
+            break
+        fi
+        printf "  [%d/%d] SA 대기 중...\r" "$((si+1))" "$sa_retries"
+        sleep 5
+        si=$((si+1))
+    done
+    echo ""
+
+    # Grafana SA에 cluster-monitoring-view 권한 부여 (oc apply — 멱등)
     print_info "Prometheus 접근 권한 설정 중..."
-    oc create clusterrolebinding grafana-cluster-monitoring-view \
-        --clusterrole=cluster-monitoring-view \
-        --serviceaccount="${NS}:poc-grafana-sa" 2>/dev/null || \
-        print_info "ClusterRoleBinding 이미 존재"
-    print_ok "cluster-monitoring-view 권한 부여 완료"
+    cat > /tmp/grafana-monitoring-crb.yaml <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cluster-monitoring-view
+subjects:
+- kind: ServiceAccount
+  name: poc-grafana-sa
+  namespace: ${NS}
+roleRef:
+  kind: ClusterRole
+  name: cluster-monitoring-view
+  apiGroup: rbac.authorization.k8s.io
+EOF
+    oc apply -f /tmp/grafana-monitoring-crb.yaml
+    print_ok "cluster-monitoring-view ClusterRoleBinding 적용 완료"
 }
 
 step_datasource() {
@@ -270,8 +296,21 @@ step_datasource() {
     fi
     print_step "3/6  Prometheus DataSource 연동"
 
-    # ServiceAccount 토큰 생성
-    TOKEN=$(oc create token poc-grafana-sa -n "$NS" --duration=8760h 2>/dev/null || true)
+    # ServiceAccount 존재 확인 (step_grafana에서 대기했지만 한 번 더 보장)
+    if ! oc get serviceaccount poc-grafana-sa -n "$NS" &>/dev/null; then
+        print_warn "ServiceAccount poc-grafana-sa 없음 — DataSource 스텝 건너뜁니다."
+        print_info "수동 확인: oc get sa -n ${NS}"
+        return
+    fi
+
+    # ServiceAccount 토큰 생성 (재시도 3회)
+    TOKEN=""
+    local t=0
+    while [ "$t" -lt 3 ] && [ -z "$TOKEN" ]; do
+        TOKEN=$(oc create token poc-grafana-sa -n "$NS" --duration=8760h 2>/dev/null || true)
+        [ -z "$TOKEN" ] && sleep 5
+        t=$((t+1))
+    done
     if [ -z "$TOKEN" ]; then
         print_warn "Grafana SA 토큰 생성 실패 — Grafana Pod가 아직 준비 중일 수 있습니다."
         print_info "수동으로 실행: oc create token poc-grafana-sa -n ${NS} --duration=8760h"
@@ -311,9 +350,9 @@ step_dashboard() {
     fi
     print_step "4/6  VM 전체 현황 대시보드 배포"
 
+    # 이미 존재해도 최신 JSON으로 업데이트 (oc apply)
     if oc get grafanadashboard poc-vm-overview -n "$NS" &>/dev/null; then
-        print_ok "GrafanaDashboard poc-vm-overview 이미 존재 — 스킵"
-        return
+        print_info "GrafanaDashboard poc-vm-overview 이미 존재 — 최신 버전으로 갱신"
     fi
 
     # Dashboard JSON ($-확장 방지: single-quoted heredoc 사용)
@@ -357,7 +396,7 @@ step_dashboard() {
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {"selected": true, "text": ["All"], "value": ["$__all"]},
         "datasource": {"type": "prometheus", "uid": "${datasource}"},
         "definition": "label_values(kubevirt_vmi_info, namespace)",
         "hide": 0,
@@ -374,7 +413,7 @@ step_dashboard() {
       },
       {
         "allValue": ".*",
-        "current": {},
+        "current": {"selected": true, "text": ["All"], "value": ["$__all"]},
         "datasource": {"type": "prometheus", "uid": "${datasource}"},
         "definition": "label_values(kubevirt_vmi_info{namespace=~\"$namespace\"}, name)",
         "hide": 0,
