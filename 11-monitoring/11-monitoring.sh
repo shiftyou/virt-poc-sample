@@ -350,9 +350,11 @@ step_dashboard() {
     fi
     print_step "4/6  VM 전체 현황 대시보드 배포"
 
-    # 이미 존재해도 최신 JSON으로 업데이트 (oc apply)
+    # 기존 CR 삭제 후 재생성 — oc apply unchanged 방지 및 Grafana UI 삭제 후 복구 보장
     if oc get grafanadashboard poc-vm-overview -n "$NS" &>/dev/null; then
-        print_info "GrafanaDashboard poc-vm-overview 이미 존재 — 최신 버전으로 갱신"
+        print_info "GrafanaDashboard poc-vm-overview 기존 CR 삭제 후 재생성..."
+        oc delete grafanadashboard poc-vm-overview -n "$NS" --wait=false 2>/dev/null || true
+        sleep 2
     fi
 
     # Dashboard JSON ($-확장 방지: single-quoted heredoc 사용)
@@ -960,6 +962,7 @@ DASHBOARD_EOF
         printf '  labels:\n'
         printf '    app: poc-grafana\n'
         printf 'spec:\n'
+        printf '  resyncPeriod: 5m\n'
         printf '  instanceSelector:\n'
         printf '    matchLabels:\n'
         printf '      dashboards: poc-grafana\n'
@@ -967,7 +970,7 @@ DASHBOARD_EOF
         sed 's/^/    /' /tmp/poc-vm-dashboard.json
     } > /tmp/poc-vm-dashboard.yaml
 
-    oc apply -f /tmp/poc-vm-dashboard.yaml
+    oc create -f /tmp/poc-vm-dashboard.yaml
     print_ok "GrafanaDashboard poc-vm-overview 배포 완료"
     print_info "  대시보드: Grafana → Dashboards → KubeVirt VM 전체 현황"
 }
@@ -1318,6 +1321,13 @@ step_coo_dashboard() {
         return
     fi
     print_step "7/7  VM OS 메트릭 대시보드 배포 (COO-Prometheus / node_exporter)"
+
+    # 기존 CR 삭제 후 재생성
+    if oc get grafanadashboard poc-vm-node-exporter -n "$NS" &>/dev/null; then
+        print_info "GrafanaDashboard poc-vm-node-exporter 기존 CR 삭제 후 재생성..."
+        oc delete grafanadashboard poc-vm-node-exporter -n "$NS" --wait=false 2>/dev/null || true
+        sleep 2
+    fi
 
     cat > /tmp/poc-vm-node-exporter-dashboard.json << 'NEDASHEOF'
 {
@@ -1796,6 +1806,7 @@ NEDASHEOF
         printf '  labels:\n'
         printf '    app: poc-grafana\n'
         printf 'spec:\n'
+        printf '  resyncPeriod: 5m\n'
         printf '  instanceSelector:\n'
         printf '    matchLabels:\n'
         printf '      dashboards: poc-grafana\n'
@@ -1803,7 +1814,7 @@ NEDASHEOF
         sed 's/^/    /' /tmp/poc-vm-node-exporter-dashboard.json
     } > /tmp/poc-vm-node-exporter-dashboard.yaml
 
-    oc apply -f /tmp/poc-vm-node-exporter-dashboard.yaml
+    oc create -f /tmp/poc-vm-node-exporter-dashboard.yaml
     print_ok "GrafanaDashboard poc-vm-node-exporter 배포 완료"
     print_info "  대시보드: Grafana → Dashboards → VM OS 메트릭 (node_exporter / COO)"
 }
