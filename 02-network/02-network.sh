@@ -139,6 +139,28 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
+    # BRIDGE_INTERFACE 안전성 경고 (Linux Bridge / OVN Localnet 방식 모두 해당)
+    # BRIDGE_INTERFACE 가 노드의 primary NIC 이면 해당 NIC의 IP가 사라져 노드 통신이 단절됩니다.
+    echo ""
+    print_warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    print_warn "  [네트워크 안전 확인]"
+    print_warn "  BRIDGE_INTERFACE = '${BRIDGE_INTERFACE}'"
+    print_warn "  이 NIC을 Linux Bridge 포트로 사용합니다."
+    print_warn "  반드시 secondary(추가) NIC 이어야 합니다."
+    print_warn "  primary NIC(기본 라우트가 있는 NIC)을 지정하면"
+    print_warn "  노드의 IP 및 클러스터 통신이 즉시 단절됩니다."
+    print_warn ""
+    print_warn "  워커 노드에서 primary NIC 확인:"
+    print_warn "    oc debug node/<worker-node> -- ip route show default"
+    print_warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    read -r -p "  '${BRIDGE_INTERFACE}'이(가) secondary NIC임을 확인했습니까? [y/N]: " _nic_confirm
+    if [[ "$_nic_confirm" != "y" && "$_nic_confirm" != "Y" ]]; then
+        print_warn "취소되었습니다. env.conf 에서 BRIDGE_INTERFACE 를 secondary NIC 이름으로 수정 후 재실행하세요."
+        exit 0
+    fi
+    print_ok "BRIDGE_INTERFACE '${BRIDGE_INTERFACE}' 확인 완료"
+
     if [ "${NMSTATE_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
             print_warn "Kubernetes NMState Operator 미설치 → 건너뜁니다."
@@ -173,10 +195,10 @@ detect_existing_nncp() {
     all_nncps=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
     [ -z "$all_nncps" ] && return 1
 
-    # poc- 접두어 NNCP 우선, 없으면 전체에서 linux-bridge / ovn 타입 검색
+    # poc- 접두어 NNCP 만 재사용 대상으로 한정
+    # 시스템 NNCP(br-ex 등 클러스터 핵심 브리지)를 실수로 재사용하는 것을 방지
     local candidates
-    candidates=$(echo "$all_nncps" | tr ' ' '\n' | grep -E '^poc-' || \
-                 echo "$all_nncps" | tr ' ' '\n')
+    candidates=$(echo "$all_nncps" | tr ' ' '\n' | grep -E '^poc-' || true)
 
     local nncp
     for nncp in $candidates; do
@@ -326,8 +348,11 @@ EOF
 }
 
 step_nncp_ovn_localnet() {
-    print_step "1/4  NNCP — OVN Localnet bridge-mappings (${OVN_LOCALNET_NAME} → br-ex)"
+    print_step "1/4  NNCP — OVN Localnet bridge-mappings (${OVN_LOCALNET_NAME} → ${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})"
 
+    # br-ex 는 OVN-Kubernetes 클러스터 게이트웨이 브리지이므로 절대 사용하지 않음.
+    # 전용 Linux Bridge(BRIDGE_NAME)를 생성하고 물리 NIC(BRIDGE_INTERFACE)를 포트로 연결한 뒤
+    # OVN bridge-mapping 대상을 해당 브리지로 지정합니다.
     cat > nncp-${NNCP_NAME}.yaml <<EOF
 apiVersion: nmstate.io/v1
 kind: NodeNetworkConfigurationPolicy
@@ -337,10 +362,25 @@ spec:
   nodeSelector:
     node-role.kubernetes.io/worker: ''
   desiredState:
+    interfaces:
+      - name: ${BRIDGE_NAME}
+        description: Linux bridge with ${BRIDGE_INTERFACE} as a port for OVN Localnet
+        type: linux-bridge
+        state: up
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        bridge:
+          options:
+            stp:
+              enabled: false
+          port:
+            - name: ${BRIDGE_INTERFACE}
     ovn:
       bridge-mappings:
         - localnet: ${OVN_LOCALNET_NAME}
-          bridge: br-ex
+          bridge: ${BRIDGE_NAME}
           state: present
 EOF
     echo ""
@@ -555,6 +595,18 @@ _deploy_nad_to_poc_namespaces() {
 
     [ -z "$poc_namespaces" ] && return 0
 
+    print_info "아래 poc- 네임스페이스에 NAD(${NAD_NAME})를 추가 배포할 수 있습니다:"
+    echo ""
+    for ns in $poc_namespaces; do
+        echo "    - ${ns}"
+    done
+    echo ""
+    read -r -p "  위 네임스페이스에도 NAD를 배포하시겠습니까? [y/N]: " _nad_confirm
+    if [[ "$_nad_confirm" != "y" && "$_nad_confirm" != "Y" ]]; then
+        print_info "추가 배포를 건너뜁니다."
+        return 0
+    fi
+
     print_info "추가 poc- 네임스페이스에 NAD 배포 중..."
     for ns in $poc_namespaces; do
         # metadata.namespace 및 OVN netAttachDefName 내 네임스페이스 치환 후 적용
@@ -683,7 +735,7 @@ YAML
             ;;
         2|4)
             nncp_title="POC OVN Localnet NNCP"
-            nncp_desc="OVN bridge-mappings로 ${BRIDGE_NAME}을 ${OVN_LOCALNET_NAME}에 매핑합니다."
+            nncp_desc="전용 Linux Bridge(${BRIDGE_NAME})를 생성하고 OVN bridge-mappings로 ${OVN_LOCALNET_NAME}에 매핑합니다. br-ex(클러스터 게이트웨이)는 사용하지 않습니다."
             nncp_yaml="$(cat <<YAML
     apiVersion: nmstate.io/v1
     kind: NodeNetworkConfigurationPolicy
@@ -693,10 +745,25 @@ YAML
       nodeSelector:
         node-role.kubernetes.io/worker: ""
       desiredState:
+        interfaces:
+          - name: ${BRIDGE_NAME}
+            description: Linux bridge with ${BRIDGE_INTERFACE} as a port for OVN Localnet
+            type: linux-bridge
+            state: up
+            ipv4:
+              enabled: false
+            ipv6:
+              enabled: false
+            bridge:
+              options:
+                stp:
+                  enabled: false
+              port:
+                - name: ${BRIDGE_INTERFACE}
         ovn:
           bridge-mappings:
             - localnet: ${OVN_LOCALNET_NAME}
-              bridge: br-ex
+              bridge: ${BRIDGE_NAME}
               state: present
 YAML
 )"
