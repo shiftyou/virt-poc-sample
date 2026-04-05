@@ -4,10 +4,10 @@
 #
 # 멀티 테넌트 VM 환경 구성
 #   - 네임스페이스 2개 생성 (poc-multitenancy-1, poc-multitenancy-2)
-#   - user1: poc-multitenancy-1 admin
-#   - user2: poc-multitenancy-2 admin
-#   - user3: poc-multitenancy-1 view (read-only)
-#   - user4: poc-multitenancy-2 view (read-only)
+#   - user1: poc-multitenancy-1 admin  → VM 생성 가능
+#   - user2: poc-multitenancy-1 view   → VM 생성 불가 (읽기 전용)
+#   - user3: poc-multitenancy-2 admin  → VM 생성 가능
+#   - user4: poc-multitenancy-2 view   → VM 생성 불가 (읽기 전용)
 #   - 각 네임스페이스에 VM 1개 생성 (poc 템플릿 사용)
 #
 # 사용법: ./04-multitenancy.sh [--cleanup]
@@ -42,10 +42,10 @@ print_cmd()   { echo -e "  ${CYAN}$ $1${NC}"; }
 NS1="poc-multitenancy-1"
 NS2="poc-multitenancy-2"
 
-USER1="user1"   # NS1 admin
-USER2="user2"   # NS2 admin
-USER3="user3"   # NS1 view (read-only)
-USER4="user4"   # NS2 view (read-only)
+USER1="user1"   # NS1 admin (VM 생성 가능)
+USER2="user2"   # NS1 view  (읽기 전용, VM 생성 불가)
+USER3="user3"   # NS2 admin (VM 생성 가능)
+USER4="user4"   # NS2 view  (읽기 전용, VM 생성 불가)
 
 DEFAULT_PASS="Redhat1!"
 
@@ -163,34 +163,35 @@ step_rbac() {
     print_step "RBAC 설정"
 
     # RoleBinding(네임스페이스 한정) — ClusterRoleBinding(클러스터 전체)이 아님
-    # admin ClusterRole을 특정 NS에만 바인딩 → 해당 NS 내 리소스만 관리 가능
+    # admin/view ClusterRole을 특정 NS에만 바인딩 → 해당 NS 내 리소스만 접근 가능
+    # 다른 네임스페이스에는 아무 권한도 없음
     echo ""
-    printf "  %-10s  %-30s  %s\n" "사용자" "네임스페이스" "역할"
-    echo "  ──────────────────────────────────────────────────────"
+    printf "  %-10s  %-30s  %-12s  %s\n" "사용자" "네임스페이스" "역할" "VM 생성"
+    echo "  ──────────────────────────────────────────────────────────────"
 
     oc adm policy add-role-to-user admin "$USER1" -n "$NS1" 2>/dev/null
-    printf "  %-10s  %-30s  %s\n" "$USER1" "$NS1" "admin  (해당 NS 한정)"
-    print_ok "${USER1} → ${NS1} [admin, NS 한정]"
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER1" "$NS1" "admin" "가능"
+    print_ok "${USER1} → ${NS1} [admin]  — VM 생성 가능"
 
-    oc adm policy add-role-to-user admin "$USER2" -n "$NS2" 2>/dev/null
-    printf "  %-10s  %-30s  %s\n" "$USER2" "$NS2" "admin  (해당 NS 한정)"
-    print_ok "${USER2} → ${NS2} [admin, NS 한정]"
+    oc adm policy add-role-to-user view "$USER2" -n "$NS1" 2>/dev/null
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER2" "$NS1" "view" "불가"
+    print_ok "${USER2} → ${NS1} [view]   — 읽기 전용, VM 생성 불가"
 
-    oc adm policy add-role-to-user view "$USER3" -n "$NS1" 2>/dev/null
-    printf "  %-10s  %-30s  %s\n" "$USER3" "$NS1" "view   (읽기 전용)"
-    print_ok "${USER3} → ${NS1} [view]"
+    oc adm policy add-role-to-user admin "$USER3" -n "$NS2" 2>/dev/null
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER3" "$NS2" "admin" "가능"
+    print_ok "${USER3} → ${NS2} [admin]  — VM 생성 가능"
 
     oc adm policy add-role-to-user view "$USER4" -n "$NS2" 2>/dev/null
-    printf "  %-10s  %-30s  %s\n" "$USER4" "$NS2" "view   (읽기 전용)"
-    print_ok "${USER4} → ${NS2} [view]"
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER4" "$NS2" "view" "불가"
+    print_ok "${USER4} → ${NS2} [view]   — 읽기 전용, VM 생성 불가"
 
     # DataSource 참조 권한 — VM 생성 시 openshift-virtualization-os-images의
-    # DataSource를 sourceRef로 사용하므로 해당 NS에 view 권한 필요
+    # DataSource를 sourceRef로 사용하므로 admin 사용자(VM 생성자)에게만 view 권한 부여
     oc adm policy add-role-to-user view "$USER1" -n "$DATASOURCE_NS" 2>/dev/null
     print_ok "${USER1} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
 
-    oc adm policy add-role-to-user view "$USER2" -n "$DATASOURCE_NS" 2>/dev/null
-    print_ok "${USER2} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
+    oc adm policy add-role-to-user view "$USER3" -n "$DATASOURCE_NS" 2>/dev/null
+    print_ok "${USER3} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
 }
 
 # =============================================================================
@@ -306,7 +307,7 @@ cleanup() {
     oc delete namespace "$NS2" --ignore-not-found
 
     print_info "DataSource NS RoleBinding 삭제..."
-    for user in "$USER1" "$USER2"; do
+    for user in "$USER1" "$USER3"; do
         oc adm policy remove-role-from-user view "$user" \
             -n "$DATASOURCE_NS" 2>/dev/null || true
     done
@@ -334,23 +335,38 @@ print_summary() {
     echo -e "${GREEN}  완료! Multi-Tenant 환경 구성이 끝났습니다.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  ${CYAN}━━ 사용자 / 권한 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    printf "  %-8s  %-20s  %-18s  %s\n" "사용자" "네임스페이스" "역할" "비밀번호"
-    echo "  ─────────────────────────────────────────────────────────────"
-    printf "  %-8s  %-24s  %-22s  %s\n" "$USER1" "$NS1" "admin (해당 NS 한정)"  "$DEFAULT_PASS"
-    printf "  %-8s  %-24s  %-22s  %s\n" "$USER2" "$NS2" "admin (해당 NS 한정)"  "$DEFAULT_PASS"
-    printf "  %-8s  %-24s  %-22s  %s\n" "$USER3" "$NS1" "view  (읽기 전용)"    "$DEFAULT_PASS"
-    printf "  %-8s  %-24s  %-22s  %s\n" "$USER4" "$NS2" "view  (읽기 전용)"    "$DEFAULT_PASS"
+    echo -e "  ${CYAN}━━ 사용자 / 권한 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "사용자" "네임스페이스" "역할" "VM생성" "비밀번호"
+    echo "  ──────────────────────────────────────────────────────────────────────"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER1" "$NS1" "admin" "가능" "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER2" "$NS1" "view"  "불가" "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER3" "$NS2" "admin" "가능" "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER4" "$NS2" "view"  "불가" "$DEFAULT_PASS"
     echo ""
     echo -e "  ${CYAN}━━ Console 로그인 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  URL: ${BLUE}https://${console_url}${NC}"
     echo -e "  IDP: ${CYAN}${HTPASSWD_IDP_NAME}${NC}"
     echo ""
     echo -e "  ${CYAN}━━ CLI 전환 테스트 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "  ${CYAN}oc login -u user1 -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}   # 조회 가능"
-    echo -e "  ${CYAN}oc login -u user3 -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc delete vm vm-poc-mt1 -n ${NS1}${NC}  # 거부됨 (view only)"
+    echo -e "  # user1 — ${NS1} admin (VM 생성 가능)"
+    echo -e "  ${CYAN}oc login -u ${USER1} -p '${DEFAULT_PASS}' ${api_url}${NC}"
+    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # 성공"
+    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # 거부됨 (권한 없음)"
+    echo ""
+    echo -e "  # user2 — ${NS1} view (VM 생성 불가)"
+    echo -e "  ${CYAN}oc login -u ${USER2} -p '${DEFAULT_PASS}' ${api_url}${NC}"
+    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # 성공 (읽기)"
+    echo -e "  ${CYAN}oc create -f vm.yaml -n ${NS1}${NC} # 거부됨 (view only)"
+    echo ""
+    echo -e "  # user3 — ${NS2} admin (VM 생성 가능)"
+    echo -e "  ${CYAN}oc login -u ${USER3} -p '${DEFAULT_PASS}' ${api_url}${NC}"
+    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # 성공"
+    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # 거부됨 (권한 없음)"
+    echo ""
+    echo -e "  # user4 — ${NS2} view (VM 생성 불가)"
+    echo -e "  ${CYAN}oc login -u ${USER4} -p '${DEFAULT_PASS}' ${api_url}${NC}"
+    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # 성공 (읽기)"
+    echo -e "  ${CYAN}oc create -f vm.yaml -n ${NS2}${NC} # 거부됨 (view only)"
     echo ""
     echo -e "  자세한 내용: 04-multitenancy.md 참조"
     echo ""

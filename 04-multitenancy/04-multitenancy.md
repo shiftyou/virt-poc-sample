@@ -8,29 +8,29 @@
 ## 사용자 / 권한 구성
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  poc-multitenancy-1                poc-multitenancy-2            │
-│  ┌──────────────────┐              ┌──────────────────┐          │
-│  │  vm-poc-mt1      │              │  vm-poc-mt2      │          │
-│  └──────────────────┘              └──────────────────┘          │
-│                                                                  │
-│  user1  ── admin  (모든 권한)       user2  ── admin               │
-│  user3  ── view   (읽기 전용)       user4  ── view                │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  poc-multitenancy-1                  poc-multitenancy-2            │
+│  ┌──────────────────┐                ┌──────────────────┐          │
+│  │  poc-mt-vm-1     │                │  poc-mt-vm-2     │          │
+│  └──────────────────┘                └──────────────────┘          │
+│                                                                    │
+│  user1  ── admin  (VM 생성 가능)      user3  ── admin              │
+│  user2  ── view   (읽기 전용)         user4  ── view               │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-| 사용자 | 네임스페이스        | 역할  | 가능한 작업 |
-|--------|-------------------|-------|------------|
-| user1  | poc-multitenancy-1 | admin | VM 생성/수정/삭제/콘솔 접근 |
-| user2  | poc-multitenancy-2 | admin | VM 생성/수정/삭제/콘솔 접근 |
-| user3  | poc-multitenancy-1 | view  | VM/리소스 조회만 가능 |
-| user4  | poc-multitenancy-2 | view  | VM/리소스 조회만 가능 |
+| 사용자 | 네임스페이스        | 역할  | VM 생성 | 다른 NS 접근 | 가능한 작업 |
+|--------|-------------------|-------|---------|-------------|------------|
+| user1  | poc-multitenancy-1 | admin | **가능** | **불가** | VM 생성/수정/삭제/콘솔 접근 |
+| user2  | poc-multitenancy-1 | view  | **불가** | **불가** | VM/리소스 조회만 가능 |
+| user3  | poc-multitenancy-2 | admin | **가능** | **불가** | VM 생성/수정/삭제/콘솔 접근 |
+| user4  | poc-multitenancy-2 | view  | **불가** | **불가** | VM/리소스 조회만 가능 |
 
 - 기본 비밀번호: `Redhat1!`
 - Identity Provider: HTPasswd (`poc-htpasswd`)
 - VM 템플릿: `poc` (01-template 단계에서 등록)
 
-> user1/user3 은 poc-multitenancy-1 만 접근 가능, user2/user4 는 poc-multitenancy-2 만 접근 가능.
+> 각 사용자는 자신에게 할당된 네임스페이스에만 접근 가능하며, 다른 네임스페이스는 조회조차 불가합니다.
 
 ## 사전 준비
 
@@ -79,12 +79,23 @@ oc get namespace poc-multitenancy-1 poc-multitenancy-2
 
 ### 3. RBAC (RoleBinding)
 
-OpenShift 내장 ClusterRole을 사용한다:
+OpenShift 내장 ClusterRole을 **RoleBinding**(네임스페이스 한정)으로 바인딩한다.
+ClusterRoleBinding이 아니므로 해당 네임스페이스 외부 리소스에는 권한이 없다.
 
 | ClusterRole | 권한 |
 |-------------|------|
 | `admin`     | 네임스페이스 내 모든 리소스 생성/수정/삭제 (단, 네임스페이스 자체 삭제 불가) |
 | `view`      | 네임스페이스 내 모든 리소스 조회만 가능 |
+
+```
+user1  RoleBinding(admin) → poc-multitenancy-1 만
+user2  RoleBinding(view)  → poc-multitenancy-1 만
+user3  RoleBinding(admin) → poc-multitenancy-2 만
+user4  RoleBinding(view)  → poc-multitenancy-2 만
+```
+
+DataSource 참조 권한(VM 생성 시 필요):
+- user1, user3 → `openshift-virtualization-os-images` 네임스페이스에 `view` 권한 추가
 
 ```bash
 oc get rolebindings -n poc-multitenancy-1
@@ -95,10 +106,10 @@ oc get rolebindings -n poc-multitenancy-2
 
 각 네임스페이스에 `poc` 템플릿 기반 VM 1개를 생성한다.
 
-| VM 이름      | 네임스페이스        | CPU | Memory | Disk  | 템플릿 |
-|-------------|-------------------|-----|--------|-------|--------|
-| vm-poc-mt1  | poc-multitenancy-1 | 1   | 2Gi    | 30Gi  | poc    |
-| vm-poc-mt2  | poc-multitenancy-2 | 1   | 2Gi    | 30Gi  | poc    |
+| VM 이름        | 네임스페이스        | CPU | Memory | Disk  | 템플릿 |
+|---------------|-------------------|-----|--------|-------|--------|
+| poc-mt-vm-1   | poc-multitenancy-1 | 1   | 2Gi    | 30Gi  | poc    |
+| poc-mt-vm-2   | poc-multitenancy-2 | 1   | 2Gi    | 30Gi  | poc    |
 
 cloud-init 기본 계정: `cloud-user / changeme`
 
@@ -109,25 +120,27 @@ cloud-init 기본 계정: `cloud-user / changeme`
 ```bash
 API=$(oc whoami --show-server)
 
-# user1: poc-multitenancy-1 admin — 모든 권한
+# user1: poc-multitenancy-1 admin — VM 생성 가능
 oc login -u user1 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-1   # 성공
-oc get vm -n poc-multitenancy-2   # 실패 (접근 권한 없음)
+oc get vm -n poc-multitenancy-1    # 성공
+oc get vm -n poc-multitenancy-2    # 거부됨 (권한 없음)
 
-# user3: poc-multitenancy-1 view — 조회만 가능
-oc login -u user3 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-1           # 성공 (조회)
-oc delete vm vm-poc-mt1 -n poc-multitenancy-1  # 실패 (view 권한 부족)
-
-# user2: poc-multitenancy-2 admin
+# user2: poc-multitenancy-1 view — 조회만 가능, VM 생성 불가
 oc login -u user2 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-2   # 성공
-oc get vm -n poc-multitenancy-1   # 실패 (접근 권한 없음)
+oc get vm -n poc-multitenancy-1           # 성공 (조회)
+oc get vm -n poc-multitenancy-2           # 거부됨 (권한 없음)
+oc create -f vm.yaml -n poc-multitenancy-1  # 거부됨 (view only)
 
-# user4: poc-multitenancy-2 view
+# user3: poc-multitenancy-2 admin — VM 생성 가능
+oc login -u user3 -p 'Redhat1!' "$API"
+oc get vm -n poc-multitenancy-2    # 성공
+oc get vm -n poc-multitenancy-1    # 거부됨 (권한 없음)
+
+# user4: poc-multitenancy-2 view — 조회만 가능, VM 생성 불가
 oc login -u user4 -p 'Redhat1!' "$API"
 oc get vm -n poc-multitenancy-2           # 성공 (조회)
-oc delete vm vm-poc-mt2 -n poc-multitenancy-2  # 실패 (view 권한 부족)
+oc get vm -n poc-multitenancy-1           # 거부됨 (권한 없음)
+oc create -f vm.yaml -n poc-multitenancy-2  # 거부됨 (view only)
 ```
 
 ### Console 접근 테스트
@@ -136,15 +149,19 @@ oc delete vm vm-poc-mt2 -n poc-multitenancy-2  # 실패 (view 권한 부족)
 2. Identity Provider: `poc-htpasswd` 선택
 3. 각 사용자로 로그인
 4. **Virtualization → VirtualMachines** 메뉴 확인
-   - user1/user2: 생성 버튼 활성화, 자신의 네임스페이스만 표시
-   - user3/user4: 조회만 가능, 생성/삭제 버튼 없음
+   - user1 / user3: 생성 버튼 활성화, 자신의 네임스페이스만 표시
+   - user2 / user4: 조회만 가능, 생성/삭제 버튼 없음
 
 ### VM 콘솔 접근
 
 ```bash
-# admin 사용자 (user1)는 virtctl 콘솔 접근 가능
+# admin 사용자는 virtctl 콘솔 접근 가능
 oc login -u user1 -p 'Redhat1!' "$API"
-virtctl console vm-poc-mt1 -n poc-multitenancy-1
+virtctl console poc-mt-vm-1 -n poc-multitenancy-1
+# 로그인: cloud-user / changeme
+
+oc login -u user3 -p 'Redhat1!' "$API"
+virtctl console poc-mt-vm-2 -n poc-multitenancy-2
 # 로그인: cloud-user / changeme
 ```
 
@@ -192,7 +209,7 @@ DATASOURCE_NS=openshift-virtualization-os-images
 ```
 
 정리 항목:
-- VM (vm-poc-mt1, vm-poc-mt2)
+- VM (poc-mt-vm-1, poc-mt-vm-2)
 - 네임스페이스 (poc-multitenancy-1, poc-multitenancy-2) 및 내부 모든 리소스
 - User 오브젝트 (user1~user4)
 - Identity 오브젝트
