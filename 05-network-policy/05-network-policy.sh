@@ -85,7 +85,7 @@ choose_mode() {
             NS1="poc-multi-network-policy-1"
             NS2="poc-multi-network-policy-2"
             NAD_NAME="poc-localnet-nad"
-            TOTAL_STEPS=7
+            TOTAL_STEPS=8
             print_ok "선택: MultiNetworkPolicy (OVN Localnet)"
             ;;
         *)
@@ -536,7 +536,7 @@ EOF
     oc apply -f consoleyamlsample-allow-same-ns.yaml
     print_ok "ConsoleYAMLSample poc-${suffix}-allow-same-ns 등록"
 
-    # Allow from NS1 IP 샘플 파일 생성 (수동 적용용)
+    # Mode 1: NetworkPolicy — VM IP는 VMI 기동 후 확인 가능하므로 참고용 파일만 생성
     if [ "$POLICY_MODE" = "1" ]; then
         cat > netpol-allow-from-ns1-ip.yaml <<EOF
 # =============================================================================
@@ -565,22 +565,55 @@ spec:
 EOF
         echo "생성된 파일: netpol-allow-from-ns1-ip.yaml"
         print_ok "netpol-allow-from-ns1-ip.yaml 생성 완료 (IP 수정 후 수동 적용)"
-    else
-        cat > multi-netpol-allow-from-ns1-ip.yaml <<EOF
+    fi
+}
+
 # =============================================================================
-# [MultiNetworkPolicy] ${NS2} — NS1 VM secondary NIC IP 허용
-#
-# ${NS1} VM secondary NIC IP 확인:
-#   oc get vmi -n ${NS1} \\
-#     -o jsonpath='{.items[0].status.interfaces[?(@.name=="secondary")].ipAddress}'
-#
-# IP 수정 후 적용:
-#   oc apply -f multi-netpol-allow-from-ns1-ip.yaml
+# 크로스 네임스페이스 허용 (MultiNetworkPolicy 전용)
+# NS1 VM(secondary .51) ↔ NS2 VM(secondary .52) 양방향 통신 허용
 # =============================================================================
+step_allow_cross_ns() {
+    [ "$POLICY_MODE" != "2" ] && return 0
+
+    local step=$(( $(_snum) + 4 ))
+    print_step "${step}/${TOTAL_STEPS}  크로스 네임스페이스 허용 (${NS1} ↔ ${NS2})"
+
+    local ip_ns1="${SECONDARY_IP_PREFIX}.51"
+    local ip_ns2="${SECONDARY_IP_PREFIX}.52"
+
+    # NS1: NS2 VM IP 허용 (Ingress + Egress)
+    cat > "multi-netpol-allow-cross-ns-${NS1}.yaml" <<EOF
 apiVersion: k8s.cni.cncf.io/v1beta1
 kind: MultiNetworkPolicy
 metadata:
-  name: allow-from-ns1-vm-ip
+  name: allow-cross-namespace
+  namespace: ${NS1}
+  annotations:
+    k8s.v1.cni.cncf.io/policy-for: ${NS1}/${NAD_NAME}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: ${ip_ns2}/32
+  egress:
+    - to:
+        - ipBlock:
+            cidr: ${ip_ns2}/32
+EOF
+    echo "생성된 파일: multi-netpol-allow-cross-ns-${NS1}.yaml"
+    oc apply -f "multi-netpol-allow-cross-ns-${NS1}.yaml"
+    print_ok "allow-cross-namespace 적용 완료 (namespace: ${NS1}, 허용 대상: ${ip_ns2})"
+
+    # NS2: NS1 VM IP 허용 (Ingress + Egress)
+    cat > "multi-netpol-allow-cross-ns-${NS2}.yaml" <<EOF
+apiVersion: k8s.cni.cncf.io/v1beta1
+kind: MultiNetworkPolicy
+metadata:
+  name: allow-cross-namespace
   namespace: ${NS2}
   annotations:
     k8s.v1.cni.cncf.io/policy-for: ${NS2}/${NAD_NAME}
@@ -588,14 +621,19 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
+    - Egress
   ingress:
     - from:
         - ipBlock:
-            cidr: 192.168.0.1/32    # ← ${NS1} VM secondary NIC IP로 교체
+            cidr: ${ip_ns1}/32
+  egress:
+    - to:
+        - ipBlock:
+            cidr: ${ip_ns1}/32
 EOF
-        echo "생성된 파일: multi-netpol-allow-from-ns1-ip.yaml"
-        print_ok "multi-netpol-allow-from-ns1-ip.yaml 생성 완료 (IP 수정 후 수동 적용)"
-    fi
+    echo "생성된 파일: multi-netpol-allow-cross-ns-${NS2}.yaml"
+    oc apply -f "multi-netpol-allow-cross-ns-${NS2}.yaml"
+    print_ok "allow-cross-namespace 적용 완료 (namespace: ${NS2}, 허용 대상: ${ip_ns1})"
 }
 
 # =============================================================================
@@ -604,9 +642,6 @@ EOF
 print_summary() {
     local policy_kind
     [ "$POLICY_MODE" = "1" ] && policy_kind="NetworkPolicy" || policy_kind="MultiNetworkPolicy"
-    local allow_file
-    [ "$POLICY_MODE" = "1" ] && allow_file="netpol-allow-from-ns1-ip.yaml" \
-                              || allow_file="multi-netpol-allow-from-ns1-ip.yaml"
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -626,9 +661,18 @@ print_summary() {
     echo -e "    ${CYAN}oc get vmi -n ${NS1}${NC}"
     echo -e "    ${CYAN}oc get vmi -n ${NS2}${NC}"
     echo ""
-    echo -e "  다음 단계: 04-network-policy.md 참조"
-    echo -e "    1. VM IP 확인 후 ${allow_file} 수정 → 적용"
-    echo -e "    2. VM 콘솔에서 ping/curl 통신 테스트"
+    echo -e "  다음 단계: 05-network-policy.md 참조"
+    if [ "$POLICY_MODE" = "1" ]; then
+        echo -e "    1. VM IP 확인 후 netpol-allow-from-ns1-ip.yaml 수정 → 적용"
+        echo -e "    2. VM 콘솔에서 ping/curl 통신 테스트"
+    else
+        echo -e "  적용된 MultiNetworkPolicy:"
+        echo -e "    - default-deny-all     : secondary NIC 전체 차단"
+        echo -e "    - allow-same-namespace : 같은 네임스페이스 내 통신 허용"
+        echo -e "    - allow-cross-namespace: ${NS1} ↔ ${NS2} 양방향 허용"
+        echo -e "    1. VM 콘솔에서 ping ${SECONDARY_IP_PREFIX}.52 (NS1→NS2) 테스트"
+        echo -e "    2. VM 콘솔에서 ping ${SECONDARY_IP_PREFIX}.51 (NS2→NS1) 테스트"
+    fi
     echo ""
 }
 
@@ -652,6 +696,7 @@ main() {
     step_nad
     step_deny_all
     step_allow_same_ns
+    step_allow_cross_ns
     step_vms
     step_consoleyamlsamples
     print_summary
