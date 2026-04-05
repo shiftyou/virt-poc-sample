@@ -154,9 +154,13 @@ preflight() {
     print_warn "    oc debug node/<worker-node> -- ip route show default"
     print_warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    read -r -p "  '${BRIDGE_INTERFACE}'이(가) secondary NIC임을 확인했습니까? [y/N]: " _nic_confirm
+    read -r -p "  사용할 secondary NIC 이름 [기본값: ${BRIDGE_INTERFACE}]: " _nic_input
+    [ -n "$_nic_input" ] && BRIDGE_INTERFACE="$_nic_input"
+    print_ok "BRIDGE_INTERFACE = '${BRIDGE_INTERFACE}'"
+    echo ""
+    read -r -p "  '${BRIDGE_INTERFACE}'이(가) secondary NIC임을 최종 확인합니까? [y/N]: " _nic_confirm
     if [[ "$_nic_confirm" != "y" && "$_nic_confirm" != "Y" ]]; then
-        print_warn "취소되었습니다. env.conf 에서 BRIDGE_INTERFACE 를 secondary NIC 이름으로 수정 후 재실행하세요."
+        print_warn "취소되었습니다."
         exit 0
     fi
     print_ok "BRIDGE_INTERFACE '${BRIDGE_INTERFACE}' 확인 완료"
