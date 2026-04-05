@@ -286,7 +286,7 @@ roleRef:
   name: cluster-monitoring-view
   apiGroup: rbac.authorization.k8s.io
 EOF
-    oc apply -f /tmp/grafana-monitoring-crb.yaml
+    oc apply --server-side -f /tmp/grafana-monitoring-crb.yaml
     print_ok "cluster-monitoring-view ClusterRoleBinding 적용 완료"
 }
 
