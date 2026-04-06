@@ -24,13 +24,13 @@ fi
 
 BRIDGE_INTERFACE="${BRIDGE_INTERFACE:-ens4}"
 BRIDGE_NAME="${BRIDGE_NAME:-br1}"
+NNCP_NAME="${NNCP_NAME:-${BRIDGE_NAME}-nncp}"
 NAD_NAMESPACE="poc-network"
 VLAN_ID="${VLAN_ID:-100}"
 SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
 # 모드별로 설정되는 변수
 NET_TYPE=""
-NNCP_NAME=""
 NAD_NAME=""
 
 GREEN='\033[0;32m'
@@ -78,20 +78,19 @@ choose_mode() {
     echo -e "     단일 물리 NIC으로 여러 VLAN 분리."
     echo ""
     echo -e "  현재 설정:"
-    echo -e "    BRIDGE_INTERFACE : ${CYAN}${BRIDGE_INTERFACE}${NC}"
+    echo -e "    NNCP_NAME        : ${CYAN}${NNCP_NAME}${NC}"
     echo -e "    BRIDGE_NAME      : ${CYAN}${BRIDGE_NAME}${NC}"
+    echo -e "    BRIDGE_INTERFACE : ${CYAN}${BRIDGE_INTERFACE}${NC}"
     echo -e "    네임스페이스      : ${CYAN}${NAD_NAMESPACE}${NC}"
     echo ""
     read -r -p "  선택 [1-2]: " NET_TYPE
 
     case "$NET_TYPE" in
         1)
-            NNCP_NAME="poc-bridge-nncp"
             NAD_NAME="poc-bridge-nad"
             print_ok "선택: Linux Bridge"
             ;;
         2)
-            NNCP_NAME="poc-bridge-nncp"
             NAD_NAME="poc-bridge-vlan-nad"
             echo ""
             read -r -p "  VLAN ID를 입력하세요 [기본값: ${VLAN_ID}]: " input_vlan
@@ -117,31 +116,21 @@ preflight() {
     fi
     print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # BRIDGE_INTERFACE 안전성 경고 (Linux Bridge / OVN Localnet 방식 모두 해당)
-    # BRIDGE_INTERFACE 가 노드의 primary NIC 이면 해당 NIC의 IP가 사라져 노드 통신이 단절됩니다.
+    # NNCP 정보 표시
     echo ""
-    print_warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    print_warn "  [네트워크 안전 확인]"
-    print_warn "  BRIDGE_INTERFACE = '${BRIDGE_INTERFACE}'"
-    print_warn "  이 NIC을 Linux Bridge 포트로 사용합니다."
-    print_warn "  반드시 secondary(추가) NIC 이어야 합니다."
-    print_warn "  primary NIC(기본 라우트가 있는 NIC)을 지정하면"
-    print_warn "  노드의 IP 및 클러스터 통신이 즉시 단절됩니다."
-    print_warn ""
-    print_warn "  워커 노드에서 primary NIC 확인:"
-    print_warn "    oc debug node/<worker-node> -- ip route show default"
-    print_warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    read -r -p "  사용할 secondary NIC 이름 [기본값: ${BRIDGE_INTERFACE}]: " _nic_input
-    [ -n "$_nic_input" ] && BRIDGE_INTERFACE="$_nic_input"
-    print_ok "BRIDGE_INTERFACE = '${BRIDGE_INTERFACE}'"
-    echo ""
-    read -r -p "  '${BRIDGE_INTERFACE}'이(가) secondary NIC임을 최종 확인합니까? [y/N]: " _nic_confirm
-    if [[ "$_nic_confirm" != "y" && "$_nic_confirm" != "Y" ]]; then
-        print_warn "취소되었습니다."
-        exit 0
+    print_info "── NNCP 정보 ──"
+    print_info "  NNCP_NAME       : ${NNCP_NAME}"
+    print_info "  BRIDGE_NAME     : ${BRIDGE_NAME}"
+    print_info "  BRIDGE_INTERFACE: ${BRIDGE_INTERFACE}"
+    _nncp_avail=$(oc get nncp "${NNCP_NAME}" \
+        -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
+    if [ -n "$_nncp_avail" ]; then
+        print_info "  클러스터 NNCP 상태: Available=${_nncp_avail}"
+        oc get nnce 2>/dev/null | grep "${NNCP_NAME}" | \
+            awk '{printf "    %-40s %s\n", $1, $2}' || true
+    else
+        print_info "  클러스터 NNCP 상태: 미적용 (신규 생성 예정)"
     fi
-    print_ok "BRIDGE_INTERFACE '${BRIDGE_INTERFACE}' 확인 완료"
 
     if [ "${NMSTATE_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
