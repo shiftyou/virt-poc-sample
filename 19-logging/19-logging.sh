@@ -29,10 +29,13 @@ LOKI_NAME="logging-loki"
 CLF_NAME="instance"
 CL_NAME="instance"
 STORAGE_CLASS="${STORAGE_CLASS:-ocs-storagecluster-ceph-rbd}"
-MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://minio.poc-minio.svc.cluster.local:9000}"
-MINIO_BUCKET="${MINIO_BUCKET:-loki}"
-MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minio}"
-MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minio123}"
+
+# Object Storage (S3) — LokiStack 전용 (preflight 에서 소스에 따라 결정)
+S3_ENDPOINT=""
+S3_BUCKET=""
+S3_ACCESS_KEY=""
+S3_SECRET_KEY=""
+S3_REGION=""
 
 AUDIT_PROFILE=""
 HAS_LOGGING=false
@@ -133,25 +136,52 @@ preflight() {
         HAS_LOKI=true
         print_ok "Loki Operator 확인"
 
-        # MinIO(S3) 버킷·자격증명 확인
+        # S3 초기값 결정: MinIO 우선, 없으면 ODF, 없으면 빈값(직접 입력)
+        if [ -n "${MINIO_ENDPOINT:-}" ]; then
+            S3_ENDPOINT="${MINIO_ENDPOINT}"
+            S3_BUCKET="${LOGGING_S3_BUCKET:-${MINIO_BUCKET:-loki}}"
+            S3_ACCESS_KEY="${MINIO_ACCESS_KEY:-}"
+            S3_SECRET_KEY="${MINIO_SECRET_KEY:-}"
+            S3_REGION="${LOGGING_S3_REGION:-us-east-1}"
+        elif [ -n "${ODF_S3_ENDPOINT:-}" ]; then
+            S3_ENDPOINT="${ODF_S3_ENDPOINT}"
+            S3_BUCKET="${LOGGING_S3_BUCKET:-${ODF_S3_BUCKET:-loki}}"
+            S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
+            S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
+            S3_REGION="${LOGGING_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"
+        else
+            S3_ENDPOINT="${LOGGING_S3_ENDPOINT:-}"
+            S3_BUCKET="${LOGGING_S3_BUCKET:-loki}"
+            S3_ACCESS_KEY="${LOGGING_S3_ACCESS_KEY:-}"
+            S3_SECRET_KEY="${LOGGING_S3_SECRET_KEY:-}"
+            S3_REGION="${LOGGING_S3_REGION:-us-east-1}"
+            print_warn "Object Storage 자동 감지 실패 — 아래에서 직접 입력하세요."
+        fi
+
+        # Object Storage 확인 및 재입력
         echo ""
-        print_info "  MinIO Endpoint  : ${MINIO_ENDPOINT}"
-        print_info "  MinIO Bucket    : ${MINIO_BUCKET}"
-        print_info "  MinIO AccessKey : ${MINIO_ACCESS_KEY}"
-        print_info "  MinIO SecretKey : ****"
+        print_info "── Object Storage (S3) — LokiStack 전용 ──"
+        print_info "  S3 Endpoint  : ${S3_ENDPOINT:-(미설정)}"
+        print_info "  S3 Bucket    : ${S3_BUCKET}"
+        print_info "  S3 Region    : ${S3_REGION}"
+        print_info "  S3 AccessKey : ${S3_ACCESS_KEY:-(미설정)}"
+        print_info "  S3 SecretKey : ****"
         echo ""
         read -r -p "  위 내용이 맞습니까? (Y/n): " _confirm
         if [[ "${_confirm:-}" =~ ^[Nn]$ ]]; then
-            read -r -p "  MinIO Endpoint  [${MINIO_ENDPOINT}]: " _input
-            [ -n "$_input" ] && MINIO_ENDPOINT="$_input"
-            read -r -p "  MinIO Bucket    [${MINIO_BUCKET}]: " _input
-            [ -n "$_input" ] && MINIO_BUCKET="$_input"
-            read -r -p "  MinIO AccessKey [${MINIO_ACCESS_KEY}]: " _input
-            [ -n "$_input" ] && MINIO_ACCESS_KEY="$_input"
-            read -r -s -p "  MinIO SecretKey [****]: " _input
+            read -r -p "  S3 Endpoint  [${S3_ENDPOINT}]: " _input
+            [ -n "$_input" ] && S3_ENDPOINT="$_input"
+            read -r -p "  S3 Bucket    [${S3_BUCKET}]: " _input
+            [ -n "$_input" ] && S3_BUCKET="$_input"
+            read -r -p "  S3 Region    [${S3_REGION}]: " _input
+            [ -n "$_input" ] && S3_REGION="$_input"
+            read -r -p "  S3 AccessKey [${S3_ACCESS_KEY}]: " _input
+            [ -n "$_input" ] && S3_ACCESS_KEY="$_input"
+            read -r -s -p "  S3 SecretKey [****]: " _input
             echo ""
-            [ -n "$_input" ] && MINIO_SECRET_KEY="$_input"
+            [ -n "$_input" ] && S3_SECRET_KEY="$_input"
         fi
+        print_ok "Object Storage 설정 확인 완료 (bucket: ${S3_BUCKET})"
     else
         HAS_LOKI=false
         print_warn "Loki Operator 미설치 → LokiStack 생성을 건너뜁니다."
@@ -277,40 +307,21 @@ step_loki_secret() {
         return
     fi
 
-    local s3_endpoint s3_bucket s3_access_key s3_secret_key s3_region s3_backend
-
-    if [ "${ODF_INSTALLED:-false}" = "true" ] && [ -n "${ODF_S3_ENDPOINT:-}" ]; then
-        s3_backend="ODF MCG"
-        s3_endpoint="${ODF_S3_ENDPOINT}"
-        s3_bucket="${ODF_S3_BUCKET:-loki}"
-        s3_access_key="${ODF_S3_ACCESS_KEY}"
-        s3_secret_key="${ODF_S3_SECRET_KEY}"
-        s3_region="${ODF_S3_REGION:-us-east-1}"
-    elif [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ]; then
-        s3_backend="MinIO"
-        s3_endpoint="${MINIO_ENDPOINT}"
-        s3_bucket="${MINIO_BUCKET:-loki}"
-        s3_access_key="${MINIO_ACCESS_KEY}"
-        s3_secret_key="${MINIO_SECRET_KEY}"
-        s3_region="us-east-1"
-    else
-        print_error "S3 백엔드를 찾을 수 없습니다."
-        print_warn "  ODF_INSTALLED=${ODF_INSTALLED:-false}, MINIO_INSTALLED=${MINIO_INSTALLED:-false}"
-        print_warn "  env.conf 에서 ODF_S3_* 또는 MINIO_* 변수를 확인하세요."
+    if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_ACCESS_KEY}" ]; then
+        print_error "Object Storage 정보가 없습니다. preflight 단계에서 S3 정보를 입력하세요."
         exit 1
     fi
 
-    print_info "${s3_backend} S3 Secret 생성 중..."
     oc create secret generic logging-loki-s3 \
         -n "${LOGGING_NS}" \
-        --from-literal=access_key_id="${s3_access_key}" \
-        --from-literal=access_key_secret="${s3_secret_key}" \
-        --from-literal=bucketnames="${s3_bucket}" \
-        --from-literal=endpoint="${s3_endpoint}" \
-        --from-literal=region="${s3_region}"
-    print_ok "S3 Secret 'logging-loki-s3' 생성 완료 (${s3_backend})"
-    print_info "  endpoint : ${s3_endpoint}"
-    print_info "  bucket   : ${s3_bucket}"
+        --from-literal=access_key_id="${S3_ACCESS_KEY}" \
+        --from-literal=access_key_secret="${S3_SECRET_KEY}" \
+        --from-literal=bucketnames="${S3_BUCKET}" \
+        --from-literal=endpoint="${S3_ENDPOINT}" \
+        --from-literal=region="${S3_REGION}"
+    print_ok "S3 Secret 'logging-loki-s3' 생성 완료"
+    print_info "  endpoint : ${S3_ENDPOINT}"
+    print_info "  bucket   : ${S3_BUCKET}"
 }
 
 step_loki_stack() {

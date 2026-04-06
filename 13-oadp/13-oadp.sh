@@ -87,42 +87,38 @@ preflight() {
     fi
     print_ok "OADP Operator 확인 (ns: ${NS})"
 
-    # 백엔드 결정: MinIO 우선, 없으면 ODF
-    local minio_ok=false
-    local odf_ok=false
-
-    [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ] && minio_ok=true
-    [ "${ODF_INSTALLED:-false}"   = "true" ] && odf_ok=true
-
-    if [ "$minio_ok" = "false" ] && [ "$odf_ok" = "false" ]; then
-        print_warn "MinIO/ODF 백엔드 없음 → 건너뜁니다."
-        print_warn "  MinIO : MinIO 커뮤니티 버전 배포 후 setup.sh 재실행 (13-oadp.md 참조)"
-        print_warn "  ODF   : ODF Operator 설치 후 setup.sh 재실행"
-        exit 77
-    fi
-
-    if [ "$minio_ok" = "true" ]; then
+    # S3 초기값 결정: MinIO 우선, 없으면 ODF, 없으면 빈값(직접 입력)
+    if [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ]; then
         BACKEND="minio"
         S3_ENDPOINT="${MINIO_ENDPOINT}"
-        S3_BUCKET="${MINIO_BUCKET:-velero}"
-        S3_ACCESS_KEY="${MINIO_ACCESS_KEY:-minio}"
-        S3_SECRET_KEY="${MINIO_SECRET_KEY:-minio123}"
-        S3_REGION="minio"
-    else
+        S3_BUCKET="${OADP_S3_BUCKET:-${MINIO_BUCKET:-velero}}"
+        S3_ACCESS_KEY="${MINIO_ACCESS_KEY:-}"
+        S3_SECRET_KEY="${MINIO_SECRET_KEY:-}"
+        S3_REGION="${OADP_S3_REGION:-us-east-1}"
+    elif [ "${ODF_INSTALLED:-false}" = "true" ] && [ -n "${ODF_S3_ENDPOINT:-}" ]; then
         BACKEND="odf"
         S3_ENDPOINT="${ODF_S3_ENDPOINT}"
-        S3_BUCKET="${ODF_S3_BUCKET:-velero}"
+        S3_BUCKET="${OADP_S3_BUCKET:-${ODF_S3_BUCKET:-velero}}"
         S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
         S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
-        S3_REGION="${ODF_S3_REGION:-localstorage}"
+        S3_REGION="${OADP_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"
+    else
+        BACKEND="custom"
+        S3_ENDPOINT="${OADP_S3_ENDPOINT:-}"
+        S3_BUCKET="${OADP_S3_BUCKET:-velero}"
+        S3_ACCESS_KEY="${OADP_S3_ACCESS_KEY:-}"
+        S3_SECRET_KEY="${OADP_S3_SECRET_KEY:-}"
+        S3_REGION="${OADP_S3_REGION:-us-east-1}"
+        print_warn "Object Storage 자동 감지 실패 — 아래에서 직접 입력하세요."
     fi
 
-    print_ok "백엔드: ${BACKEND}"
     echo ""
-    print_info "  S3 Endpoint : ${S3_ENDPOINT}"
+    print_info "── Object Storage (S3) — OADP 백업용 ──"
+    print_info "  백엔드      : ${BACKEND}"
+    print_info "  S3 Endpoint : ${S3_ENDPOINT:-(미설정)}"
     print_info "  S3 Bucket   : ${S3_BUCKET}"
     print_info "  S3 Region   : ${S3_REGION}"
-    print_info "  S3 AccessKey: ${S3_ACCESS_KEY}"
+    print_info "  S3 AccessKey: ${S3_ACCESS_KEY:-(미설정)}"
     print_info "  S3 SecretKey: ****"
     echo ""
     read -r -p "  위 내용이 맞습니까? (Y/n): " _confirm
@@ -139,6 +135,12 @@ preflight() {
         echo ""
         [ -n "$_input" ] && S3_SECRET_KEY="$_input"
     fi
+
+    if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_ACCESS_KEY}" ]; then
+        print_error "S3 Endpoint 또는 AccessKey가 비어 있습니다."
+        exit 1
+    fi
+    print_ok "Object Storage 설정 확인 완료 (백엔드: ${BACKEND}, bucket: ${S3_BUCKET})"
 }
 
 # =============================================================================
