@@ -218,6 +218,19 @@ step_vms() {
 step_descheduler() {
     print_step "3/5  KubeDescheduler 설정"
 
+    # 기존 KubeDescheduler가 있으면 스크립트가 생성한 것이 아님을 기록
+    if oc get kubedescheduler cluster -n openshift-kube-descheduler-operator &>/dev/null; then
+        print_warn "KubeDescheduler 'cluster' 이 이미 존재합니다."
+        print_warn "  → 기존 설정을 보존하고 poc-descheduler 네임스페이스만 추가합니다."
+        oc patch kubedescheduler cluster -n openshift-kube-descheduler-operator \
+            --type=json \
+            -p='[{"op":"add","path":"/spec/profileCustomizations/namespaces/included/-","value":"poc-descheduler"}]' \
+            2>/dev/null || true
+        touch .kubedescheduler-preexisted
+        print_ok "기존 KubeDescheduler에 poc-descheduler 네임스페이스 추가 완료"
+        return
+    fi
+
     cat > kubedescheduler.yaml <<'EOF'
 apiVersion: operator.openshift.io/v1
 kind: KubeDescheduler
@@ -476,7 +489,29 @@ print_summary() {
 cleanup() {
     print_step "--cleanup: 07-descheduler 리소스 삭제"
     oc delete project poc-descheduler --ignore-not-found 2>/dev/null || true
-    oc delete kubedescheduler cluster -n openshift-kube-descheduler-operator --ignore-not-found 2>/dev/null || true
+
+    local _pre="${SCRIPT_DIR}/.kubedescheduler-preexisted"
+    if [ -f "$_pre" ]; then
+        # 스크립트 실행 전에 이미 존재했던 경우 — poc-descheduler 항목만 제거
+        print_info "KubeDescheduler는 기존 설정이므로 삭제하지 않습니다."
+        print_info "  → poc-descheduler 네임스페이스 항목만 제거합니다."
+        local _idx
+        _idx=$(oc get kubedescheduler cluster -n openshift-kube-descheduler-operator \
+            -o json 2>/dev/null | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); \
+                ns=d['spec'].get('profileCustomizations',{}).get('namespaces',{}).get('included',[]); \
+                print(ns.index('poc-descheduler') if 'poc-descheduler' in ns else -1)" 2>/dev/null || echo -1)
+        if [ "$_idx" != "-1" ] && [ "$_idx" != "" ]; then
+            oc patch kubedescheduler cluster -n openshift-kube-descheduler-operator \
+                --type=json \
+                -p="[{\"op\":\"remove\",\"path\":\"/spec/profileCustomizations/namespaces/included/${_idx}\"}]" \
+                2>/dev/null && print_ok "poc-descheduler 항목 제거 완료" || true
+        fi
+        rm -f "$_pre"
+    else
+        oc delete kubedescheduler cluster -n openshift-kube-descheduler-operator --ignore-not-found 2>/dev/null || true
+    fi
+
     oc delete consoleyamlsample poc-kubedescheduler --ignore-not-found 2>/dev/null || true
     print_ok "07-descheduler 리소스 삭제 완료"
 }
