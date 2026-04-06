@@ -561,37 +561,62 @@ EOF
 step_console_plugin() {
     print_step "6/6  Console Plugin 활성화 (Observe > Logs)"
 
-    # logging-view-plugin ConsolePlugin 존재 확인
-    if ! oc get consoleplugin logging-view-plugin &>/dev/null; then
-        print_warn "logging-view-plugin ConsolePlugin 이 없습니다."
-        print_info "  OpenShift Logging Operator가 자동 생성합니다. Operator 상태를 확인하세요."
-        print_info "    oc get consoleplugin"
-        return
+    if [ "$LOGGING_V6" = "true" ]; then
+        # v6: UIPlugin CR (console.operator plugins 배열을 건드리지 않아 안전)
+        if oc get uiplugin logging &>/dev/null; then
+            print_ok "UIPlugin 'logging' 이미 존재합니다 — 건너뜁니다."
+            return
+        fi
+
+        if ! oc get crd uiplugins.observability.openshift.io &>/dev/null; then
+            print_warn "UIPlugin CRD 없음 — cluster-observability-operator 미설치"
+            print_info "  OperatorHub에서 'Cluster Observability Operator' 설치 후 재실행하세요."
+            return
+        fi
+
+        cat > ./uiplugin-logging.yaml <<EOF
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  name: logging
+spec:
+  type: Logging
+  logging:
+    lokiStack:
+      name: ${LOKI_NAME}
+      namespace: ${LOGGING_NS}
+EOF
+        oc apply -f ./uiplugin-logging.yaml
+        print_ok "UIPlugin 'logging' 생성 완료"
+        print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
+    else
+        # v5: consoleplugin 방식 — 기존 plugins 목록에 append (덮어쓰지 않음)
+        if ! oc get consoleplugin logging-view-plugin &>/dev/null; then
+            print_warn "logging-view-plugin ConsolePlugin 이 없습니다."
+            print_info "  OpenShift Logging Operator가 자동 생성합니다."
+            print_info "    oc get consoleplugin"
+            return
+        fi
+        print_ok "logging-view-plugin ConsolePlugin 확인"
+
+        local _enabled
+        _enabled=$(oc get console.operator.openshift.io cluster \
+            -o jsonpath='{.spec.plugins}' 2>/dev/null || echo "")
+        if echo "${_enabled}" | grep -q "logging-view-plugin"; then
+            print_ok "logging-view-plugin 이미 활성화됨"
+            return
+        fi
+
+        # /spec/plugins 배열 없으면 초기화 후 append
+        if ! echo "${_enabled}" | grep -q '\['; then
+            oc patch console.operator.openshift.io cluster --type=merge \
+                -p '{"spec":{"plugins":[]}}' 2>/dev/null || true
+        fi
+        oc patch console.operator.openshift.io cluster --type=json \
+            -p '[{"op":"add","path":"/spec/plugins/-","value":"logging-view-plugin"}]'
+        print_ok "logging-view-plugin 활성화 완료"
+        print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
     fi
-    print_ok "logging-view-plugin ConsolePlugin 확인"
-
-    # 이미 활성화 여부 확인
-    local _enabled
-    _enabled=$(oc get console.operator.openshift.io cluster \
-        -o jsonpath='{.spec.plugins}' 2>/dev/null || echo "")
-
-    if echo "${_enabled}" | grep -q "logging-view-plugin"; then
-        print_ok "logging-view-plugin 이미 활성화됨"
-        return
-    fi
-
-    # /spec/plugins 배열이 없으면 json patch add가 실패하므로 먼저 초기화
-    if ! oc get console.operator.openshift.io cluster \
-            -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q '\['; then
-        oc patch console.operator.openshift.io cluster --type=merge \
-            -p '{"spec":{"plugins":[]}}' 2>/dev/null || true
-    fi
-    # 기존 목록에 append (덮어쓰지 않음)
-    oc patch console.operator.openshift.io cluster --type=json \
-        -p '[{"op":"add","path":"/spec/plugins/-","value":"logging-view-plugin"}]'
-
-    print_ok "logging-view-plugin 활성화 완료"
-    print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
 }
 
 # =============================================================================
