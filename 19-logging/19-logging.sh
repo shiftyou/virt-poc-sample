@@ -417,6 +417,32 @@ spec:
   storageClassName: ${STORAGE_CLASS}
   tenants:
     mode: openshift-logging
+  # POC 환경 resource 절감 — 기본값(ingester: cpu=4, mem=20Gi)은 과도함
+  template:
+    ingester:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "2Gi"
+        limits:
+          cpu: "2"
+          memory: "4Gi"
+    compactor:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+    queryFrontend:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
 EOF
 
     confirm_and_apply ./loki-stack.yaml
