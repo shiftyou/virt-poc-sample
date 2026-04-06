@@ -164,7 +164,7 @@ step_audit_policy() {
     fi
     [ -n "$current" ] && print_info "현재 프로필: ${current} → 변경: ${AUDIT_PROFILE}"
 
-    cat > ./audit-policy.yaml" <<EOF
+    cat > ./audit-policy.yaml <<EOF
 apiVersion: config.openshift.io/v1
 kind: APIServer
 metadata:
@@ -174,7 +174,7 @@ spec:
     profile: ${AUDIT_PROFILE}
 EOF
 
-    confirm_and_apply ./audit-policy.yaml"
+    confirm_and_apply ./audit-policy.yaml
     print_ok "Audit Policy 적용 완료"
     print_info "kube-apiserver 롤아웃에 수분이 소요될 수 있습니다."
     print_info "  확인: oc get co kube-apiserver"
@@ -231,7 +231,7 @@ step_cluster_logging() {
         log_store_block="  # logStore: Loki Operator 미설치로 생략"
     fi
 
-    cat > ./cluster-logging.yaml" <<EOF
+    cat > ./cluster-logging.yaml <<EOF
 apiVersion: logging.openshift.io/v1
 kind: ClusterLogging
 metadata:
@@ -244,7 +244,7 @@ ${log_store_block}
     type: vector
 EOF
 
-    confirm_and_apply ./cluster-logging.yaml"
+    confirm_and_apply ./cluster-logging.yaml
     print_ok "ClusterLogging '${CL_NAME}' 생성 완료"
 }
 
@@ -303,7 +303,7 @@ step_loki_stack() {
 
     step_loki_secret
 
-    cat > ./loki-stack.yaml" <<EOF
+    cat > ./loki-stack.yaml <<EOF
 apiVersion: loki.grafana.com/v1
 kind: LokiStack
 metadata:
@@ -323,7 +323,7 @@ spec:
     mode: openshift-logging
 EOF
 
-    confirm_and_apply ./loki-stack.yaml"
+    confirm_and_apply ./loki-stack.yaml
 
     print_info "LokiStack 준비 대기 중 (최대 5분)..."
     local retries=30 i=0
@@ -398,7 +398,7 @@ step_log_forwarder() {
         - default"
         fi
 
-        cat > ./cluster-log-forwarder.yaml" <<EOF
+        cat > ./cluster-log-forwarder.yaml <<EOF
 apiVersion: observability.openshift.io/v1
 kind: ClusterLogForwarder
 metadata:
@@ -442,7 +442,7 @@ EOF
         - default"
         fi
 
-        cat > ./cluster-log-forwarder.yaml" <<EOF
+        cat > ./cluster-log-forwarder.yaml <<EOF
 apiVersion: logging.openshift.io/v1
 kind: ClusterLogForwarder
 metadata:
@@ -453,7 +453,7 @@ ${output_section}
 EOF
     fi
 
-    confirm_and_apply ./cluster-log-forwarder.yaml"
+    confirm_and_apply ./cluster-log-forwarder.yaml
     print_ok "ClusterLogForwarder '${CLF_NAME}' 적용 완료"
 }
 
