@@ -556,6 +556,41 @@ EOF
 }
 
 # =============================================================================
+# Console Plugin 활성화 (Observe > Logs 메뉴 표시)
+# =============================================================================
+step_console_plugin() {
+    print_step "6/6  Console Plugin 활성화 (Observe > Logs)"
+
+    # logging-view-plugin ConsolePlugin 존재 확인
+    if ! oc get consoleplugin logging-view-plugin &>/dev/null; then
+        print_warn "logging-view-plugin ConsolePlugin 이 없습니다."
+        print_info "  OpenShift Logging Operator가 자동 생성합니다. Operator 상태를 확인하세요."
+        print_info "    oc get consoleplugin"
+        return
+    fi
+    print_ok "logging-view-plugin ConsolePlugin 확인"
+
+    # 이미 활성화 여부 확인
+    local _enabled
+    _enabled=$(oc get console.operator.openshift.io cluster \
+        -o jsonpath='{.spec.plugins}' 2>/dev/null || echo "")
+
+    if echo "${_enabled}" | grep -q "logging-view-plugin"; then
+        print_ok "logging-view-plugin 이미 활성화됨"
+        return
+    fi
+
+    oc patch console.operator.openshift.io cluster --type=json \
+        -p '[{"op":"add","path":"/spec/plugins/-","value":"logging-view-plugin"}]' \
+        2>/dev/null || \
+    oc patch console.operator.openshift.io cluster --type=merge \
+        -p '{"spec":{"plugins":["logging-view-plugin"]}}'
+
+    print_ok "logging-view-plugin 활성화 완료"
+    print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
+}
+
+# =============================================================================
 # 상태 확인
 # =============================================================================
 step_verify() {
@@ -643,6 +678,7 @@ main() {
             print_warn "Loki Operator 미설치 — 건너뜁니다."
         fi
         step_log_forwarder
+        step_console_plugin
     else
         print_step "3/5  ClusterLogging"
         print_warn "OpenShift Logging Operator 미설치 — 건너뜁니다."
