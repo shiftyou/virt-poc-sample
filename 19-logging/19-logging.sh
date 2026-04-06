@@ -145,7 +145,7 @@ preflight() {
             S3_REGION="${LOGGING_S3_REGION:-us-east-1}"
         elif [ -n "${ODF_S3_ENDPOINT:-}" ]; then
             S3_ENDPOINT="${ODF_S3_ENDPOINT}"
-            S3_BUCKET="${LOGGING_S3_BUCKET:-${ODF_S3_BUCKET:-loki}}"
+            S3_BUCKET="(OBC 자동 생성 — step_loki_obc 에서 결정)"
             S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
             S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
             S3_REGION="${LOGGING_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"
@@ -300,6 +300,69 @@ EOF
 }
 
 # =============================================================================
+# Step 4a: ODF 백엔드일 때 OBC로 Loki 전용 버킷 생성
+# =============================================================================
+step_loki_obc() {
+    # ODF가 아니면 스킵
+    [ -z "${ODF_S3_ENDPOINT:-}" ] && [ -z "${MINIO_ENDPOINT:-}" ] && return
+    [ -n "${MINIO_ENDPOINT:-}" ] && return   # MinIO는 OBC 불필요
+
+    print_step "4a  Loki 전용 ObjectBucketClaim 생성"
+
+    if oc get obc obc-loki -n "${LOGGING_NS}" &>/dev/null; then
+        print_ok "OBC obc-loki 이미 존재 — 버킷 이름 취득"
+    else
+        local _obc_sc
+        _obc_sc=$(oc get storageclass -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
+            tr ' ' '\n' | grep -i "noobaa" | head -1 || true)
+        [ -z "$_obc_sc" ] && _obc_sc="openshift-storage.noobaa.io"
+
+        cat > ./obc-loki.yaml <<EOF
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: obc-loki
+  namespace: ${LOGGING_NS}
+spec:
+  generateBucketName: loki
+  storageClassName: ${_obc_sc}
+EOF
+        echo "생성된 파일: obc-loki.yaml"
+        oc apply -f ./obc-loki.yaml
+        print_ok "OBC obc-loki 생성 완료"
+    fi
+
+    # Bound 대기
+    print_info "OBC Bound 대기 중..."
+    local i=0
+    while [ $i -lt 12 ]; do
+        local phase
+        phase=$(oc get obc obc-loki -n "${LOGGING_NS}" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || true)
+        [ "$phase" = "Bound" ] && break
+        printf "  [%d/12] 대기 중... (%s)\r" "$((i+1))" "${phase:-Pending}"
+        sleep 5
+        i=$((i+1))
+    done
+    echo ""
+    if [ $i -eq 12 ]; then
+        print_error "OBC Bound 시간 초과."
+        exit 1
+    fi
+    print_ok "OBC 상태: Bound"
+
+    # 버킷 이름 및 자격증명 취득
+    S3_BUCKET=$(oc get cm obc-loki -n "${LOGGING_NS}" \
+        -o jsonpath='{.data.BUCKET_NAME}' 2>/dev/null || true)
+    S3_ACCESS_KEY=$(oc get secret obc-loki -n "${LOGGING_NS}" \
+        -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d || true)
+    S3_SECRET_KEY=$(oc get secret obc-loki -n "${LOGGING_NS}" \
+        -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d || true)
+    print_ok "Loki OBC 버킷/자격증명 취득 완료"
+    print_info "  Bucket : ${S3_BUCKET}"
+}
+
+# =============================================================================
 # Step 4: LokiStack + S3 Secret 생성 (Loki Operator 설치 시)
 # =============================================================================
 step_loki_secret() {
@@ -333,6 +396,7 @@ step_loki_stack() {
         return
     fi
 
+    step_loki_obc
     step_loki_secret
 
     cat > ./loki-stack.yaml <<EOF
@@ -548,6 +612,7 @@ cleanup() {
     oc delete clusterlogging instance -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete lokistack logging-loki -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete secret logging-loki-s3 -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
+    oc delete obc obc-loki -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     print_ok "19-logging 리소스 삭제 완료"
     print_info "  네임스페이스 ${_logging_ns} 는 Logging Operator가 관리하므로 삭제하지 않습니다."
 }
