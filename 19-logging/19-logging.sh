@@ -475,6 +475,8 @@ step_log_forwarder() {
         authentication:
           token:
             from: serviceAccount
+      tls:
+        insecureSkipVerify: true
   pipelines:
     - name: all-to-loki
       inputRefs:
