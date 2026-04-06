@@ -352,27 +352,52 @@ EOF
 step_verify() {
     print_step "6/6  BackupStorageLocation 확인 (ns: ${NS})"
 
+    echo ""
+    print_info "연결 대상 정보:"
+    print_info "  S3 Endpoint : ${S3_ENDPOINT}"
+    print_info "  S3 Bucket   : ${S3_BUCKET}"
+    print_info "  S3 Region   : ${S3_REGION}"
+    echo ""
+    print_warn "주의: BSL 검증 실패의 주요 원인"
+    print_warn "  1) 버킷 미존재 — Velero는 버킷을 자동 생성하지 않습니다."
+    print_warn "     MinIO: mc mb <alias>/${S3_BUCKET}  또는 콘솔에서 직접 생성"
+    print_warn "  2) Endpoint 불통 — Velero Pod에서 ${S3_ENDPOINT} 에 도달 가능해야 합니다."
+    print_warn "  3) 자격증명 오류 — AccessKey / SecretKey 확인"
+    echo ""
+
     print_info "BackupStorageLocation 준비 대기 중..."
-    local retries=12
+    local retries=18
     local i=0
     while [ $i -lt $retries ]; do
-        local phase
+        local phase message
         phase=$(oc get backupstoragelocation -n "$NS" \
             -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
+        message=$(oc get backupstoragelocation -n "$NS" \
+            -o jsonpath='{.items[0].status.lastValidationTime}' 2>/dev/null || true)
         if [ "$phase" = "Available" ]; then
             print_ok "BackupStorageLocation 상태: Available"
-            break
+            oc get backupstoragelocation -n "$NS" 2>/dev/null || true
+            return
         fi
-        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
+        # 에러 메시지 표시
+        local err_msg
+        err_msg=$(oc get backupstoragelocation -n "$NS" \
+            -o jsonpath='{.items[0].status.message}' 2>/dev/null || true)
+        printf "  [%d/%d] 상태: %-12s %s\r" "$((i+1))" "$retries" "${phase:-Pending}" "${err_msg:+| $err_msg}"
         sleep 10
         i=$((i+1))
     done
     echo ""
 
-    if [ $i -eq $retries ]; then
-        print_warn "BackupStorageLocation 준비 시간 초과. 백엔드 연결을 확인하세요."
-        print_info "  oc describe backupstoragelocation -n ${NS}"
-    fi
+    print_warn "BackupStorageLocation 준비 시간 초과."
+    echo ""
+    print_info "현재 BSL 상태:"
+    oc get backupstoragelocation -n "$NS" 2>/dev/null || true
+    echo ""
+    print_info "상세 오류 확인:"
+    oc describe backupstoragelocation -n "$NS" 2>/dev/null | grep -A5 "Status:\|Message:\|Phase:" || true
+    echo ""
+    print_info "  → oc describe backupstoragelocation -n ${NS}"
 }
 
 # =============================================================================
