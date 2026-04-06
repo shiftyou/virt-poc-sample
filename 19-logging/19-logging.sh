@@ -132,6 +132,26 @@ preflight() {
     if [ "${LOKI_INSTALLED:-false}" = "true" ]; then
         HAS_LOKI=true
         print_ok "Loki Operator 확인"
+
+        # MinIO(S3) 버킷·자격증명 확인
+        echo ""
+        print_info "  MinIO Endpoint  : ${MINIO_ENDPOINT}"
+        print_info "  MinIO Bucket    : ${MINIO_BUCKET}"
+        print_info "  MinIO AccessKey : ${MINIO_ACCESS_KEY}"
+        print_info "  MinIO SecretKey : ****"
+        echo ""
+        read -r -p "  위 내용이 맞습니까? (Y/n): " _confirm
+        if [[ "${_confirm:-}" =~ ^[Nn]$ ]]; then
+            read -r -p "  MinIO Endpoint  [${MINIO_ENDPOINT}]: " _input
+            [ -n "$_input" ] && MINIO_ENDPOINT="$_input"
+            read -r -p "  MinIO Bucket    [${MINIO_BUCKET}]: " _input
+            [ -n "$_input" ] && MINIO_BUCKET="$_input"
+            read -r -p "  MinIO AccessKey [${MINIO_ACCESS_KEY}]: " _input
+            [ -n "$_input" ] && MINIO_ACCESS_KEY="$_input"
+            read -r -s -p "  MinIO SecretKey [****]: " _input
+            echo ""
+            [ -n "$_input" ] && MINIO_SECRET_KEY="$_input"
+        fi
     else
         HAS_LOKI=false
         print_warn "Loki Operator 미설치 → LokiStack 생성을 건너뜁니다."

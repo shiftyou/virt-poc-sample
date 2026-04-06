@@ -118,10 +118,27 @@ preflight() {
     fi
 
     print_ok "백엔드: ${BACKEND}"
+    echo ""
     print_info "  S3 Endpoint : ${S3_ENDPOINT}"
     print_info "  S3 Bucket   : ${S3_BUCKET}"
     print_info "  S3 Region   : ${S3_REGION}"
     print_info "  S3 AccessKey: ${S3_ACCESS_KEY}"
+    print_info "  S3 SecretKey: ****"
+    echo ""
+    read -r -p "  위 내용이 맞습니까? (Y/n): " _confirm
+    if [[ "${_confirm:-}" =~ ^[Nn]$ ]]; then
+        read -r -p "  S3 Endpoint  [${S3_ENDPOINT}]: " _input
+        [ -n "$_input" ] && S3_ENDPOINT="$_input"
+        read -r -p "  S3 Bucket    [${S3_BUCKET}]: " _input
+        [ -n "$_input" ] && S3_BUCKET="$_input"
+        read -r -p "  S3 Region    [${S3_REGION}]: " _input
+        [ -n "$_input" ] && S3_REGION="$_input"
+        read -r -p "  S3 AccessKey [${S3_ACCESS_KEY}]: " _input
+        [ -n "$_input" ] && S3_ACCESS_KEY="$_input"
+        read -r -s -p "  S3 SecretKey [****]: " _input
+        echo ""
+        [ -n "$_input" ] && S3_SECRET_KEY="$_input"
+    fi
 }
 
 # =============================================================================
