@@ -417,35 +417,26 @@ spec:
   storageClassName: ${STORAGE_CLASS}
   tenants:
     mode: openshift-logging
-  # POC 환경 resource 절감 — 기본값(ingester: cpu=4, mem=20Gi)은 과도함
-  template:
-    ingester:
-      resources:
-        requests:
-          cpu: "500m"
-          memory: "2Gi"
-        limits:
-          cpu: "2"
-          memory: "4Gi"
-    compactor:
-      resources:
-        requests:
-          cpu: "200m"
-          memory: "512Mi"
-        limits:
-          cpu: "1"
-          memory: "1Gi"
-    queryFrontend:
-      resources:
-        requests:
-          cpu: "200m"
-          memory: "512Mi"
-        limits:
-          cpu: "1"
-          memory: "1Gi"
 EOF
 
     confirm_and_apply ./loki-stack.yaml
+
+    # POC 환경 resource 절감 (LokiStack CRD가 resource override를 미지원 → StatefulSet 직접 패치)
+    # 기본 1x.small: ingester cpu=4/mem=20Gi → worker 노드 CPU 부족으로 Pending 발생
+    print_info "LokiStack StatefulSet resource 축소 (POC 환경)..."
+    sleep 5  # StatefulSet 생성 대기
+    oc patch statefulset "${LOKI_NAME}-ingester" -n "${LOGGING_NS}" --type=json -p '[
+      {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"500m"},
+      {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"2Gi"}
+    ]' 2>/dev/null && print_ok "ingester resource 축소 완료" || print_warn "ingester patch 실패 (수동 적용 필요)"
+    oc patch statefulset "${LOKI_NAME}-compactor" -n "${LOGGING_NS}" --type=json -p '[
+      {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"200m"},
+      {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"512Mi"}
+    ]' 2>/dev/null && print_ok "compactor resource 축소 완료" || print_warn "compactor patch 실패 (수동 적용 필요)"
+    oc patch deployment "${LOKI_NAME}-query-frontend" -n "${LOGGING_NS}" --type=json -p '[
+      {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"200m"},
+      {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"512Mi"}
+    ]' 2>/dev/null && print_ok "query-frontend resource 축소 완료" || print_warn "query-frontend patch 실패 (수동 적용 필요)"
 
     print_info "LokiStack 준비 대기 중 (최대 5분)..."
     local retries=30 i=0
