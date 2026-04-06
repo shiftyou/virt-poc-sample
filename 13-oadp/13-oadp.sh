@@ -40,6 +40,8 @@ S3_BUCKET=""
 S3_ACCESS_KEY=""
 S3_SECRET_KEY=""
 S3_REGION=""
+DPA_NAME="poc-dpa"
+BSL_NAME="poc-dpa-1"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -296,6 +298,19 @@ EOF
 step_dpa() {
     print_step "5/6  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
 
+    # OADP는 네임스페이스 당 DPA 하나만 허용 — 기존 DPA가 있으면 그것을 사용
+    local _existing_dpa
+    _existing_dpa=$(oc get dpa -n "$NS" --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | head -1 || true)
+    if [ -n "$_existing_dpa" ] && [ "$_existing_dpa" != "poc-dpa" ]; then
+        print_warn "이미 DPA '${_existing_dpa}' 가 존재합니다."
+        print_warn "OADP는 네임스페이스 당 DPA 하나만 허용합니다."
+        print_warn "기존 DPA의 BSL 이름: ${_existing_dpa}-1"
+        DPA_NAME="${_existing_dpa}"
+        BSL_NAME="${_existing_dpa}-1"
+        print_info "기존 DPA '${_existing_dpa}' 를 그대로 사용합니다 — poc-dpa 생성 스킵"
+        return
+    fi
+
     if oc get dpa poc-dpa -n "$NS" &>/dev/null; then
         print_ok "DataProtectionApplication poc-dpa 이미 존재 — 스킵"
         return
@@ -347,8 +362,7 @@ EOF
 step_verify() {
     print_step "6/6  BackupStorageLocation 확인 (ns: ${NS})"
 
-    # 다른 DPA가 있으면 items[0]이 poc-dpa-1이 아닐 수 있으므로 이름 직접 지정
-    local BSL_NAME="poc-dpa-1"
+    # DPA_NAME/BSL_NAME 은 step_dpa() 에서 결정 (기존 DPA 재사용 시 변경됨)
 
     echo ""
     # 네임스페이스에 다른 DPA/BSL이 있으면 경고
