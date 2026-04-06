@@ -298,16 +298,21 @@ EOF
 step_dpa() {
     print_step "5/6  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
 
-    # OADP는 네임스페이스 당 DPA 하나만 허용 — 기존 DPA가 있으면 그것을 사용
+    # OADP는 네임스페이스 당 DPA 하나만 허용 — 기존 DPA가 있으면 버킷/credentials 업데이트
     local _existing_dpa
     _existing_dpa=$(oc get dpa -n "$NS" --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | head -1 || true)
     if [ -n "$_existing_dpa" ] && [ "$_existing_dpa" != "poc-dpa" ]; then
-        print_warn "이미 DPA '${_existing_dpa}' 가 존재합니다."
-        print_warn "OADP는 네임스페이스 당 DPA 하나만 허용합니다."
-        print_warn "기존 DPA의 BSL 이름: ${_existing_dpa}-1"
+        print_warn "이미 DPA '${_existing_dpa}' 가 존재합니다 (OADP는 네임스페이스 당 DPA 하나만 허용)."
         DPA_NAME="${_existing_dpa}"
         BSL_NAME="${_existing_dpa}-1"
-        print_info "기존 DPA '${_existing_dpa}' 를 그대로 사용합니다 — poc-dpa 생성 스킵"
+        print_info "기존 DPA '${_existing_dpa}' 의 bucket/endpoint/credentials를 업데이트합니다."
+
+        oc patch dpa "${_existing_dpa}" -n "$NS" --type=json -p="[
+          {\"op\":\"replace\",\"path\":\"/spec/backupLocations/0/velero/objectStorage/bucket\",\"value\":\"${S3_BUCKET}\"},
+          {\"op\":\"replace\",\"path\":\"/spec/backupLocations/0/velero/config/s3Url\",\"value\":\"${S3_ENDPOINT}\"},
+          {\"op\":\"replace\",\"path\":\"/spec/backupLocations/0/velero/config/region\",\"value\":\"${S3_REGION}\"}
+        ]" 2>/dev/null && print_ok "DPA bucket/endpoint/region 업데이트 완료" || \
+            print_warn "DPA 패치 실패 — 수동 확인 필요: oc edit dpa ${_existing_dpa} -n ${NS}"
         return
     fi
 
