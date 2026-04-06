@@ -539,9 +539,11 @@ if [ "$_USE_EXISTING_NNCP" = "false" ]; then
     else
         print_info "노드의 네트워크 인터페이스 확인: oc debug node/<node> -- ip link show"
     fi
-    ask "새로 생성할 NNCP 이름" "br-poc-nncp" NNCP_NAME
-    ask "NNCP용 노드 네트워크 인터페이스 이름 (예: ens4, eth1)" "${DETECTED_IFACE:-ens4}" BRIDGE_INTERFACE
     ask "생성할 Linux Bridge 이름" "br-poc" BRIDGE_NAME
+    BRIDGE_INTERFACE="${DETECTED_IFACE:-ens4}"
+    NNCP_NAME="${BRIDGE_NAME}-nncp"
+    print_info "  NIC       : ${BRIDGE_INTERFACE}"
+    print_info "  NNCP 이름 : ${NNCP_NAME}"
 fi
 
 echo ""
