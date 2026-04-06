@@ -124,7 +124,7 @@ step_namespace() {
 # 2단계: VM 2개 배포 → TEST_NODE로 Live Migration
 # =============================================================================
 step_vms() {
-    print_step "2/3  VM 2개 배포 → ${NODE1} 로 Live Migration"
+    print_step "2/4  VM 2개 배포 → ${NODE1} 로 Live Migration"
 
     for VM in poc-maintenance-vm-1 poc-maintenance-vm-2; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
@@ -221,8 +221,35 @@ EOF
 # =============================================================================
 # 3단계: NodeMaintenance 생성 → Migration 확인
 # =============================================================================
+step_consoleyamlsamples() {
+    print_step "4/4  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-nodemaintenance.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-nodemaintenance
+spec:
+  title: "POC NodeMaintenance"
+  description: "노드를 유지보수 모드로 전환하는 NodeMaintenance CR 예시입니다. 생성 시 해당 노드가 cordon되고 VM이 자동으로 Live Migration됩니다."
+  targetResource:
+    apiVersion: nodemaintenance.medik8s.io/v1beta1
+    kind: NodeMaintenance
+  yaml: |
+    apiVersion: nodemaintenance.medik8s.io/v1beta1
+    kind: NodeMaintenance
+    metadata:
+      name: maintenance-worker-0
+    spec:
+      nodeName: worker-0
+      reason: "POC 유지보수 실습"
+EOF
+    oc apply -f consoleyamlsample-nodemaintenance.yaml
+    print_ok "ConsoleYAMLSample poc-nodemaintenance 등록 완료"
+}
+
 step_maintenance() {
-    print_step "3/3  NodeMaintenance 생성 (${NODE1})"
+    print_step "3/4  NodeMaintenance 생성 (${NODE1})"
 
     if oc get nodemaintenance "maintenance-${NODE1}" &>/dev/null; then
         print_ok "NodeMaintenance maintenance-${NODE1} 이미 존재 — 스킵"
@@ -272,6 +299,7 @@ print_summary() {
 cleanup() {
     print_step "--cleanup: 14-node-maintenance 리소스 삭제"
     oc delete project poc-maintenance --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-nodemaintenance --ignore-not-found 2>/dev/null || true
     print_ok "14-node-maintenance 리소스 삭제 완료"
 }
 
@@ -288,6 +316,7 @@ main() {
     step_namespace
     step_vms
     step_maintenance
+    step_consoleyamlsamples
     print_summary
 }
 

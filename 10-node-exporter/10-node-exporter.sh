@@ -151,8 +151,50 @@ EOF
     print_ok "ServiceMonitor node-exporter-monitor 등록 완료"
 }
 
+step_consoleyamlsamples() {
+    print_step "5/5  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-servicemonitor.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-servicemonitor-node-exporter
+spec:
+  title: "POC ServiceMonitor node-exporter"
+  description: "VM 내부 node_exporter 메트릭을 Prometheus가 수집할 수 있도록 ServiceMonitor를 등록하는 예시입니다. servicetype=metrics 레이블이 있는 Service를 자동으로 스크레이프합니다."
+  targetResource:
+    apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+  yaml: |
+    apiVersion: monitoring.coreos.com/v1
+    kind: ServiceMonitor
+    metadata:
+      name: node-exporter-monitor
+      namespace: poc-node-exporter
+      labels:
+        servicetype: metrics
+    spec:
+      selector:
+        matchLabels:
+          servicetype: metrics
+      endpoints:
+        - port: metric
+          interval: 30s
+          path: /metrics
+          relabelings:
+            - targetLabel: job
+              replacement: vm_prometheus-metric
+            - sourceLabels: [__meta_kubernetes_endpoint_hostname]
+              targetLabel: vmname
+            - sourceLabels: [__address__]
+              targetLabel: instance
+EOF
+    oc apply -f consoleyamlsample-servicemonitor.yaml
+    print_ok "ConsoleYAMLSample poc-servicemonitor-node-exporter 등록 완료"
+}
+
 step_check_endpoints() {
-    print_step "4/4  Endpoints 확인"
+    print_step "4/5  Endpoints 확인"
 
     local ep_count
     ep_count=$(oc get endpoints node-exporter-service -n "$NS" \
@@ -212,6 +254,7 @@ print_summary() {
 cleanup() {
     print_step "--cleanup: 10-node-exporter 리소스 삭제"
     oc delete project poc-node-exporter --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-servicemonitor-node-exporter --ignore-not-found 2>/dev/null || true
     print_ok "10-node-exporter 리소스 삭제 완료"
 }
 
@@ -225,6 +268,7 @@ main() {
     step_vm
     step_apply_service
     step_service_monitor
+    step_consoleyamlsamples
     step_check_endpoints
     print_summary
 }

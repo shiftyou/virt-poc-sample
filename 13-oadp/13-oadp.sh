@@ -466,6 +466,113 @@ EOF
     echo -e "    ${CYAN}oc apply -f poc-oadp-restore.yaml${NC}"
 }
 
+step_consoleyamlsamples() {
+    print_step "10/10  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-dpa.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-dataprotectionapplication
+spec:
+  title: "POC DataProtectionApplication (OADP)"
+  description: "S3 호환 오브젝트 스토리지(MinIO/ODF)를 백업 스토리지로 사용하는 DataProtectionApplication 예시입니다. kubevirt, csi, openshift 플러그인을 포함합니다."
+  targetResource:
+    apiVersion: oadp.openshift.io/v1alpha1
+    kind: DataProtectionApplication
+  yaml: |
+    apiVersion: oadp.openshift.io/v1alpha1
+    kind: DataProtectionApplication
+    metadata:
+      name: poc-dpa
+      namespace: openshift-adp
+    spec:
+      configuration:
+        nodeAgent:
+          enable: true
+          uploaderType: restic
+        velero:
+          defaultPlugins:
+            - aws
+            - openshift
+            - kubevirt
+            - csi
+          disableFsBackup: false
+      logFormat: text
+      backupLocations:
+        - velero:
+            provider: aws
+            default: true
+            objectStorage:
+              bucket: velero
+              prefix: oadp
+            config:
+              profile: default
+              region: us-east-1
+              s3ForcePathStyle: "true"
+              s3Url: http://minio.minio.svc:9000
+              checksumAlgorithm: ""
+            credential:
+              key: cloud
+              name: cloud-credentials
+EOF
+    oc apply -f consoleyamlsample-dpa.yaml
+    print_ok "ConsoleYAMLSample poc-dataprotectionapplication 등록 완료"
+
+    cat > consoleyamlsample-backup.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-backup
+spec:
+  title: "POC Backup (Velero)"
+  description: "특정 네임스페이스의 VM과 볼륨을 백업하는 Velero Backup CR 예시입니다. storageLocation은 DataProtectionApplication에서 자동 생성된 BSL 이름을 사용합니다."
+  targetResource:
+    apiVersion: velero.io/v1
+    kind: Backup
+  yaml: |
+    apiVersion: velero.io/v1
+    kind: Backup
+    metadata:
+      name: poc-oadp-backup
+      namespace: openshift-adp
+    spec:
+      includedNamespaces:
+        - poc-oadp
+      storageLocation: poc-dpa-1
+      ttl: 720h0m0s
+      snapshotVolumes: true
+EOF
+    oc apply -f consoleyamlsample-backup.yaml
+    print_ok "ConsoleYAMLSample poc-backup 등록 완료"
+
+    cat > consoleyamlsample-restore.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-restore
+spec:
+  title: "POC Restore (Velero)"
+  description: "Velero Backup으로부터 VM과 PV를 복원하는 Restore CR 예시입니다. 백업 완료 후 적용하세요."
+  targetResource:
+    apiVersion: velero.io/v1
+    kind: Restore
+  yaml: |
+    apiVersion: velero.io/v1
+    kind: Restore
+    metadata:
+      name: poc-oadp-restore
+      namespace: openshift-adp
+    spec:
+      backupName: poc-oadp-backup
+      includedNamespaces:
+        - poc-oadp
+      restorePVs: true
+EOF
+    oc apply -f consoleyamlsample-restore.yaml
+    print_ok "ConsoleYAMLSample poc-restore 등록 완료"
+}
+
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -501,6 +608,7 @@ cleanup() {
     oc delete secret cloud-credentials -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
     oc delete objectbucketclaim obc-backups -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
     oc delete volumesnapshotclass poc-volumesnapshotclass --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-dataprotectionapplication poc-backup poc-restore --ignore-not-found 2>/dev/null || true
     print_ok "13-oadp 리소스 삭제 완료"
 }
 
@@ -520,6 +628,7 @@ main() {
     step_vm_namespace
     step_vm
     step_backup
+    step_consoleyamlsamples
     print_summary
 }
 

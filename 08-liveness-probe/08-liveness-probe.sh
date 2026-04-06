@@ -151,8 +151,80 @@ step_vm() {
 # =============================================================================
 # 3단계: Probe 확인용 서비스 안내
 # =============================================================================
+step_consoleyamlsamples() {
+    print_step "4/4  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-liveness-vm.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-liveness-vm
+spec:
+  title: "POC VM Liveness/Readiness Probe"
+  description: "HTTP Liveness/Readiness Probe가 설정된 VirtualMachine 예시입니다. port 80으로 주기적으로 헬스체크를 수행하며, 3회 실패 시 VM을 재시작합니다."
+  targetResource:
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+  yaml: |
+    apiVersion: kubevirt.io/v1
+    kind: VirtualMachine
+    metadata:
+      name: poc-liveness-vm
+      namespace: poc-liveness-probe
+    spec:
+      runStrategy: Always
+      template:
+        spec:
+          readinessProbe:
+            httpGet:
+              port: 80
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 3
+          livenessProbe:
+            httpGet:
+              port: 80
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          domain:
+            cpu:
+              cores: 1
+            memory:
+              guest: 2Gi
+            devices:
+              disks:
+                - name: rootdisk
+                  disk:
+                    bus: virtio
+          volumes:
+            - name: rootdisk
+              dataVolume:
+                name: poc-liveness-vm
+      dataVolumeTemplates:
+        - metadata:
+            name: poc-liveness-vm
+          spec:
+            pvc:
+              accessModes:
+                - ReadWriteMany
+              resources:
+                requests:
+                  storage: 30Gi
+            sourceRef:
+              kind: DataSource
+              name: poc
+              namespace: openshift-virtualization-os-images
+EOF
+    oc apply -f consoleyamlsample-liveness-vm.yaml
+    print_ok "ConsoleYAMLSample poc-liveness-vm 등록 완료"
+}
+
 step_service() {
-    print_step "3/3  VM 내부 httpd 포트 안내"
+    print_step "3/4  VM 내부 httpd 포트 안내"
 
     print_info "KubeVirt Probe는 virt-probe가 VMI 내부 IP로 직접 접속합니다."
     print_info "httpGet.port 는 VM 내부 포트를 지정합니다 (Service 불필요)."
@@ -195,6 +267,7 @@ print_summary() {
 cleanup() {
     print_step "--cleanup: 08-liveness-probe 리소스 삭제"
     oc delete project poc-liveness-probe --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-liveness-vm --ignore-not-found 2>/dev/null || true
     print_ok "08-liveness-probe 리소스 삭제 완료"
 }
 
@@ -211,6 +284,7 @@ main() {
     step_namespace
     step_vm
     step_service
+    step_consoleyamlsamples
     print_summary
 }
 

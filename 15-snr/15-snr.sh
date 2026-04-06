@@ -141,7 +141,7 @@ EOF
 # 3단계: NodeHealthCheck 생성
 # =============================================================================
 step_nhc() {
-    print_step "3/4  NodeHealthCheck 생성 (SNR 연동)"
+    print_step "3/5  NodeHealthCheck 생성 (SNR 연동)"
 
     cat > nhc-snr.yaml <<EOF
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -175,8 +175,50 @@ EOF
 # =============================================================================
 # 4단계: VM 배포
 # =============================================================================
+step_consoleyamlsamples() {
+    print_step "5/5  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-nhc-snr.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-nodehealthcheck-snr
+spec:
+  title: "POC NodeHealthCheck (SNR 연동)"
+  description: "Self Node Remediation과 연동하여 비정상 워커 노드를 자동 복구하는 NodeHealthCheck CR 예시입니다. Ready=False 또는 Unknown 상태가 300초 이상 지속되면 SNR이 발동됩니다."
+  targetResource:
+    apiVersion: remediation.medik8s.io/v1alpha1
+    kind: NodeHealthCheck
+  yaml: |
+    apiVersion: remediation.medik8s.io/v1alpha1
+    kind: NodeHealthCheck
+    metadata:
+      name: poc-snr-nhc
+    spec:
+      minHealthy: "51%"
+      remediationTemplate:
+        apiVersion: self-node-remediation.medik8s.io/v1alpha1
+        kind: SelfNodeRemediationTemplate
+        name: poc-snr-template
+        namespace: openshift-workload-availability
+      selector:
+        matchExpressions:
+          - key: node-role.kubernetes.io/worker
+            operator: Exists
+      unhealthyConditions:
+        - type: Ready
+          status: "False"
+          duration: 300s
+        - type: Ready
+          status: "Unknown"
+          duration: 300s
+EOF
+    oc apply -f consoleyamlsample-nhc-snr.yaml
+    print_ok "ConsoleYAMLSample poc-nodehealthcheck-snr 등록 완료"
+}
+
 step_vms() {
-    print_step "4/4  VM 배포 → ${NODE1}"
+    print_step "4/5  VM 배포 → ${NODE1}"
 
     for VM in poc-snr-vm-1 poc-snr-vm-2; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
@@ -240,6 +282,7 @@ cleanup() {
     oc delete project poc-snr --ignore-not-found 2>/dev/null || true
     oc delete nodehealthcheck poc-snr-nhc --ignore-not-found 2>/dev/null || true
     oc delete selfnoderemediationtemplate poc-snr-template -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-nodehealthcheck-snr --ignore-not-found 2>/dev/null || true
     print_ok "15-snr 리소스 삭제 완료"
 }
 
@@ -257,6 +300,7 @@ main() {
     step_snr_template
     step_nhc
     step_vms
+    step_consoleyamlsamples
     print_summary
 }
 

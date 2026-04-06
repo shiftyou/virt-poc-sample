@@ -194,7 +194,7 @@ EOF
 # 3단계: NodeHealthCheck 생성
 # =============================================================================
 step_nhc() {
-    print_step "4/4  NodeHealthCheck 생성 (FAR 연동)"
+    print_step "4/5  NodeHealthCheck 생성 (FAR 연동)"
 
     cat > nhc-far.yaml <<EOF
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -228,6 +228,88 @@ EOF
 # =============================================================================
 # 완료 요약
 # =============================================================================
+step_consoleyamlsamples() {
+    print_step "5/5  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-nhc-far.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-nodehealthcheck-far
+spec:
+  title: "POC NodeHealthCheck (FAR 연동)"
+  description: "Fence Agents Remediation과 연동하여 비정상 워커 노드를 IPMI로 자동 재부팅하는 NodeHealthCheck CR 예시입니다. Ready=False 또는 Unknown 상태가 300초 이상 지속되면 FAR이 발동됩니다."
+  targetResource:
+    apiVersion: remediation.medik8s.io/v1alpha1
+    kind: NodeHealthCheck
+  yaml: |
+    apiVersion: remediation.medik8s.io/v1alpha1
+    kind: NodeHealthCheck
+    metadata:
+      name: poc-far-nhc
+    spec:
+      minHealthy: "51%"
+      remediationTemplate:
+        apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
+        kind: FenceAgentsRemediationTemplate
+        name: poc-far-template
+        namespace: openshift-workload-availability
+      selector:
+        matchExpressions:
+          - key: node-role.kubernetes.io/worker
+            operator: Exists
+      unhealthyConditions:
+        - type: Ready
+          status: "False"
+          duration: 300s
+        - type: Ready
+          status: Unknown
+          duration: 300s
+EOF
+    oc apply -f consoleyamlsample-nhc-far.yaml
+    print_ok "ConsoleYAMLSample poc-nodehealthcheck-far 등록 완료"
+
+    cat > consoleyamlsample-far-template.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-fenceagentsremediationtemplate
+spec:
+  title: "POC FenceAgentsRemediationTemplate (IPMI)"
+  description: "fence_ipmilan을 사용하여 노드를 IPMI로 재부팅하는 FenceAgentsRemediationTemplate 예시입니다. 노드별 BMC IP와 공유 자격증명 Secret을 설정합니다."
+  targetResource:
+    apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
+    kind: FenceAgentsRemediationTemplate
+  yaml: |
+    apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
+    kind: FenceAgentsRemediationTemplate
+    metadata:
+      annotations:
+        remediation.medik8s.io/multiple-templates-support: "true"
+      name: poc-far-template
+      namespace: openshift-workload-availability
+    spec:
+      template:
+        spec:
+          agent: fence_ipmilan
+          nodeparameters:
+            --ip:
+              worker-0: 192.168.1.100
+              worker-1: 192.168.1.101
+          remediationStrategy: ResourceDeletion
+          retrycount: 5
+          retryinterval: 5s
+          sharedSecretName: poc-far-credentials
+          sharedparameters:
+            --action: reboot
+            --lanplus: ""
+            --username: admin
+          timeout: 1m0s
+EOF
+    oc apply -f consoleyamlsample-far-template.yaml
+    print_ok "ConsoleYAMLSample poc-fenceagentsremediationtemplate 등록 완료"
+}
+
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -261,6 +343,7 @@ cleanup() {
     oc delete nodehealthcheck poc-far-nhc --ignore-not-found 2>/dev/null || true
     oc delete fenceagentsremediationtemplate poc-far-template -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
     oc delete secret poc-far-credentials -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-nodehealthcheck-far poc-fenceagentsremediationtemplate --ignore-not-found 2>/dev/null || true
     print_ok "16-far 리소스 삭제 완료"
 }
 
@@ -278,6 +361,7 @@ main() {
     step_secret
     step_far_template
     step_nhc
+    step_consoleyamlsamples
     print_summary
 }
 

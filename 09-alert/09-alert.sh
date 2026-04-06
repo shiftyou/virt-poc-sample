@@ -194,8 +194,79 @@ EOF
     print_ok "PrometheusRule poc-vm-alerts 배포 완료"
 }
 
+step_consoleyamlsamples() {
+    print_step "5/5  ConsoleYAMLSample 등록"
+
+    cat > consoleyamlsample-prometheusrule.yaml <<'EOF'
+apiVersion: console.openshift.io/v1
+kind: ConsoleYAMLSample
+metadata:
+  name: poc-prometheusrule-vm-alerts
+spec:
+  title: "POC PrometheusRule VM 알림 규칙"
+  description: "VM 중지, Pending, Migration 실패 등 주요 VM 상태 이상을 감지하는 PrometheusRule 예시입니다. User-defined Project Monitoring이 활성화된 환경에서 사용합니다."
+  targetResource:
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+  yaml: |
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: poc-vm-alerts
+      namespace: poc-alert
+      labels:
+        role: alert-rules
+    spec:
+      groups:
+        - name: poc-vm-availability
+          interval: 30s
+          rules:
+            - alert: VMStoppedByName
+              expr: |
+                (
+                  kubevirt_vm_info{name="poc-alert-vm", namespace="poc-alert"}
+                ) unless on(name, namespace) (
+                  kubevirt_vmi_info{name="poc-alert-vm", namespace="poc-alert"}
+                )
+              for: 1m
+              labels:
+                severity: critical
+              annotations:
+                summary: "지정 VM {{ $labels.name }} 이 중지되었습니다"
+                description: "네임스페이스 {{ $labels.namespace }}의 VM {{ $labels.name }}이 중지 상태입니다."
+            - alert: VMStopped
+              expr: |
+                kubevirt_vmi_phase_count{phase="succeeded"} > 0
+              for: 2m
+              labels:
+                severity: critical
+              annotations:
+                summary: "VM이 중지되었습니다"
+                description: "네임스페이스 {{ $labels.namespace }}에서 succeeded 상태의 VM이 {{ $value }}개 감지되었습니다."
+            - alert: VMStuckPending
+              expr: |
+                kubevirt_vmi_phase_count{phase="pending"} > 0
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "VM이 pending 상태로 대기 중입니다"
+                description: "네임스페이스 {{ $labels.namespace }}에서 pending 상태의 VM이 {{ $value }}개 있습니다."
+            - alert: VMLiveMigrationFailed
+              expr: |
+                increase(kubevirt_vmi_migration_phase_transition_time_seconds_count{phase="Failed"}[10m]) > 0
+              labels:
+                severity: warning
+              annotations:
+                summary: "VM Live Migration이 실패했습니다"
+                description: "VM {{ $labels.vmi }}의 Live Migration이 실패했습니다."
+EOF
+    oc apply -f consoleyamlsample-prometheusrule.yaml
+    print_ok "ConsoleYAMLSample poc-prometheusrule-vm-alerts 등록 완료"
+}
+
 step_vm() {
-    print_step "4/4  VM 생성 (poc 템플릿 — Alert 유발 테스트용)"
+    print_step "4/5  VM 생성 (poc 템플릿 — Alert 유발 테스트용)"
 
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
         print_warn "VIRT_INSTALLED=false — VM 생성 스킵"
@@ -261,6 +332,7 @@ print_summary() {
 cleanup() {
     print_step "--cleanup: 09-alert 리소스 삭제"
     oc delete project poc-alert --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-prometheusrule-vm-alerts --ignore-not-found 2>/dev/null || true
     print_ok "09-alert 리소스 삭제 완료"
 }
 
@@ -275,6 +347,7 @@ main() {
     step_user_workload_monitoring
     step_prometheus_rule
     step_vm
+    step_consoleyamlsamples
     print_summary
 }
 
