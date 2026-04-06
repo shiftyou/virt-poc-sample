@@ -239,9 +239,10 @@ step_namespace() {
     if oc get namespace "${LOGGING_NS}" &>/dev/null; then
         print_ok "네임스페이스 ${LOGGING_NS} 존재"
     else
-        print_info "네임스페이스 ${LOGGING_NS} 생성..."
-        oc create namespace "${LOGGING_NS}" >/dev/null
-        print_ok "네임스페이스 ${LOGGING_NS} 생성 완료"
+        print_error "네임스페이스 ${LOGGING_NS} 가 없습니다."
+        print_error "  OpenShift Logging Operator가 정상 설치되면 자동으로 생성됩니다."
+        print_error "  00-operator/ 설치 가이드를 확인하세요."
+        exit 1
     fi
 }
 
