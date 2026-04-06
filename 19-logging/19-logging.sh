@@ -548,8 +548,8 @@ cleanup() {
     oc delete clusterlogging instance -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete lokistack logging-loki -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete secret logging-loki-s3 -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
-    oc delete project "$_logging_ns" --ignore-not-found 2>/dev/null || true
     print_ok "19-logging 리소스 삭제 완료"
+    print_info "  네임스페이스 ${_logging_ns} 는 Logging Operator가 관리하므로 삭제하지 않습니다."
 }
 
 # =============================================================================
