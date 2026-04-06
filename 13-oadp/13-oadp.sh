@@ -352,37 +352,52 @@ EOF
 step_verify() {
     print_step "6/6  BackupStorageLocation 확인 (ns: ${NS})"
 
+    # 다른 DPA가 있으면 items[0]이 poc-dpa-1이 아닐 수 있으므로 이름 직접 지정
+    local BSL_NAME="poc-dpa-1"
+
     echo ""
-    print_info "연결 대상 정보:"
+    # 네임스페이스에 다른 DPA/BSL이 있으면 경고
+    local other_bsl
+    other_bsl=$(oc get backupstoragelocation -n "$NS" \
+        --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | grep -v "^${BSL_NAME}$" || true)
+    if [ -n "$other_bsl" ]; then
+        print_warn "다른 BackupStorageLocation이 감지되었습니다:"
+        echo "$other_bsl" | while read -r b; do
+            print_warn "  - ${b} (이 스크립트가 생성한 것이 아님, 상태 무관)"
+        done
+        echo ""
+    fi
+
+    print_info "연결 대상 정보 (BSL: ${BSL_NAME}):"
     print_info "  S3 Endpoint : ${S3_ENDPOINT}"
     print_info "  S3 Bucket   : ${S3_BUCKET}"
     print_info "  S3 Region   : ${S3_REGION}"
     echo ""
     print_warn "주의: BSL 검증 실패의 주요 원인"
     print_warn "  1) 버킷 미존재 — Velero는 버킷을 자동 생성하지 않습니다."
-    print_warn "     MinIO: mc mb <alias>/${S3_BUCKET}  또는 콘솔에서 직접 생성"
+    if [ "$BACKEND" = "odf" ]; then
+        print_warn "     ODF: OBC(obc-backups)로 생성된 버킷 이름을 사용합니다 → ${S3_BUCKET}"
+    else
+        print_warn "     MinIO: mc mb <alias>/${S3_BUCKET}  또는 콘솔에서 직접 생성"
+    fi
     print_warn "  2) Endpoint 불통 — Velero Pod에서 ${S3_ENDPOINT} 에 도달 가능해야 합니다."
     print_warn "  3) 자격증명 오류 — AccessKey / SecretKey 확인"
     echo ""
 
-    print_info "BackupStorageLocation 준비 대기 중..."
+    print_info "BackupStorageLocation 준비 대기 중 (BSL: ${BSL_NAME})..."
     local retries=18
     local i=0
     while [ $i -lt $retries ]; do
-        local phase message
-        phase=$(oc get backupstoragelocation -n "$NS" \
-            -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)
-        message=$(oc get backupstoragelocation -n "$NS" \
-            -o jsonpath='{.items[0].status.lastValidationTime}' 2>/dev/null || true)
+        local phase err_msg
+        phase=$(oc get backupstoragelocation "${BSL_NAME}" -n "$NS" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || true)
         if [ "$phase" = "Available" ]; then
-            print_ok "BackupStorageLocation 상태: Available"
+            print_ok "BackupStorageLocation ${BSL_NAME} 상태: Available"
             oc get backupstoragelocation -n "$NS" 2>/dev/null || true
             return
         fi
-        # 에러 메시지 표시
-        local err_msg
-        err_msg=$(oc get backupstoragelocation -n "$NS" \
-            -o jsonpath='{.items[0].status.message}' 2>/dev/null || true)
+        err_msg=$(oc get backupstoragelocation "${BSL_NAME}" -n "$NS" \
+            -o jsonpath='{.status.message}' 2>/dev/null || true)
         printf "  [%d/%d] 상태: %-12s %s\r" "$((i+1))" "$retries" "${phase:-Pending}" "${err_msg:+| $err_msg}"
         sleep 10
         i=$((i+1))
@@ -394,10 +409,10 @@ step_verify() {
     print_info "현재 BSL 상태:"
     oc get backupstoragelocation -n "$NS" 2>/dev/null || true
     echo ""
-    print_info "상세 오류 확인:"
-    oc describe backupstoragelocation -n "$NS" 2>/dev/null | grep -A5 "Status:\|Message:\|Phase:" || true
+    print_info "상세 오류 확인 (${BSL_NAME}):"
+    oc describe backupstoragelocation "${BSL_NAME}" -n "$NS" 2>/dev/null | grep -A5 "Status:\|Message:\|Phase:" || true
     echo ""
-    print_info "  → oc describe backupstoragelocation -n ${NS}"
+    print_info "  → oc describe backupstoragelocation ${BSL_NAME} -n ${NS}"
 }
 
 # =============================================================================
