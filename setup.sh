@@ -127,7 +127,31 @@ check_operators() {
         grep -qi "kubernetes-nmstate"        /tmp/_poc_csv.txt 2>/dev/null && NMSTATE_INSTALLED=true
         if grep -qi "oadp-operator" /tmp/_poc_csv.txt 2>/dev/null; then
             OADP_INSTALLED=true
-            OADP_NS=$(oc get csv -A 2>/dev/null | grep -i "oadp-operator" | awk '{print $1}' | head -1 || echo "openshift-adp")
+            # OADP가 설치된 네임스페이스 목록 감지
+            local _oadp_ns_list
+            _oadp_ns_list=$(oc get csv -A 2>/dev/null | grep -i "oadp-operator" | awk '{print $1}')
+            local _oadp_ns_count
+            _oadp_ns_count=$(echo "$_oadp_ns_list" | grep -c . || true)
+            if [ "$_oadp_ns_count" -eq 1 ]; then
+                OADP_NS=$(echo "$_oadp_ns_list")
+            elif [ "$_oadp_ns_count" -gt 1 ]; then
+                echo ""
+                print_info "OADP Operator가 여러 네임스페이스에 설치되어 있습니다:"
+                local _i=1
+                while IFS= read -r _ns; do
+                    echo "    ${_i}) ${_ns}"
+                    _i=$((_i+1))
+                done <<< "$_oadp_ns_list"
+                read -r -p "  사용할 네임스페이스 번호 또는 이름 [1]: " _sel
+                _sel="${_sel:-1}"
+                if [[ "$_sel" =~ ^[0-9]+$ ]]; then
+                    OADP_NS=$(echo "$_oadp_ns_list" | sed -n "${_sel}p")
+                else
+                    OADP_NS="$_sel"
+                fi
+            else
+                OADP_NS="openshift-adp"
+            fi
         fi
         grep -qi "grafana-operator"               /tmp/_poc_csv.txt 2>/dev/null && GRAFANA_INSTALLED=true
         grep -qi "cluster-observability-operator" /tmp/_poc_csv.txt 2>/dev/null && COO_INSTALLED=true
@@ -867,7 +891,7 @@ VIRT_INSTALLED=${VIRT_INSTALLED:-false}
 MTV_INSTALLED=${MTV_INSTALLED:-false}
 NMSTATE_INSTALLED=${NMSTATE_INSTALLED:-false}
 OADP_INSTALLED=${OADP_INSTALLED:-false}
-OADP_NS=${OADP_NS:-openshift-adp}
+OADP_NS=${OADP_NS}
 GRAFANA_INSTALLED=${GRAFANA_INSTALLED:-false}
 COO_INSTALLED=${COO_INSTALLED:-false}
 DESCHEDULER_INSTALLED=${DESCHEDULER_INSTALLED:-false}

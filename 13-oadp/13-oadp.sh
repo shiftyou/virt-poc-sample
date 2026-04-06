@@ -29,12 +29,7 @@ if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
-# openshift-adp 가 있으면 우선 사용, 없으면 setup.sh 에서 감지한 OADP_NS 사용
-if oc get namespace "openshift-adp" &>/dev/null 2>&1; then
-    NS="openshift-adp"
-else
-    NS="${OADP_NS:-openshift-adp}"
-fi
+NS="${OADP_NS:-openshift-adp}"
 
 # 사용할 백엔드: minio | odf (preflight 에서 결정)
 BACKEND=""
@@ -509,7 +504,7 @@ EOF
 step_consoleyamlsamples() {
     print_step "10/10  ConsoleYAMLSample 등록"
 
-    cat > consoleyamlsample-dpa.yaml <<'EOF'
+    cat > consoleyamlsample-dpa.yaml <<EOF
 apiVersion: console.openshift.io/v1
 kind: ConsoleYAMLSample
 metadata:
@@ -525,7 +520,7 @@ spec:
     kind: DataProtectionApplication
     metadata:
       name: poc-dpa
-      namespace: openshift-adp
+      namespace: ${NS}
     spec:
       configuration:
         nodeAgent:
@@ -559,7 +554,7 @@ EOF
     oc apply -f consoleyamlsample-dpa.yaml
     print_ok "ConsoleYAMLSample poc-dataprotectionapplication 등록 완료"
 
-    cat > consoleyamlsample-backup.yaml <<'EOF'
+    cat > consoleyamlsample-backup.yaml <<EOF
 apiVersion: console.openshift.io/v1
 kind: ConsoleYAMLSample
 metadata:
@@ -575,7 +570,7 @@ spec:
     kind: Backup
     metadata:
       name: poc-oadp-backup
-      namespace: openshift-adp
+      namespace: ${NS}
     spec:
       includedNamespaces:
         - poc-oadp
@@ -586,7 +581,7 @@ EOF
     oc apply -f consoleyamlsample-backup.yaml
     print_ok "ConsoleYAMLSample poc-backup 등록 완료"
 
-    cat > consoleyamlsample-restore.yaml <<'EOF'
+    cat > consoleyamlsample-restore.yaml <<EOF
 apiVersion: console.openshift.io/v1
 kind: ConsoleYAMLSample
 metadata:
@@ -602,7 +597,7 @@ spec:
     kind: Restore
     metadata:
       name: poc-oadp-restore
-      namespace: openshift-adp
+      namespace: ${NS}
     spec:
       backupName: poc-oadp-backup
       includedNamespaces:
