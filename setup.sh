@@ -622,7 +622,8 @@ if [ "${OADP_INSTALLED:-false}" = "true" ]; then
         ask "MinIO API Endpoint" "${MINIO_ENDPOINT}" MINIO_ENDPOINT
         ask "MinIO Access Key"   "${MINIO_ACCESS_KEY}" MINIO_ACCESS_KEY
         ask "MinIO Secret Key"   "${MINIO_SECRET_KEY}" MINIO_SECRET_KEY "true"
-        ask "MinIO Bucket 이름"  "${MINIO_BUCKET}" MINIO_BUCKET
+        ask "OADP (Velero) 전용 S3 Bucket" "${OADP_S3_BUCKET:-velero}" OADP_S3_BUCKET
+        MINIO_BUCKET="${OADP_S3_BUCKET}"
         MINIO_FOUND=true
 
         # ODF도 있으면 추가 감지
@@ -630,20 +631,21 @@ if [ "${OADP_INSTALLED:-false}" = "true" ]; then
             auto_detect_odf
         else
             ODF_S3_ENDPOINT=""
-            ODF_S3_BUCKET="velero"
+            ODF_S3_BUCKET="${OADP_S3_BUCKET}"
             ODF_S3_REGION="localstorage"
             ODF_S3_ACCESS_KEY=""
             ODF_S3_SECRET_KEY=""
         fi
     else
         MINIO_ENDPOINT=""
-        MINIO_BUCKET="velero"
         MINIO_ACCESS_KEY=""
         MINIO_SECRET_KEY=""
         print_info "MinIO 미감지 → ODF(NooBaa MCG)를 OADP backend로 사용합니다."
         print_info "MinIO를 사용하려면 먼저 배포 후 setup.sh 재실행하세요 (13-oadp.md 참조)"
         if [ "${ODF_INSTALLED:-false}" = "true" ]; then
             auto_detect_odf
+            ask "OADP (Velero) 전용 S3 Bucket" "${OADP_S3_BUCKET:-velero}" OADP_S3_BUCKET
+            ODF_S3_BUCKET="${OADP_S3_BUCKET}"
         else
             print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
             ODF_S3_ENDPOINT=""
@@ -651,7 +653,9 @@ if [ "${OADP_INSTALLED:-false}" = "true" ]; then
             ODF_S3_REGION="localstorage"
             ODF_S3_ACCESS_KEY=""
             ODF_S3_SECRET_KEY=""
+            OADP_S3_BUCKET="${OADP_S3_BUCKET:-velero}"
         fi
+        MINIO_BUCKET="${OADP_S3_BUCKET:-velero}"
     fi
 else
     print_info "[12] OADP — OADP Operator 미설치, 건너뜁니다."
@@ -664,6 +668,21 @@ else
     ODF_S3_REGION="localstorage"
     ODF_S3_ACCESS_KEY=""
     ODF_S3_SECRET_KEY=""
+    OADP_S3_BUCKET="${OADP_S3_BUCKET:-velero}"
+fi
+
+# =============================================================================
+# [19] Logging — LokiStack S3 Bucket 설정 (OADP와 별도)
+# =============================================================================
+if [ "${LOKI_INSTALLED:-false}" = "true" ]; then
+    print_step_header "[19]" "Logging — LokiStack 전용 S3 Bucket 설정"
+    echo ""
+    print_info "LokiStack은 OADP(Velero)와 다른 버킷을 사용해야 합니다."
+    print_info "  OADP bucket : ${OADP_S3_BUCKET:-velero}"
+    echo ""
+    ask "Loki 전용 S3 Bucket" "${LOGGING_S3_BUCKET:-loki}" LOGGING_S3_BUCKET
+else
+    LOGGING_S3_BUCKET="${LOGGING_S3_BUCKET:-loki}"
 fi
 
 # =============================================================================
@@ -785,6 +804,10 @@ ODF_S3_BUCKET=${ODF_S3_BUCKET}
 ODF_S3_REGION=${ODF_S3_REGION}
 ODF_S3_ACCESS_KEY=${ODF_S3_ACCESS_KEY}
 ODF_S3_SECRET_KEY=${ODF_S3_SECRET_KEY}
+
+# 용도별 전용 버킷 (공유 endpoint, 별도 bucket)
+OADP_S3_BUCKET=${OADP_S3_BUCKET:-velero}
+LOGGING_S3_BUCKET=${LOGGING_S3_BUCKET:-loki}
 
 # 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
 VIRT_INSTALLED=${VIRT_INSTALLED:-false}
