@@ -98,7 +98,7 @@ preflight() {
     elif [ "${ODF_INSTALLED:-false}" = "true" ] && [ -n "${ODF_S3_ENDPOINT:-}" ]; then
         BACKEND="odf"
         S3_ENDPOINT="${ODF_S3_ENDPOINT}"
-        S3_BUCKET="${OADP_S3_BUCKET:-${ODF_S3_BUCKET:-velero}}"
+        S3_BUCKET="(OBC 자동 생성 — step_obc 에서 결정)"
         S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
         S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
         S3_REGION="${OADP_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"

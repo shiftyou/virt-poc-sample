@@ -644,7 +644,9 @@ if [ "${OADP_INSTALLED:-false}" = "true" ]; then
         print_info "MinIO를 사용하려면 먼저 배포 후 setup.sh 재실행하세요 (13-oadp.md 참조)"
         if [ "${ODF_INSTALLED:-false}" = "true" ]; then
             auto_detect_odf
-            ask "OADP (Velero) 전용 S3 Bucket" "${OADP_S3_BUCKET:-velero}" OADP_S3_BUCKET
+            print_info "ODF 백엔드: 버킷 이름은 ObjectBucketClaim(OBC)이 자동 생성합니다."
+            print_info "  → 13-oadp.sh 실행 시 'backups-xxxx' 형식으로 결정됩니다."
+            OADP_S3_BUCKET="(obc-auto)"
             ODF_S3_BUCKET="${OADP_S3_BUCKET}"
         else
             print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
