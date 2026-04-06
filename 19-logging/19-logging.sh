@@ -457,11 +457,21 @@ step_log_forwarder() {
             oc create serviceaccount collector -n "${LOGGING_NS}"
             print_ok "ServiceAccount collector 생성"
         fi
+        # 노드 로그 수집 권한
         for role in collect-application-logs collect-infrastructure-logs collect-audit-logs; do
             oc adm policy add-cluster-role-to-user "${role}" \
                 -z collector -n "${LOGGING_NS}" 2>/dev/null || true
         done
-        print_ok "collector ServiceAccount 권한 부여"
+        # LokiStack 쓰기 권한 (없으면 gateway에서 403 반환)
+        for role in \
+            cluster-logging-write-application-logs \
+            cluster-logging-write-infrastructure-logs \
+            cluster-logging-write-audit-logs \
+            logging-collector-logs-writer; do
+            oc adm policy add-cluster-role-to-user "${role}" \
+                -z collector -n "${LOGGING_NS}" 2>/dev/null || true
+        done
+        print_ok "collector ServiceAccount 권한 부여 (수집 + Loki 쓰기)"
 
         local output_section
         if [ "$HAS_LOKI" = "true" ]; then
