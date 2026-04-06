@@ -22,7 +22,6 @@ fi
 
 NS="poc-node-exporter"
 VM_NAME="poc-node-exporter-vm"
-SERVICE_YAML="${SCRIPT_DIR}/node-exporter-service.yaml"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -72,10 +71,6 @@ preflight() {
     fi
     print_ok "virtctl 확인"
 
-    if [ ! -f "$SERVICE_YAML" ]; then
-        print_error "Service YAML 파일을 찾을 수 없습니다: $SERVICE_YAML"
-        exit 1
-    fi
 }
 
 step_vm() {
@@ -115,7 +110,25 @@ step_apply_service() {
     oc label namespace "$NS" openshift.io/cluster-monitoring=true --overwrite 2>/dev/null || true
     print_ok "네임스페이스 모니터링 레이블 설정 완료"
 
-    oc apply -f "$SERVICE_YAML"
+    cat > ./vm-ne-svc.yaml <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter-service
+  namespace: ${NS}
+  labels:
+    monitor: metrics
+spec:
+  selector:
+    monitor: metrics
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+      protocol: TCP
+EOF
+    echo "생성된 파일: vm-ne-svc.yaml"
+    oc apply -f ./vm-ne-svc.yaml
     print_ok "node-exporter-service 적용 완료"
 }
 
