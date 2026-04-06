@@ -460,75 +460,86 @@ ask "poc-golden.qcow2 이미지 다운로드 URL" "http://krssa.ddns.net/vm-imag
 # =============================================================================
 print_step_header "[02]" "Network — NNCP / NAD / VM 생성"
 
-# NNCP 감지 및 선택
+# NNCP 감지 및 선택 — linux-bridge 타입만 검색
 NNCP_NAME="br-poc-nncp"
 _USE_EXISTING_NNCP=false
 
-_EXISTING_NNCPS=""
+# linux-bridge NNCP만 수집
+_LB_NNCPS=()
 if command -v oc &>/dev/null && oc whoami &>/dev/null 2>&1; then
-    _EXISTING_NNCPS=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep -v '^$' || true)
+    _ALL_NNCPS=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n' | grep -v '^$' || true)
+    for _n in $_ALL_NNCPS; do
+        _br_check=$(oc get nncp "$_n" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+            2>/dev/null || true)
+        [ -n "$_br_check" ] && _LB_NNCPS+=("$_n")
+    done
 fi
 
-if [ -n "$_EXISTING_NNCPS" ]; then
-    echo ""
-    print_info "현재 클러스터에 존재하는 NNCP 목록:"
-    echo ""
-    printf "  %-35s %-15s %-20s %s\n" "NNCP 이름" "타입" "Bridge 이름" "NIC"
-    echo "  ────────────────────────────────────────────────────────────────────────────"
-    for _nncp in $_EXISTING_NNCPS; do
-        _br=$(oc get nncp "$_nncp" \
+if [ ${#_LB_NNCPS[@]} -gt 0 ]; then
+    # linux-bridge NNCP가 1개인 경우 바로 확인 질문
+    if [ ${#_LB_NNCPS[@]} -eq 1 ]; then
+        _cand="${_LB_NNCPS[0]}"
+        _cand_br=$(oc get nncp "$_cand" \
             -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
             2>/dev/null || true)
-        if [ -n "$_br" ]; then
-            _nic=$(oc get nncp "$_nncp" \
-                -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
-                2>/dev/null || true)
-            printf "  %-35s %-15s %-20s %s\n" "$_nncp" "linux-bridge" "$_br" "${_nic:-N/A}"
-        else
-            _ovn_br=$(oc get nncp "$_nncp" \
-                -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
-                2>/dev/null || true)
-            if [ -n "$_ovn_br" ]; then
-                _ovn_net=$(oc get nncp "$_nncp" \
-                    -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].localnet}' \
-                    2>/dev/null || true)
-                printf "  %-35s %-15s %-20s %s\n" "$_nncp" "ovn-localnet" "$_ovn_br" "(localnet: ${_ovn_net:-N/A})"
-            else
-                printf "  %-35s %-15s %-20s %s\n" "$_nncp" "unknown" "-" "-"
-            fi
-        fi
-    done
-    echo ""
-    echo -n -e "${YELLOW}  기존 NNCP를 그대로 사용하시겠습니까? (Y/n): ${NC}"
-    read _use_existing
-    if [[ ! "${_use_existing:-}" =~ ^[Nn]$ ]]; then
-        _USE_EXISTING_NNCP=true
-        _NNCP_COUNT=$(echo "$_EXISTING_NNCPS" | wc -l | tr -d ' ')
-        _FIRST_NNCP=$(echo "$_EXISTING_NNCPS" | head -1)
-        if [ "$_NNCP_COUNT" -gt 1 ]; then
-            echo -n -e "${YELLOW}  사용할 NNCP 이름을 입력하세요 [기본값: ${_FIRST_NNCP}]: ${NC}"
-            read _sel_nncp
-            [ -z "$_sel_nncp" ] && _sel_nncp="$_FIRST_NNCP"
-        else
-            _sel_nncp="$_FIRST_NNCP"
-        fi
-        NNCP_NAME="$_sel_nncp"
-        # 선택된 NNCP에서 bridge 이름 및 NIC 추출
-        _sel_br=$(oc get nncp "$NNCP_NAME" \
-            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
-            2>/dev/null || true)
-        _sel_nic=$(oc get nncp "$NNCP_NAME" \
+        _cand_nic=$(oc get nncp "$_cand" \
             -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
             2>/dev/null || true)
-        if [ -z "$_sel_br" ]; then
-            _sel_br=$(oc get nncp "$NNCP_NAME" \
-                -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
-                2>/dev/null || true)
-            _sel_nic="br-ex"
+        echo ""
+        echo -n -e "${YELLOW}  검색된 ${_cand} (bridge: ${_cand_br}, NIC: ${_cand_nic:-N/A})을 사용하시겠습니까? (Y/n): ${NC}"
+        read _use_existing
+        if [[ ! "${_use_existing:-}" =~ ^[Nn]$ ]]; then
+            _USE_EXISTING_NNCP=true
+            NNCP_NAME="$_cand"
+            BRIDGE_NAME="${_cand_br:-br-poc}"
+            BRIDGE_INTERFACE="${_cand_nic:-${DETECTED_IFACE:-ens4}}"
+            print_ok "선택: ${NNCP_NAME}  (bridge: ${BRIDGE_NAME}, NIC: ${BRIDGE_INTERFACE})"
         fi
-        [ -n "$_sel_br" ]  && BRIDGE_NAME="$_sel_br"      || BRIDGE_NAME="${BRIDGE_NAME:-br-poc}"
-        [ -n "$_sel_nic" ] && BRIDGE_INTERFACE="$_sel_nic" || BRIDGE_INTERFACE="${DETECTED_IFACE:-ens4}"
-        print_ok "선택: ${NNCP_NAME}  (bridge: ${BRIDGE_NAME}, NIC: ${BRIDGE_INTERFACE})"
+    else
+        # linux-bridge NNCP가 여러 개인 경우 목록 표시 후 선택
+        echo ""
+        print_info "linux-bridge NNCP 목록:"
+        echo ""
+        printf "  %-4s %-35s %-20s %s\n" "번호" "NNCP 이름" "Bridge 이름" "NIC"
+        echo "  ────────────────────────────────────────────────────────────────────────────"
+        _idx=1
+        for _n in "${_LB_NNCPS[@]}"; do
+            _br=$(oc get nncp "$_n" \
+                -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+                2>/dev/null || true)
+            _nic=$(oc get nncp "$_n" \
+                -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
+                2>/dev/null || true)
+            printf "  %-4s %-35s %-20s %s\n" "${_idx})" "$_n" "${_br:-N/A}" "${_nic:-N/A}"
+            _idx=$((_idx + 1))
+        done
+        echo ""
+        _FIRST_LB="${_LB_NNCPS[0]}"
+        echo -n -e "${YELLOW}  사용할 NNCP 번호 또는 이름 [기본값: ${_FIRST_LB}]: ${NC}"
+        read _sel_input
+        if [ -z "$_sel_input" ]; then
+            _sel_nncp="$_FIRST_LB"
+        elif [[ "$_sel_input" =~ ^[0-9]+$ ]]; then
+            _sel_nncp="${_LB_NNCPS[$((_sel_input - 1))]:-$_FIRST_LB}"
+        else
+            _sel_nncp="$_sel_input"
+        fi
+        _sel_br=$(oc get nncp "$_sel_nncp" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
+            2>/dev/null || true)
+        _sel_nic=$(oc get nncp "$_sel_nncp" \
+            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.bridge.port[0].name}{end}' \
+            2>/dev/null || true)
+        echo -n -e "${YELLOW}  검색된 ${_sel_nncp} (bridge: ${_sel_br}, NIC: ${_sel_nic:-N/A})을 사용하시겠습니까? (Y/n): ${NC}"
+        read _use_existing
+        if [[ ! "${_use_existing:-}" =~ ^[Nn]$ ]]; then
+            _USE_EXISTING_NNCP=true
+            NNCP_NAME="$_sel_nncp"
+            BRIDGE_NAME="${_sel_br:-br-poc}"
+            BRIDGE_INTERFACE="${_sel_nic:-${DETECTED_IFACE:-ens4}}"
+            print_ok "선택: ${NNCP_NAME}  (bridge: ${BRIDGE_NAME}, NIC: ${BRIDGE_INTERFACE})"
+        fi
     fi
 fi
 
@@ -544,6 +555,14 @@ if [ "$_USE_EXISTING_NNCP" = "false" ]; then
     NNCP_NAME="${BRIDGE_NAME}-nncp"
     print_info "  NIC       : ${BRIDGE_INTERFACE}"
     print_info "  NNCP 이름 : ${NNCP_NAME}"
+    echo ""
+    echo -n -e "${YELLOW}  nncp-gen.sh를 실행하여 NNCP를 지금 생성하시겠습니까? (Y/n): ${NC}"
+    read _run_nncp_gen
+    if [[ ! "${_run_nncp_gen:-}" =~ ^[Nn]$ ]]; then
+        _SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        export BRIDGE_NAME BRIDGE_INTERFACE NNCP_NAME
+        bash "${_SETUP_DIR}/02-network/nncp-gen.sh" 1
+    fi
 fi
 
 echo ""
