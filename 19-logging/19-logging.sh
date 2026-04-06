@@ -240,7 +240,7 @@ step_namespace() {
         print_ok "네임스페이스 ${LOGGING_NS} 존재"
     else
         print_info "네임스페이스 ${LOGGING_NS} 생성..."
-        oc new-project "${LOGGING_NS}" >/dev/null 2>&1 || true
+        oc create namespace "${LOGGING_NS}" >/dev/null
         print_ok "네임스페이스 ${LOGGING_NS} 생성 완료"
     fi
 }
