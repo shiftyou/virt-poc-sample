@@ -159,74 +159,23 @@ NMEOF
 }
 
 # =============================================================================
-# 기존 NNCP 감지 — 있으면 재사용
-# =============================================================================
-detect_existing_nncp() {
-    local all_nncps
-    all_nncps=$(oc get nncp -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)
-    [ -z "$all_nncps" ] && return 1
-
-    # poc- 접두어 NNCP 만 재사용 대상으로 한정
-    # 시스템 NNCP(br-ex 등 클러스터 핵심 브리지)를 실수로 재사용하는 것을 방지
-    local candidates
-    candidates=$(echo "$all_nncps" | tr ' ' '\n' | grep -E '^poc-' || true)
-
-    local nncp
-    for nncp in $candidates; do
-        # linux-bridge 타입 확인
-        local bridge_name
-        bridge_name=$(oc get nncp "$nncp" \
-            -o jsonpath='{range .spec.desiredState.interfaces[?(@.type=="linux-bridge")]}{.name}{end}' \
-            2>/dev/null || true)
-        if [ -n "$bridge_name" ]; then
-            EXISTING_NNCP="$nncp"
-            EXISTING_BRIDGE="$bridge_name"
-            EXISTING_NNCP_TYPE="linux-bridge"
-            print_ok "기존 NNCP 발견: ${EXISTING_NNCP} (타입: linux-bridge, bridge: ${EXISTING_BRIDGE})"
-            return 0
-        fi
-
-        # OVN bridge-mappings 타입 확인
-        local ovn_bridge
-        ovn_bridge=$(oc get nncp "$nncp" \
-            -o jsonpath='{.spec.desiredState.ovn.bridge-mappings[0].bridge}' \
-            2>/dev/null || true)
-        if [ -n "$ovn_bridge" ]; then
-            EXISTING_NNCP="$nncp"
-            EXISTING_BRIDGE="$ovn_bridge"
-            EXISTING_NNCP_TYPE="ovn"
-            print_ok "기존 NNCP 발견: ${EXISTING_NNCP} (타입: ovn-localnet, bridge: ${EXISTING_BRIDGE})"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-# =============================================================================
-# NNCP — nncp-gen.sh 위임
+# NNCP 상태 확인
 # =============================================================================
 step_nncp() {
-    print_step "1/4  NNCP 확인"
+    print_step "1/4  NNCP 상태 확인"
 
-    if detect_existing_nncp; then
-        # 기존 NNCP 재사용 — bridge 이름을 덮어씌움
-        BRIDGE_NAME="${EXISTING_BRIDGE}"
-        NNCP_NAME="${EXISTING_NNCP}"
-        print_info "NNCP 생성 스킵 — 기존 NNCP(${NNCP_NAME})를 사용합니다. (bridge: ${BRIDGE_NAME})"
-        return
+    if ! oc get nncp "${NNCP_NAME}" &>/dev/null; then
+        print_warn "NNCP '${NNCP_NAME}'이 클러스터에 없습니다."
+        print_warn "  setup.sh 또는 nncp-gen.sh를 먼저 실행하세요."
+        exit 1
     fi
 
-    echo ""
-    print_info "NNCP를 새로 생성합니다. (nncp-gen.sh 실행)"
-    print_info "  NNCP_NAME       : ${NNCP_NAME}"
-    print_info "  BRIDGE_NAME     : ${BRIDGE_NAME}"
-    print_info "  BRIDGE_INTERFACE: ${BRIDGE_INTERFACE}"
-    read -r -p "nncp-gen.sh를 실행하여 NNCP를 생성하시겠습니까? [y/N]: " _nncp_confirm
-    [[ "$_nncp_confirm" != "y" && "$_nncp_confirm" != "Y" ]] && { print_warn "취소되었습니다."; exit 0; }
-
-    export BRIDGE_NAME BRIDGE_INTERFACE NNCP_NAME VLAN_ID
-    "${SCRIPT_DIR}/nncp-gen.sh" "$NET_TYPE"
+    local avail
+    avail=$(oc get nncp "${NNCP_NAME}" \
+        -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
+    print_ok "NNCP ${NNCP_NAME}  (bridge: ${BRIDGE_NAME}, NIC: ${BRIDGE_INTERFACE}, Available: ${avail:-Unknown})"
+    oc get nnce 2>/dev/null | grep "${NNCP_NAME}" | \
+        awk '{printf "    %-40s %s\n", $1, $2}' || true
 }
 
 # =============================================================================
