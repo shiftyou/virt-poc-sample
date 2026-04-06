@@ -580,11 +580,15 @@ step_console_plugin() {
         return
     fi
 
+    # /spec/plugins 배열이 없으면 json patch add가 실패하므로 먼저 초기화
+    if ! oc get console.operator.openshift.io cluster \
+            -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q '\['; then
+        oc patch console.operator.openshift.io cluster --type=merge \
+            -p '{"spec":{"plugins":[]}}' 2>/dev/null || true
+    fi
+    # 기존 목록에 append (덮어쓰지 않음)
     oc patch console.operator.openshift.io cluster --type=json \
-        -p '[{"op":"add","path":"/spec/plugins/-","value":"logging-view-plugin"}]' \
-        2>/dev/null || \
-    oc patch console.operator.openshift.io cluster --type=merge \
-        -p '{"spec":{"plugins":["logging-view-plugin"]}}'
+        -p '[{"op":"add","path":"/spec/plugins/-","value":"logging-view-plugin"}]'
 
     print_ok "logging-view-plugin 활성화 완료"
     print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
