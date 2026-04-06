@@ -649,13 +649,17 @@ if [ "${OADP_INSTALLED:-false}" = "true" ]; then
             OADP_S3_BUCKET="(obc-auto)"
             ODF_S3_BUCKET="${OADP_S3_BUCKET}"
         else
-            print_warn "ODF Operator도 미설치 — OADP backend 설정을 건너뜁니다."
-            ODF_S3_ENDPOINT=""
-            ODF_S3_BUCKET="velero"
-            ODF_S3_REGION="localstorage"
-            ODF_S3_ACCESS_KEY=""
-            ODF_S3_SECRET_KEY=""
-            OADP_S3_BUCKET="${OADP_S3_BUCKET:-velero}"
+            print_warn "MinIO/ODF 미감지 — 커스텀 S3 정보를 직접 입력하세요."
+            ask "OADP S3 Endpoint"   "${OADP_S3_ENDPOINT:-}"         OADP_S3_ENDPOINT
+            ask "OADP S3 Access Key" "${OADP_S3_ACCESS_KEY:-}"       OADP_S3_ACCESS_KEY
+            ask "OADP S3 Secret Key" "${OADP_S3_SECRET_KEY:-}"       OADP_S3_SECRET_KEY "true"
+            ask "OADP S3 Region"     "${OADP_S3_REGION:-us-east-1}"  OADP_S3_REGION
+            ask "OADP S3 Bucket"     "${OADP_S3_BUCKET:-velero}"     OADP_S3_BUCKET
+            ODF_S3_ENDPOINT="${OADP_S3_ENDPOINT}"
+            ODF_S3_BUCKET="${OADP_S3_BUCKET}"
+            ODF_S3_REGION="${OADP_S3_REGION}"
+            ODF_S3_ACCESS_KEY="${OADP_S3_ACCESS_KEY}"
+            ODF_S3_SECRET_KEY="${OADP_S3_SECRET_KEY}"
         fi
         MINIO_BUCKET="${OADP_S3_BUCKET:-velero}"
     fi
@@ -677,14 +681,51 @@ fi
 # [19] Logging — LokiStack S3 Bucket 설정 (OADP와 별도)
 # =============================================================================
 if [ "${LOKI_INSTALLED:-false}" = "true" ]; then
-    print_step_header "[19]" "Logging — LokiStack 전용 S3 Bucket 설정"
+    print_step_header "[19]" "Logging — LokiStack 전용 S3 설정"
     echo ""
     print_info "LokiStack은 OADP(Velero)와 다른 버킷을 사용해야 합니다."
-    print_info "  OADP bucket : ${OADP_S3_BUCKET:-velero}"
     echo ""
+
+    # 공유 가능한 endpoint 감지 (MinIO 또는 ODF 또는 커스텀 OADP)
+    local _shared_ep=""
+    if [ -n "${MINIO_ENDPOINT:-}" ]; then
+        _shared_ep="${MINIO_ENDPOINT}"
+    elif [ -n "${ODF_S3_ENDPOINT:-}" ]; then
+        _shared_ep="${ODF_S3_ENDPOINT}"
+    elif [ -n "${OADP_S3_ENDPOINT:-}" ]; then
+        _shared_ep="${OADP_S3_ENDPOINT}"
+    fi
+
+    if [ -n "$_shared_ep" ]; then
+        print_info "감지된 S3 Endpoint: ${_shared_ep}"
+        read -r -p "  Loki도 같은 S3를 사용하시겠습니까? (Y/n): " _reuse
+        if [[ ! "${_reuse:-}" =~ ^[Nn]$ ]]; then
+            LOGGING_S3_ENDPOINT="${_shared_ep}"
+            LOGGING_S3_ACCESS_KEY="${MINIO_ACCESS_KEY:-${ODF_S3_ACCESS_KEY:-${OADP_S3_ACCESS_KEY:-}}}"
+            LOGGING_S3_SECRET_KEY="${MINIO_SECRET_KEY:-${ODF_S3_SECRET_KEY:-${OADP_S3_SECRET_KEY:-}}}"
+            LOGGING_S3_REGION="${LOGGING_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"
+            print_ok "Logging S3 endpoint/credentials 공유"
+        else
+            ask "Logging S3 Endpoint"   "${LOGGING_S3_ENDPOINT:-}"        LOGGING_S3_ENDPOINT
+            ask "Logging S3 Access Key" "${LOGGING_S3_ACCESS_KEY:-}"      LOGGING_S3_ACCESS_KEY
+            ask "Logging S3 Secret Key" "${LOGGING_S3_SECRET_KEY:-}"      LOGGING_S3_SECRET_KEY "true"
+            ask "Logging S3 Region"     "${LOGGING_S3_REGION:-us-east-1}" LOGGING_S3_REGION
+        fi
+    else
+        print_warn "S3 자동 감지 실패 — Logging 전용 S3 정보를 입력하세요."
+        ask "Logging S3 Endpoint"   "${LOGGING_S3_ENDPOINT:-}"        LOGGING_S3_ENDPOINT
+        ask "Logging S3 Access Key" "${LOGGING_S3_ACCESS_KEY:-}"      LOGGING_S3_ACCESS_KEY
+        ask "Logging S3 Secret Key" "${LOGGING_S3_SECRET_KEY:-}"      LOGGING_S3_SECRET_KEY "true"
+        ask "Logging S3 Region"     "${LOGGING_S3_REGION:-us-east-1}" LOGGING_S3_REGION
+    fi
+
     ask "Loki 전용 S3 Bucket" "${LOGGING_S3_BUCKET:-loki}" LOGGING_S3_BUCKET
 else
     LOGGING_S3_BUCKET="${LOGGING_S3_BUCKET:-loki}"
+    LOGGING_S3_ENDPOINT="${LOGGING_S3_ENDPOINT:-}"
+    LOGGING_S3_ACCESS_KEY="${LOGGING_S3_ACCESS_KEY:-}"
+    LOGGING_S3_SECRET_KEY="${LOGGING_S3_SECRET_KEY:-}"
+    LOGGING_S3_REGION="${LOGGING_S3_REGION:-us-east-1}"
 fi
 
 # =============================================================================
@@ -807,8 +848,18 @@ ODF_S3_REGION=${ODF_S3_REGION}
 ODF_S3_ACCESS_KEY=${ODF_S3_ACCESS_KEY}
 ODF_S3_SECRET_KEY=${ODF_S3_SECRET_KEY}
 
-# 용도별 전용 버킷 (공유 endpoint, 별도 bucket)
+# OADP 전용 S3 (커스텀 S3 사용 시)
+OADP_S3_ENDPOINT=${OADP_S3_ENDPOINT:-}
+OADP_S3_ACCESS_KEY=${OADP_S3_ACCESS_KEY:-}
+OADP_S3_SECRET_KEY=${OADP_S3_SECRET_KEY:-}
+OADP_S3_REGION=${OADP_S3_REGION:-us-east-1}
 OADP_S3_BUCKET=${OADP_S3_BUCKET:-velero}
+
+# Logging (Loki) 전용 S3
+LOGGING_S3_ENDPOINT=${LOGGING_S3_ENDPOINT:-}
+LOGGING_S3_ACCESS_KEY=${LOGGING_S3_ACCESS_KEY:-}
+LOGGING_S3_SECRET_KEY=${LOGGING_S3_SECRET_KEY:-}
+LOGGING_S3_REGION=${LOGGING_S3_REGION:-us-east-1}
 LOGGING_S3_BUCKET=${LOGGING_S3_BUCKET:-loki}
 
 # 오퍼레이터 설치 여부 (setup.sh 실행 시 자동 감지)
