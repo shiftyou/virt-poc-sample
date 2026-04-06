@@ -687,7 +687,7 @@ if [ "${LOKI_INSTALLED:-false}" = "true" ]; then
     echo ""
 
     # 공유 가능한 endpoint 감지 (MinIO 또는 ODF 또는 커스텀 OADP)
-    local _shared_ep=""
+    _shared_ep=""
     if [ -n "${MINIO_ENDPOINT:-}" ]; then
         _shared_ep="${MINIO_ENDPOINT}"
     elif [ -n "${ODF_S3_ENDPOINT:-}" ]; then
