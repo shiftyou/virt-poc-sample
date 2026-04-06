@@ -183,7 +183,7 @@ step_grafana() {
     if oc get grafana poc-grafana -n "$NS" &>/dev/null; then
         print_ok "Grafana poc-grafana 이미 존재 — 스킵"
     else
-        cat > /tmp/poc-grafana.yaml <<EOF
+        cat > ./poc-grafana.yaml <<EOF
 apiVersion: grafana.integreatly.org/v1beta1
 kind: Grafana
 metadata:
@@ -201,7 +201,7 @@ spec:
       admin_user: admin
       admin_password: ${grafana_pass}
 EOF
-        oc apply -f /tmp/poc-grafana.yaml
+        oc apply -f ./poc-grafana.yaml
         print_ok "Grafana poc-grafana 배포 완료 (admin 비밀번호: ${grafana_pass})"
     fi
 
@@ -227,7 +227,7 @@ EOF
     if oc get route poc-grafana-route -n "$NS" &>/dev/null; then
         print_ok "Route poc-grafana-route 이미 존재 — 스킵"
     else
-        cat > /tmp/poc-grafana-route.yaml <<EOF
+        cat > ./poc-grafana-route.yaml <<EOF
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -245,7 +245,7 @@ spec:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
 EOF
-        oc apply -f /tmp/poc-grafana-route.yaml
+        oc apply -f ./poc-grafana-route.yaml
         print_ok "Route poc-grafana-route 생성 완료"
     fi
 
@@ -272,7 +272,7 @@ EOF
 
     # Grafana SA에 cluster-monitoring-view 권한 부여 (oc apply — 멱등)
     print_info "Prometheus 접근 권한 설정 중..."
-    cat > /tmp/grafana-monitoring-crb.yaml <<EOF
+    cat > ./grafana-monitoring-crb.yaml <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -286,7 +286,7 @@ roleRef:
   name: cluster-monitoring-view
   apiGroup: rbac.authorization.k8s.io
 EOF
-    oc apply --server-side -f /tmp/grafana-monitoring-crb.yaml
+    oc apply --server-side -f ./grafana-monitoring-crb.yaml
     print_ok "cluster-monitoring-view ClusterRoleBinding 적용 완료"
 }
 
@@ -317,7 +317,7 @@ step_datasource() {
         return
     fi
 
-    cat > /tmp/prometheus-datasource.yaml <<EOF
+    cat > ./prometheus-datasource.yaml <<EOF
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
 metadata:
@@ -340,7 +340,7 @@ spec:
     secureJsonData:
       httpHeaderValue1: Bearer ${TOKEN}
 EOF
-    oc apply -f /tmp/prometheus-datasource.yaml
+    oc apply -f ./prometheus-datasource.yaml
     print_ok "Prometheus DataSource 연동 완료"
 }
 
@@ -358,7 +358,7 @@ step_dashboard() {
     fi
 
     # Dashboard JSON ($-확장 방지: single-quoted heredoc 사용)
-    cat > /tmp/poc-vm-dashboard.json << 'DASHBOARD_EOF'
+    cat > ./poc-vm-dashboard.json << 'DASHBOARD_EOF'
 {
   "annotations": {
     "list": [
@@ -965,10 +965,10 @@ DASHBOARD_EOF
         printf '    matchLabels:\n'
         printf '      dashboards: poc-grafana\n'
         printf '  json: |\n'
-        sed 's/^/    /' /tmp/poc-vm-dashboard.json
-    } > /tmp/poc-vm-dashboard.yaml
+        sed 's/^/    /' ./poc-vm-dashboard.json
+    } > ./poc-vm-dashboard.yaml
 
-    oc create -f /tmp/poc-vm-dashboard.yaml
+    oc create -f ./poc-vm-dashboard.yaml
     print_ok "GrafanaDashboard poc-vm-overview 배포 완료"
 
     # Grafana Operator 동기화 대기 (최대 90초)
@@ -1014,8 +1014,8 @@ step_vm() {
     if oc get vm "$VM_NAME" -n "$NS" &>/dev/null; then
         print_ok "VM $VM_NAME 이미 존재 — 스킵"
     else
-        oc process -n openshift poc -p NAME="$VM_NAME" > /tmp/${VM_NAME}.yaml
-        oc apply -n "$NS" -f /tmp/${VM_NAME}.yaml
+        oc process -n openshift poc -p NAME="$VM_NAME" > ./${VM_NAME}.yaml
+        oc apply -n "$NS" -f ./${VM_NAME}.yaml
         print_ok "VM $VM_NAME 생성 완료"
     fi
 
@@ -1037,7 +1037,7 @@ step_vm() {
     if oc get svc poc-monitoring-node-exporter -n "$NS" &>/dev/null; then
         print_ok "Service poc-monitoring-node-exporter 이미 존재 — 스킵"
     else
-        cat > /tmp/poc-monitoring-vm-service.yaml <<EOF
+        cat > ./poc-monitoring-vm-service.yaml <<EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -1056,7 +1056,7 @@ spec:
     monitor: metrics
   type: ClusterIP
 EOF
-        oc apply -f /tmp/poc-monitoring-vm-service.yaml
+        oc apply -f ./poc-monitoring-vm-service.yaml
         print_ok "Service poc-monitoring-node-exporter 생성 완료"
     fi
 
@@ -1068,7 +1068,7 @@ EOF
     if oc get servicemonitor poc-vm-node-exporter-console -n "$NS" &>/dev/null; then
         print_ok "ServiceMonitor poc-vm-node-exporter-console 이미 존재 — 스킵"
     else
-        cat > /tmp/poc-vm-servicemonitor-console.yaml <<EOF
+        cat > ./poc-vm-servicemonitor-console.yaml <<EOF
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -1090,7 +1090,7 @@ spec:
         - sourceLabels: [__meta_kubernetes_endpoint_hostname]
           targetLabel: vmname
 EOF
-        oc apply -f /tmp/poc-vm-servicemonitor-console.yaml
+        oc apply -f ./poc-vm-servicemonitor-console.yaml
         print_ok "ServiceMonitor poc-vm-node-exporter-console 생성 완료 (OpenShift Console 용)"
     fi
 
@@ -1118,7 +1118,7 @@ step_coo() {
     if oc get monitoringstack poc-monitoring-stack -n "$NS" &>/dev/null; then
         print_ok "MonitoringStack poc-monitoring-stack 이미 존재 — 스킵"
     else
-        cat > /tmp/poc-monitoring-stack.yaml <<EOF
+        cat > ./poc-monitoring-stack.yaml <<EOF
 apiVersion: monitoring.rhobs/v1alpha1
 kind: MonitoringStack
 metadata:
@@ -1142,7 +1142,7 @@ spec:
   alertmanagerConfig:
     enabled: true
 EOF
-        oc apply -f /tmp/poc-monitoring-stack.yaml
+        oc apply -f ./poc-monitoring-stack.yaml
         print_ok "MonitoringStack poc-monitoring-stack 배포 완료"
     fi
 
@@ -1151,7 +1151,7 @@ EOF
         if oc get servicemonitor.monitoring.rhobs poc-vm-node-exporter -n "$NS" &>/dev/null; then
             print_ok "ServiceMonitor poc-vm-node-exporter 이미 존재 — 스킵"
         else
-            cat > /tmp/poc-vm-servicemonitor-coo.yaml <<EOF
+            cat > ./poc-vm-servicemonitor-coo.yaml <<EOF
 apiVersion: monitoring.rhobs/v1
 kind: ServiceMonitor
 metadata:
@@ -1173,7 +1173,7 @@ spec:
         - sourceLabels: [__meta_kubernetes_endpoint_hostname]
           targetLabel: vmname
 EOF
-            oc apply -f /tmp/poc-vm-servicemonitor-coo.yaml
+            oc apply -f ./poc-vm-servicemonitor-coo.yaml
             print_ok "ServiceMonitor poc-vm-node-exporter 생성 완료 (COO 전용)"
         fi
     fi
@@ -1182,7 +1182,7 @@ EOF
     if oc get prometheusrule poc-vm-alerts -n "$NS" &>/dev/null; then
         print_ok "PrometheusRule poc-vm-alerts 이미 존재 — 스킵"
     else
-        cat > /tmp/poc-vm-alerts.yaml <<EOF
+        cat > ./poc-vm-alerts.yaml <<EOF
 apiVersion: monitoring.rhobs/v1
 kind: PrometheusRule
 metadata:
@@ -1214,7 +1214,7 @@ spec:
             summary: "VM 메모리 사용률 90% 초과"
             description: "VM {{ \$labels.name }} 의 메모리 사용률이 높습니다."
 EOF
-        oc apply -f /tmp/poc-vm-alerts.yaml
+        oc apply -f ./poc-vm-alerts.yaml
         print_ok "PrometheusRule poc-vm-alerts 생성 완료"
     fi
 
@@ -1235,7 +1235,7 @@ EOF
                 monitor=metrics --overwrite 2>/dev/null || true
 
             # Headless Service — 각 파드에서 node_exporter(9100) 직접 수집
-            cat > /tmp/vm-ne-svc.yaml <<EOF
+            cat > ./vm-ne-svc.yaml <<EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -1253,10 +1253,10 @@ spec:
   selector:
     monitor: metrics
 EOF
-            oc apply -f /tmp/vm-ne-svc.yaml
+            oc apply -f ./vm-ne-svc.yaml
 
             # ServiceMonitor (monitoring.rhobs/v1 — COO 전용)
-            cat > /tmp/vm-ne-sm.yaml <<EOF
+            cat > ./vm-ne-sm.yaml <<EOF
 apiVersion: monitoring.rhobs/v1
 kind: ServiceMonitor
 metadata:
@@ -1280,7 +1280,7 @@ spec:
         - targetLabel: vm_namespace
           replacement: ${vmi_ns}
 EOF
-            oc apply -f /tmp/vm-ne-sm.yaml
+            oc apply -f ./vm-ne-sm.yaml
 
             print_ok "  [${vmi_ns}] Service + ServiceMonitor 완료"
         done <<< "$vmi_ns_list"
@@ -1292,7 +1292,7 @@ EOF
         if oc get grafanadatasource coo-prometheus-datasource -n "$NS" &>/dev/null; then
             print_ok "GrafanaDatasource coo-prometheus-datasource 이미 존재 — 스킵"
         else
-            cat > /tmp/coo-prometheus-datasource.yaml <<EOF
+            cat > ./coo-prometheus-datasource.yaml <<EOF
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
 metadata:
@@ -1311,7 +1311,7 @@ spec:
     jsonData:
       timeInterval: 5s
 EOF
-            oc apply -f /tmp/coo-prometheus-datasource.yaml
+            oc apply -f ./coo-prometheus-datasource.yaml
             print_ok "GrafanaDatasource coo-prometheus-datasource 등록 완료"
         fi
     fi
@@ -1347,7 +1347,7 @@ step_coo_dashboard() {
         sleep 2
     fi
 
-    cat > /tmp/poc-vm-node-exporter-dashboard.json << 'NEDASHEOF'
+    cat > ./poc-vm-node-exporter-dashboard.json << 'NEDASHEOF'
 {
   "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": true, "hide": true, "iconColor": "rgba(0,211,255,1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
   "description": "VM 내부 OS 메트릭 (node_exporter) — COO-Prometheus 기반",
@@ -1829,10 +1829,10 @@ NEDASHEOF
         printf '    matchLabels:\n'
         printf '      dashboards: poc-grafana\n'
         printf '  json: |\n'
-        sed 's/^/    /' /tmp/poc-vm-node-exporter-dashboard.json
-    } > /tmp/poc-vm-node-exporter-dashboard.yaml
+        sed 's/^/    /' ./poc-vm-node-exporter-dashboard.json
+    } > ./poc-vm-node-exporter-dashboard.yaml
 
-    oc create -f /tmp/poc-vm-node-exporter-dashboard.yaml
+    oc create -f ./poc-vm-node-exporter-dashboard.yaml
     print_ok "GrafanaDashboard poc-vm-node-exporter 배포 완료"
     print_info "  대시보드: Grafana → Dashboards → VM OS 메트릭 (node_exporter / COO)"
 }
@@ -1889,6 +1889,16 @@ print_summary() {
     echo ""
 }
 
+# =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 11-monitoring 리소스 삭제"
+    oc delete project poc-monitoring --ignore-not-found 2>/dev/null || true
+    oc delete clusterrolebinding grafana-cluster-monitoring-view --ignore-not-found 2>/dev/null || true
+    print_ok "11-monitoring 리소스 삭제 완료"
+}
+
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1906,4 +1916,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

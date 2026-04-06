@@ -308,6 +308,16 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 06-resource-quota 리소스 삭제"
+    oc delete project poc-resource-quota --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-resource-quota --ignore-not-found 2>/dev/null || true
+    print_ok "06-resource-quota 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -324,4 +334,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

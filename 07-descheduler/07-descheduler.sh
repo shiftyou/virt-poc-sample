@@ -471,6 +471,17 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 07-descheduler 리소스 삭제"
+    oc delete project poc-descheduler --ignore-not-found 2>/dev/null || true
+    oc delete kubedescheduler cluster -n openshift-kube-descheduler-operator --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-kubedescheduler --ignore-not-found 2>/dev/null || true
+    print_ok "07-descheduler 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -488,4 +499,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

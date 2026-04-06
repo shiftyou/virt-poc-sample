@@ -51,6 +51,7 @@ if [ -z "$ARG1" ]; then
     echo -e "    ${CYAN}./make.sh 7${NC}            07 단계만 실행"
     echo -e "    ${CYAN}./make.sh from 7${NC}       07 단계부터 끝까지 실행"
     echo -e "    ${CYAN}./make.sh clean${NC}        poc- 네임스페이스 전체 삭제"
+    echo -e "    ${CYAN}./make.sh cleanup${NC}      전체 --cleanup 실행"
     echo ""
     exit 0
 fi
@@ -114,6 +115,56 @@ if [ "$ARG1" = "clean" ]; then
     done
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}  모든 poc- 네임스페이스 삭제 완료!${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    exit 0
+fi
+
+# =============================================================================
+# cleanup 서브커맨드
+# =============================================================================
+if [ "$ARG1" = "cleanup" ]; then
+    if ! oc whoami &>/dev/null; then
+        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        exit 1
+    fi
+
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        source "$ENV_FILE"
+        set +a
+    fi
+
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  make.sh cleanup — 모든 단계의 --cleanup 을 실행합니다${NC}"
+    echo -e "${YELLOW}  각 스크립트가 생성한 리소스를 역순으로 삭제합니다.${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -n -e "${YELLOW}  정말 실행하시겠습니까? (y/N): ${NC}"
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_info "취소했습니다."
+        exit 0
+    fi
+
+    echo ""
+    CLEANUP_STEPS=()
+    while IFS= read -r dir; do
+        CLEANUP_STEPS+=("$(basename "$dir")")
+    done < <(find "$SCRIPT_DIR" -maxdepth 1 -type d -name '[0-9][0-9]-*' | grep -v '/00-' | sort)
+
+    for dir_name in "${CLEANUP_STEPS[@]}"; do
+        script="${SCRIPT_DIR}/${dir_name}/${dir_name}.sh"
+        if [ -f "$script" ]; then
+            print_info "--cleanup: ${dir_name}"
+            bash "$script" --cleanup || true
+        fi
+    done
+
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}  전체 --cleanup 완료!${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     exit 0
@@ -203,7 +254,7 @@ done
 step_desc() {
     case "$1" in
         01-template)         echo "DataVolume 업로드 → DataSource → Template 등록" ;;
-        02-network)          echo "NNCP Linux Bridge + NAD + VM 생성" ;;
+        02-network)          echo "NNCP Linux Bridge (${BRIDGE_NAME:-br-poc}) + NAD + VM 생성" ;;
         03-vm-management)    echo "네임스페이스 + NAD 준비" ;;
         04-multitenancy)     echo "멀티 테넌트 — 네임스페이스·사용자·RBAC·VM" ;;
         05-network-policy)   echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;

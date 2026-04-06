@@ -677,6 +677,18 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 05-network-policy 리소스 삭제"
+    oc delete project poc-network-policy-1 poc-network-policy-2 --ignore-not-found 2>/dev/null || true
+    oc delete project poc-multi-network-policy-1 poc-multi-network-policy-2 --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-netpol-deny-all poc-netpol-allow-same-ns --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-multi-netpol-deny-all poc-multi-netpol-allow-same-ns --ignore-not-found 2>/dev/null || true
+    print_ok "05-network-policy 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -702,4 +714,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

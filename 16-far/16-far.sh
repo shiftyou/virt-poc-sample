@@ -252,6 +252,19 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 16-far 리소스 삭제"
+    local _rem_ns="openshift-workload-availability"
+    oc delete project poc-far --ignore-not-found 2>/dev/null || true
+    oc delete nodehealthcheck poc-far-nhc --ignore-not-found 2>/dev/null || true
+    oc delete fenceagentsremediationtemplate poc-far-template -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
+    oc delete secret poc-far-credentials -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
+    print_ok "16-far 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -268,4 +281,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

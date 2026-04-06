@@ -232,6 +232,18 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 15-snr 리소스 삭제"
+    local _rem_ns="openshift-workload-availability"
+    oc delete project poc-snr --ignore-not-found 2>/dev/null || true
+    oc delete nodehealthcheck poc-snr-nhc --ignore-not-found 2>/dev/null || true
+    oc delete selfnoderemediationtemplate poc-snr-template -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
+    print_ok "15-snr 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -248,4 +260,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

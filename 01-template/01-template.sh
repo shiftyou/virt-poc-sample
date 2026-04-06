@@ -362,6 +362,19 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 01-template 리소스 삭제"
+    oc delete template poc -n openshift --ignore-not-found 2>/dev/null || true
+    oc delete datasource "${DV_NAME}" -n "${TARGET_NS}" --ignore-not-found 2>/dev/null || true
+    oc delete dv "${DV_NAME}" -n "${TARGET_NS}" --ignore-not-found 2>/dev/null || true
+    oc delete pvc "${DV_NAME}" -n "${TARGET_NS}" --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-datasource --ignore-not-found 2>/dev/null || true
+    print_ok "01-template 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -379,4 +392,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main "${1:-}"

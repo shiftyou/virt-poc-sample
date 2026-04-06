@@ -255,6 +255,15 @@ print_summary() {
     echo ""
 }
 
+# =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 09-alert 리소스 삭제"
+    oc delete project poc-alert --ignore-not-found 2>/dev/null || true
+    print_ok "09-alert 리소스 삭제 완료"
+}
+
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -269,4 +278,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

@@ -408,6 +408,19 @@ echo -e "${CYAN}  virt-poc-sample setup.sh${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# OpenShift 클러스터 로그인 확인
+if ! command -v oc &>/dev/null; then
+    print_error "oc 명령어를 찾을 수 없습니다. OpenShift CLI를 설치하세요."
+    exit 1
+fi
+if ! oc whoami &>/dev/null; then
+    print_error "OpenShift 클러스터에 로그인되어 있지 않습니다."
+    print_info "먼저 'oc login' 으로 클러스터에 로그인하세요."
+    exit 1
+fi
+print_ok "클러스터 접속 확인: $(oc whoami) @ $(oc whoami --show-server 2>/dev/null)"
+echo ""
+
 # 기존 env.conf 확인
 if [ -f "$ENV_FILE" ]; then
     print_warn "기존 env.conf 파일이 존재합니다."
@@ -531,9 +544,6 @@ if [ "$_USE_EXISTING_NNCP" = "false" ]; then
     ask "생성할 Linux Bridge 이름" "br-poc" BRIDGE_NAME
 fi
 
-echo ""
-print_info "VLAN ID는 02-network 방식 3(Linux Bridge + VLAN) 또는 4(OVN Localnet + VLAN) 선택 시 사용됩니다."
-ask "VLAN ID (VLAN filtering / OVN Localnet + VLAN 사용 시)" "100" VLAN_ID
 echo ""
 print_info "SECONDARY_IP_PREFIX: secondary NIC(eth1) cloud-init 정적 IP 할당 시 사용하는 네트워크 프리픽스입니다."
 print_info "  예) 192.168.100 → 02-network VM: .21, .22 / 03-vm: .31 / 05-network-policy: .51, .52"
@@ -664,12 +674,21 @@ ask "테스트용 단일 노드 이름" "${FIRST_WORKER:-worker-0}" TEST_NODE
 # =============================================================================
 if [ "${FAR_INSTALLED:-false}" = "true" ]; then
     print_step_header "[15]" "FAR — Fence Agents Remediation (IPMI/BMC)"
-    ask "IPMI/BMC IP 주소" "192.168.1.100" FENCE_AGENT_IP
     ask "IPMI 사용자 이름" "admin" FENCE_AGENT_USER
     ask "IPMI 비밀번호" "password" FENCE_AGENT_PASS "true"
+    echo ""
+    print_info "워커 노드별 IPMI/BMC IP 주소를 입력하세요."
+    FENCE_AGENT_IPS=""
+    _ipmi_idx=1
+    for _node in ${WORKER_NODES}; do
+        ask "  ${_node} IPMI/BMC IP" "192.168.1.${_ipmi_idx}" _node_ipmi_ip
+        FENCE_AGENT_IPS="${FENCE_AGENT_IPS:+${FENCE_AGENT_IPS} }${_node_ipmi_ip}"
+        _ipmi_idx=$((_ipmi_idx + 1))
+    done
+    print_ok "IPMI IP 목록: ${FENCE_AGENT_IPS}"
 else
     print_info "[15] FAR — FAR Operator 미설치, 건너뜁니다."
-    FENCE_AGENT_IP="192.168.1.100"
+    FENCE_AGENT_IPS=""
     FENCE_AGENT_USER="admin"
     FENCE_AGENT_PASS="password"
 fi
@@ -694,7 +713,6 @@ CLUSTER_API=${CLUSTER_API}
 NNCP_NAME=${NNCP_NAME}
 BRIDGE_INTERFACE=${BRIDGE_INTERFACE}
 BRIDGE_NAME=${BRIDGE_NAME}
-VLAN_ID=${VLAN_ID}
 SECONDARY_IP_PREFIX=${SECONDARY_IP_PREFIX}
 
 # 스토리지클래스
@@ -715,7 +733,7 @@ CONSOLE_ALLOWED_CIDRS=${CONSOLE_ALLOWED_CIDRS}
 API_ALLOWED_CIDRS=${API_ALLOWED_CIDRS}
 
 # Fence Agents Remediation
-FENCE_AGENT_IP=${FENCE_AGENT_IP}
+FENCE_AGENT_IPS="${FENCE_AGENT_IPS}"
 FENCE_AGENT_USER=${FENCE_AGENT_USER}
 FENCE_AGENT_PASS=${FENCE_AGENT_PASS}
 

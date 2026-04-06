@@ -363,6 +363,16 @@ print_summary() {
 }
 
 # =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 03-vm-management 리소스 삭제"
+    oc delete project poc-vm --ignore-not-found 2>/dev/null || true
+    oc delete consoleyamlsample poc-virtualmachine --ignore-not-found 2>/dev/null || true
+    print_ok "03-vm-management 리소스 삭제 완료"
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 main() {
@@ -379,4 +389,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main

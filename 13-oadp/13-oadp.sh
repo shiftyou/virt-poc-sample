@@ -471,6 +471,20 @@ print_summary() {
     echo ""
 }
 
+# =============================================================================
+# Cleanup
+# =============================================================================
+cleanup() {
+    print_step "--cleanup: 13-oadp 리소스 삭제"
+    local _oadp_ns="${OADP_NS:-openshift-adp}"
+    oc delete project poc-oadp --ignore-not-found 2>/dev/null || true
+    oc delete dataprotectionapplication poc-dpa -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
+    oc delete secret cloud-credentials -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
+    oc delete objectbucketclaim obc-backups -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
+    oc delete volumesnapshotclass poc-volumesnapshotclass --ignore-not-found 2>/dev/null || true
+    print_ok "13-oadp 리소스 삭제 완료"
+}
+
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -490,4 +504,5 @@ main() {
     print_summary
 }
 
+[ "${1:-}" = "--cleanup" ] && { cleanup; exit 0; }
 main
