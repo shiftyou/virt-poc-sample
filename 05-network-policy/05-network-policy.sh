@@ -79,6 +79,10 @@ step_namespaces() {
             oc new-project "$NS" > /dev/null
             print_ok "네임스페이스 $NS 생성 완료"
         fi
+        # namespaceSelector matchLabels 에서 사용하는 라벨 보장
+        # Kubernetes 1.21+ 자동 부여되지만 누락 방지를 위해 명시적으로 설정
+        oc label namespace "$NS" kubernetes.io/metadata.name="$NS" --overwrite > /dev/null
+        print_ok "라벨 확인: kubernetes.io/metadata.name=${NS}"
     done
 }
 
