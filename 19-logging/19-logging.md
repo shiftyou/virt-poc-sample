@@ -1,53 +1,53 @@
-# OpenShift Audit Logging 실습
+# OpenShift Audit Logging Lab
 
-OpenShift APIServer의 Audit Policy를 설정하고,
-OpenShift Logging Operator를 통해 Audit 로그를 수집·저장하는 실습입니다.
+Configure the Audit Policy for the OpenShift APIServer,
+and collect/store Audit logs through the OpenShift Logging Operator.
 
 ```
 APIServer (kube-apiserver)
-  │  Audit Log 생성 (WriteRequestBodies / AllRequestBodies)
+  │  Audit Log generation (WriteRequestBodies / AllRequestBodies)
   ▼
 Vector Collector (DaemonSet)
   └─ ClusterLogForwarder
        ├─ audit   ─┐
-       ├─ infra    ├─ LokiStack (로그 저장, MinIO S3 사용)
+       ├─ infra    ├─ LokiStack (log storage, using MinIO S3)
        └─ app    ─┘
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- `oc` 명령어로 클러스터에 로그인된 상태 (cluster-admin 권한)
-- (선택) OpenShift Logging Operator 설치 — `00-operator/` 참조
-- (선택) Loki Operator 설치 — `00-operator/` 참조
-- (선택) MinIO 또는 ODF S3 백엔드 — `13-oadp.md` MinIO 설치 가이드 참조
-- `19-logging.sh` 실행 완료
+- Logged in to the cluster with `oc` command (cluster-admin privileges)
+- (Optional) OpenShift Logging Operator installed — refer to `00-operator/`
+- (Optional) Loki Operator installed — refer to `00-operator/`
+- (Optional) MinIO or ODF S3 backend — refer to MinIO installation guide in `13-oadp.md`
+- `19-logging.sh` execution complete
 
-> Logging Operator 미설치 시에도 **APIServer Audit Policy 설정**은 단독으로 동작합니다.
+> Even without Logging Operator installed, **APIServer Audit Policy configuration** works standalone.
 
 ---
 
-## Audit Profile 비교
+## Audit Profile Comparison
 
-| 프로필 | 기록 내용 | 로그 용량 | 권장 용도 |
+| Profile | Recorded Content | Log Volume | Recommended Use |
 |--------|----------|----------|---------|
-| `Default` | 메타데이터만 (URL·Method·응답코드·사용자·시간) | 최소 | 기본 감사 |
-| `WriteRequestBodies` | 쓰기 요청 본문 (create/update/patch/delete) | 중간 | **운영 권장** |
-| `AllRequestBodies` | 모든 요청·응답 본문 | 최대 | 상세 디버깅 |
-| `None` | 비활성화 | - | 비권장 |
+| `Default` | Metadata only (URL, Method, response code, user, time) | Minimum | Basic audit |
+| `WriteRequestBodies` | Write request bodies (create/update/patch/delete) | Medium | **Recommended for production** |
+| `AllRequestBodies` | All request/response bodies | Maximum | Detailed debugging |
+| `None` | Disabled | - | Not recommended |
 
 ---
 
-## 구성 개요
+## Configuration Overview
 
-| 리소스 | 네임스페이스 | 역할 |
+| Resource | Namespace | Role |
 |--------|------------|------|
-| APIServer `cluster` | cluster-scoped | Audit Profile 설정 |
-| ClusterLogging `instance` | `openshift-logging` | Vector Collector 관리 |
-| LokiStack `logging-loki` | `openshift-logging` | 로그 저장소 (S3 사용) |
-| ClusterLogForwarder `instance` | `openshift-logging` | 수집·전달 파이프라인 |
-| Secret `poc-far-credentials` | `openshift-logging` | MinIO S3 자격증명 |
+| APIServer `cluster` | cluster-scoped | Audit Profile configuration |
+| ClusterLogging `instance` | `openshift-logging` | Vector Collector management |
+| LokiStack `logging-loki` | `openshift-logging` | Log storage (using S3) |
+| ClusterLogForwarder `instance` | `openshift-logging` | Collection/forwarding pipeline |
+| Secret `poc-far-credentials` | `openshift-logging` | MinIO S3 credentials |
 
 ---
 
@@ -56,7 +56,7 @@ Vector Collector (DaemonSet)
 ```bash
 oc patch apiserver cluster --type=merge -p '{"spec":{"audit":{"profile":"WriteRequestBodies"}}}'
 
-# 또는 YAML로 적용
+# Or apply with YAML
 oc apply -f - <<EOF
 apiVersion: config.openshift.io/v1
 kind: APIServer
@@ -67,11 +67,11 @@ spec:
     profile: WriteRequestBodies
 EOF
 
-# 적용 후 kube-apiserver 롤아웃 확인 (수분 소요)
+# Check kube-apiserver rollout after applying (takes several minutes)
 oc get co kube-apiserver
 ```
 
-현재 설정 확인:
+Check current configuration:
 
 ```bash
 oc get apiserver cluster -o jsonpath='{.spec.audit.profile}'
@@ -79,7 +79,7 @@ oc get apiserver cluster -o jsonpath='{.spec.audit.profile}'
 
 ---
 
-## Step 2 — ClusterLogging (Logging Operator 설치 시)
+## Step 2 — ClusterLogging (when Logging Operator is installed)
 
 ```yaml
 apiVersion: logging.openshift.io/v1
@@ -106,11 +106,11 @@ spec:
 
 ---
 
-## Step 3 — LokiStack (Loki Operator 설치 시)
+## Step 3 — LokiStack (when Loki Operator is installed)
 
-MinIO S3를 스토리지로 사용하는 LokiStack입니다.
+A LokiStack using MinIO S3 as storage.
 
-### S3 Secret 생성
+### Create S3 Secret
 
 ```bash
 oc create secret generic logging-loki-s3 \
@@ -146,9 +146,9 @@ spec:
 
 ---
 
-## Step 4 — ClusterLogForwarder (Audit 포함)
+## Step 4 — ClusterLogForwarder (including Audit)
 
-### Loki 사용 시
+### When using Loki
 
 ```yaml
 apiVersion: logging.openshift.io/v1
@@ -177,7 +177,7 @@ spec:
         - loki-storage
 ```
 
-### 기본 출력 사용 시 (Loki 미설치)
+### When using default output (Loki not installed)
 
 ```yaml
 apiVersion: logging.openshift.io/v1
@@ -198,80 +198,80 @@ spec:
 
 ---
 
-## 상태 확인
+## Status Check
 
 ```bash
-# Audit Policy 확인
+# Check Audit Policy
 oc get apiserver cluster -o jsonpath='{.spec.audit.profile}'
 
-# kube-apiserver 롤아웃 상태
+# kube-apiserver rollout status
 oc get co kube-apiserver
 
-# ClusterLogging 상태
+# ClusterLogging status
 oc get clusterlogging -n openshift-logging
 
-# ClusterLogForwarder 상태
+# ClusterLogForwarder status
 oc get clusterlogforwarder -n openshift-logging
 
-# LokiStack 상태
+# LokiStack status
 oc get lokistack -n openshift-logging
 
-# Collector Pod 상태
+# Collector Pod status
 oc get pods -n openshift-logging -l component=collector
 ```
 
 ---
 
-## Audit 로그 직접 확인
+## Check Audit Logs Directly
 
 ```bash
-# 마스터 노드의 audit 로그 스트리밍
+# Stream audit logs from master node
 oc adm node-logs --role=master --path=kube-apiserver/ | grep audit | tail -20
 
-# Collector 로그 확인
+# Check Collector logs
 oc logs -n openshift-logging -l component=collector --tail=20
 
-# 특정 사용자의 audit 이벤트 검색
+# Search audit events for a specific user
 oc adm node-logs --role=master --path=kube-apiserver/ \
   | grep '"user":{"username":"system:admin"' | tail -10
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# kube-apiserver 롤아웃 진행률 확인
+# Check kube-apiserver rollout progress
 oc get co kube-apiserver
 oc get pods -n openshift-kube-apiserver | grep kube-apiserver
 
-# LokiStack 이벤트 확인
+# Check LokiStack events
 oc describe lokistack logging-loki -n openshift-logging
 
-# Collector 오류 로그
+# Collector error logs
 oc logs -n openshift-logging -l component=collector --tail=50 | grep -i error
 
-# ClusterLogForwarder 상태 상세
+# ClusterLogForwarder status detail
 oc describe clusterlogforwarder instance -n openshift-logging
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# Audit Policy 초기화 (Default로 복원)
+# Reset Audit Policy (restore to Default)
 oc patch apiserver cluster --type=merge -p '{"spec":{"audit":{"profile":"Default"}}}'
 
-# ClusterLogForwarder 삭제
+# Delete ClusterLogForwarder
 oc delete clusterlogforwarder instance -n openshift-logging
 
-# ClusterLogging 삭제
+# Delete ClusterLogging
 oc delete clusterlogging instance -n openshift-logging
 
-# LokiStack 삭제
+# Delete LokiStack
 oc delete lokistack logging-loki -n openshift-logging
 
-# S3 Secret 삭제
+# Delete S3 Secret
 oc delete secret logging-loki-s3 -n openshift-logging
 ```

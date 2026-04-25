@@ -1,77 +1,77 @@
-# HyperConverged 설정 실습
+# HyperConverged Configuration Lab
 
-HyperConverged CR을 통해 OpenShift Virtualization 클러스터 전체 설정을 변경합니다.
+Change cluster-wide OpenShift Virtualization settings through the HyperConverged CR.
 
 ---
 
-## HyperConverged CR 개요
+## HyperConverged CR Overview
 
 ```bash
-# HyperConverged CR 확인
+# Check HyperConverged CR
 oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv -o yaml
 ```
 
 ---
 
-## 1. CPU Overcommit (vCPU:pCPU 비율) 변경
+## 1. CPU Overcommit (vCPU:pCPU Ratio) Change
 
-기본값은 `10:1`입니다. 워크로드 특성에 따라 조정합니다.
+The default value is `10:1`. Adjust according to workload characteristics.
 
 ```
-CPU Overcommit = vCPU 수 / pCPU 수
-기본값: 10 (vCPU 10개 당 pCPU 1개)
+CPU Overcommit = Number of vCPUs / Number of pCPUs
+Default: 10 (1 pCPU per 10 vCPUs)
 ```
 
-### 현재 설정 확인
+### Check Current Setting
 
 ```bash
 oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv \
   -o jsonpath='{.spec.resourceRequirements.vmiCPUAllocationRatio}{"\n"}'
 ```
 
-### Overcommit 비율 변경
+### Change Overcommit Ratio
 
 ```bash
-# 예: 4:1 (pCPU 1개당 vCPU 4개 허용)
+# Example: 4:1 (allow 4 vCPUs per pCPU)
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
   -p '{"spec":{"resourceRequirements":{"vmiCPUAllocationRatio":4}}}'
 ```
 
-| 비율 | 설명 | 적합한 환경 |
+| Ratio | Description | Suitable Environment |
 |------|------|------------|
-| `1` | No overcommit (1:1) | CPU 집약적 워크로드 |
-| `4` | 4:1 | 균형 잡힌 환경 |
-| `10` | 10:1 (기본값) | 일반 POC / 혼합 워크로드 |
+| `1` | No overcommit (1:1) | CPU-intensive workloads |
+| `4` | 4:1 | Balanced environment |
+| `10` | 10:1 (default) | General POC / mixed workloads |
 
-> **주의**: Overcommit이 높을수록 CPU 경쟁 시 VM 성능 저하 발생 가능
+> **Caution**: Higher overcommit may cause VM performance degradation during CPU contention
 
 ---
 
 ## 2. Memory Overcommit
 
-메모리 Overcommit은 `spec.higherWorkloadDensity`로 설정합니다.
+Memory overcommit is configured with `spec.higherWorkloadDensity`.
 
 ```bash
-# Memory Overcommit 활성화 (Swap 활용)
+# Enable Memory Overcommit (using Swap)
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
   -p '{"spec":{"higherWorkloadDensity":{"memoryOvercommitPercentage":150}}}'
 ```
 
-| 값 | 의미 |
+| Value | Meaning |
 |----|------|
-| `100` | No overcommit (기본) |
-| `150` | 물리 메모리의 1.5배 VM 메모리 허용 |
+| `100` | No overcommit (default) |
+| `150` | Allow VM memory 1.5x physical memory |
 
 ---
 
-## 3. Live Migration 설정
+## 3. Live Migration Configuration
 
 ```bash
-# Live Migration 동시 실행 수 및 대역폭 설정
+# Configure Live Migration concurrent count and bandwidth
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
@@ -88,24 +88,24 @@ oc patch hyperconverged kubevirt-hyperconverged \
   }'
 ```
 
-| 항목 | 기본값 | 설명 |
+| Item | Default | Description |
 |------|--------|------|
-| `parallelMigrationsPerCluster` | 5 | 클러스터 전체 동시 Migration 수 |
-| `parallelOutboundMigrationsPerNode` | 2 | 노드당 동시 송신 Migration 수 |
-| `bandwidthPerMigration` | 0 (무제한) | Migration당 네트워크 대역폭 제한 |
-| `completionTimeoutPerGiB` | 800 | GiB당 완료 타임아웃 (초) |
-| `progressTimeout` | 150 | 진행 없을 때 타임아웃 (초) |
+| `parallelMigrationsPerCluster` | 5 | Concurrent migrations across the entire cluster |
+| `parallelOutboundMigrationsPerNode` | 2 | Concurrent outbound migrations per node |
+| `bandwidthPerMigration` | 0 (unlimited) | Network bandwidth limit per migration |
+| `completionTimeoutPerGiB` | 800 | Completion timeout per GiB (seconds) |
+| `progressTimeout` | 150 | Timeout when no progress (seconds) |
 
 ---
 
-## 4. Feature Gates (기능 플래그)
+## 4. Feature Gates
 
 ```bash
-# 현재 Feature Gates 확인
+# Check current Feature Gates
 oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv \
   -o jsonpath='{.spec.featureGates}'
 
-# GPU Passthrough 활성화
+# Enable GPU Passthrough
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
@@ -117,7 +117,7 @@ oc patch hyperconverged kubevirt-hyperconverged \
 ## 5. Mediating Device (GPU / SR-IOV)
 
 ```bash
-# Mediated Device (예: GPU vGPU) 설정
+# Configure Mediated Device (e.g., GPU vGPU)
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
@@ -140,12 +140,12 @@ oc patch hyperconverged kubevirt-hyperconverged \
 
 ---
 
-## 6. StorageClass 기본값 설정
+## 6. StorageClass Default Configuration
 
 ```bash
 source env.conf
 
-# Virtualization 전용 기본 StorageClass 지정
+# Specify default StorageClass dedicated to Virtualization
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
@@ -157,7 +157,7 @@ oc patch hyperconverged kubevirt-hyperconverged \
     }
   }"
 
-# DataImportCron 기본 StorageClass 설정
+# Configure default StorageClass for DataImportCron
 oc patch hco kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
@@ -166,33 +166,33 @@ oc patch hco kubevirt-hyperconverged \
 
 ---
 
-## 변경 확인 및 적용
+## Verify and Apply Changes
 
 ```bash
-# HyperConverged 상태 확인
+# Check HyperConverged status
 oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv
 
-# 변경사항 실시간 확인
+# Check changes in real-time
 oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv \
   -o jsonpath='{.spec.resourceRequirements}{"\n"}'
 
-# KubeVirt CR에 반영 확인 (HyperConverged → KubeVirt 자동 반영)
+# Verify reflected in KubeVirt CR (HyperConverged → KubeVirt auto-propagation)
 oc get kubevirt kubevirt -n openshift-cnv \
   -o jsonpath='{.spec.configuration.developerConfiguration}{"\n"}'
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# CPU Overcommit 기본값으로 복원
+# Restore CPU Overcommit to default value
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=merge \
   -p '{"spec":{"resourceRequirements":{"vmiCPUAllocationRatio":10}}}'
 
-# Live Migration 설정 초기화
+# Reset Live Migration configuration
 oc patch hyperconverged kubevirt-hyperconverged \
   -n openshift-cnv \
   --type=json \

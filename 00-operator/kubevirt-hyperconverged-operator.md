@@ -1,51 +1,51 @@
-# OpenShift Virtualization Operator 설치
+# OpenShift Virtualization Operator Installation
 
-## 개요
+## Overview
 
-OpenShift Virtualization(CNV, Container Native Virtualization)은 OpenShift에서
-가상머신(VM)을 컨테이너와 동일한 플랫폼에서 실행·관리할 수 있게 하는 Operator입니다.
-KubeVirt 기반으로 동작하며, VM 생성·마이그레이션·스냅샷·백업 등의 기능을 제공합니다.
+OpenShift Virtualization (CNV, Container Native Virtualization) is an Operator that enables
+running and managing virtual machines (VMs) on OpenShift on the same platform as containers.
+It operates based on KubeVirt and provides features such as VM creation, migration, snapshots, and backup.
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- cluster-admin 권한
-- OpenShift 4.12 이상
-- 워커 노드의 CPU 가상화 지원 (Intel VT-x / AMD-V)
+- cluster-admin privileges
+- OpenShift 4.12 or higher
+- Worker node CPU virtualization support (Intel VT-x / AMD-V)
 
 ```bash
-# 워커 노드 가상화 지원 확인
+# Check worker node virtualization support
 oc get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.capacity.cpu
 
-# 노드에서 직접 확인
+# Check directly on the node
 oc debug node/<worker-node> -- chroot /host grep -m1 -E 'vmx|svm' /proc/cpuinfo
 ```
 
 ---
 
-## 설치 방법
+## Installation Methods
 
-### 방법 1: OpenShift Console (Web UI)
+### Method 1: OpenShift Console (Web UI)
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `OpenShift Virtualization` 검색
-3. **OpenShift Virtualization** 선택
-4. `Install` 클릭
-5. 설정:
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `OpenShift Virtualization`
+3. Select **OpenShift Virtualization**
+4. Click `Install`
+5. Settings:
    - Update channel: `stable`
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-cnv`
-6. `Install` 클릭 후 완료 대기
-7. 설치 완료 후 **HyperConverged 인스턴스 생성**:
+6. Click `Install` and wait for completion
+7. After installation, **Create HyperConverged instance**:
    - Operators > Installed Operators > OpenShift Virtualization
-   - **HyperConverged** 탭 > `Create HyperConverged` 클릭
-   - 기본값으로 생성
+   - **HyperConverged** tab > Click `Create HyperConverged`
+   - Create with default values
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# 1. Namespace 생성
+# 1. Create Namespace
 oc apply -f - <<'EOF'
 apiVersion: v1
 kind: Namespace
@@ -55,7 +55,7 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
-# 2. OperatorGroup 생성
+# 2. Create OperatorGroup
 oc apply -f - <<'EOF'
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -67,7 +67,7 @@ spec:
     - openshift-cnv
 EOF
 
-# 3. Subscription 생성
+# 3. Create Subscription
 oc apply -f - <<'EOF'
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -81,13 +81,13 @@ spec:
   channel: stable
 EOF
 
-# 4. Operator 설치 완료 대기
+# 4. Wait for Operator installation to complete
 oc wait csv -n openshift-cnv \
   -l operators.coreos.com/kubevirt-hyperconverged.openshift-cnv \
   --for=jsonpath='{.status.phase}'=Succeeded \
   --timeout=5m
 
-# 5. HyperConverged 인스턴스 생성
+# 5. Create HyperConverged instance
 oc apply -f - <<'EOF'
 apiVersion: hco.kubevirt.io/v1beta1
 kind: HyperConverged
@@ -99,52 +99,52 @@ EOF
 
 ---
 
-## 설치 확인
+## Verify Installation
 
 ```bash
-# Operator 설치 상태 확인
+# Check Operator installation status
 oc get csv -n openshift-cnv | grep kubevirt
 
-# HyperConverged 상태 확인 (Available: True)
+# Check HyperConverged status (Available: True)
 oc get hco -n openshift-cnv kubevirt-hyperconverged
 
-# Pod 전체 상태 확인
+# Check all Pod statuses
 oc get pods -n openshift-cnv
 
-# 가상화 기능 준비 확인
+# Check virtualization feature readiness
 oc get infrastructure.config.openshift.io cluster -o jsonpath='{.status.platform}'
 ```
 
 ---
 
-## 설치 후 확인 사항
+## Post-Installation Verification
 
 ```bash
-# VM 생성 가능 여부 확인 (기본 Template 목록)
+# Check if VM creation is possible (default Template list)
 oc get template -n openshift | grep rhel
 
-# virtctl CLI 다운로드 경로 확인
+# Check virtctl CLI download path
 oc get ConsoleCLIDownload virtctl-clidownloads-kubevirt-hyperconverged \
   -o jsonpath='{.spec.links[0].href}'
 
-# Virtualization 기능 상태
+# Virtualization feature status
 oc get kubevirt -n openshift-cnv
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# HyperConverged 이벤트 확인
+# Check HyperConverged events
 oc describe hco -n openshift-cnv kubevirt-hyperconverged
 
-# Operator 로그 확인
+# Check Operator logs
 oc logs -n openshift-cnv deployment/hco-operator
 
-# 개별 컴포넌트 상태 확인
+# Check individual component status
 oc get kubevirt,cdi,networkaddonsconfig,ssp -n openshift-cnv
 
-# 노드 가상화 미지원 시
+# When node virtualization is not supported
 oc get nodes -l kubevirt.io/schedulable=true
 ```

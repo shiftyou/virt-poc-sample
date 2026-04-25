@@ -2,12 +2,12 @@
 # =============================================================================
 # 07-liveness-probe.sh
 #
-# VM Liveness Probe 실습 환경 구성
-#   1. poc-liveness-probe 네임스페이스 생성
-#   2. poc 템플릿으로 VM 생성
-#   3. VM에 HTTP Liveness Probe (port 80) 설정
+# VM Liveness Probe practice environment setup
+#   1. Create poc-liveness-probe namespace
+#   2. Create VM using poc template
+#   3. Configure HTTP Liveness Probe (port 80) on VM
 #
-# 사용법: ./07-liveness-probe.sh
+# Usage: ./07-liveness-probe.sh
 # =============================================================================
 
 set -euo pipefail
@@ -35,8 +35,8 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
+# Migrate spec.running (deprecated) -> spec.runStrategy
+# Call before oc patch vm to remove admission webhook warnings
 ensure_runstrategy() {
     local vm="$1" ns="$2"
     local running
@@ -52,65 +52,65 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight checks
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
-        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        print_warn "OpenShift Virtualization Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/kubevirt-hyperconverged-operator.md"
         exit 77
     fi
-    print_ok "OpenShift Virtualization Operator 확인"
+    print_ok "OpenShift Virtualization Operator confirmed"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        print_error "poc Template not found. Run 01-template first."
         exit 1
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# Step 1: Create namespace
 # =============================================================================
 step_namespace() {
-    print_step "1/3  네임스페이스 생성 (${NS})"
+    print_step "1/3  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created"
     fi
 }
 
 # =============================================================================
-# 2단계: VM 생성 (poc 템플릿 + Liveness Probe)
+# Step 2: Create VM (poc template + Liveness Probe)
 # =============================================================================
 step_vm() {
-    print_step "2/3  VM 생성 (poc 템플릿 + HTTP Liveness Probe port 80)"
+    print_step "2/3  Create VM (poc template + HTTP Liveness Probe port 80)"
 
     if oc get vm "$VM_NAME" -n "$NS" &>/dev/null; then
-        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+        print_ok "VM $VM_NAME already exists — skipping"
         return
     fi
 
-    # poc 템플릿으로 VM 생성
+    # Create VM from poc template
     oc process -n openshift poc -p NAME="$VM_NAME" | \
         sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM_NAME}.yaml"
-    echo "생성된 파일: ${VM_NAME}.yaml"
+    echo "Generated file: ${VM_NAME}.yaml"
     oc apply -n "$NS" -f "${VM_NAME}.yaml"
-    print_ok "VM $VM_NAME 생성 완료"
+    print_ok "VM $VM_NAME created"
 
-    # HTTP Liveness Probe (port 80) 패치
-    # spec.template.spec.readinessProbe / livenessProbe → KubeVirt VMI 수준에서 지원
+    # HTTP Liveness Probe (port 80) patch
+    # spec.template.spec.readinessProbe / livenessProbe → supported at KubeVirt VMI level
     ensure_runstrategy "$VM_NAME" "$NS"
     oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
       "spec": {
@@ -139,20 +139,20 @@ step_vm() {
         }
       }
     }'
-    print_ok "Liveness/Readiness Probe 설정 완료 (port 80)"
-    print_info "  initialDelaySeconds: 120  (VM 부팅 시간 확보)"
+    print_ok "Liveness/Readiness Probe configured (port 80)"
+    print_info "  initialDelaySeconds: 120  (allow time for VM boot)"
     print_info "  periodSeconds      : 20"
-    print_info "  failureThreshold   : 3    (3회 실패 시 VM 재시작)"
+    print_info "  failureThreshold   : 3    (VM restart after 3 failures)"
 
     virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
-    print_ok "VM $VM_NAME 시작"
+    print_ok "VM $VM_NAME started"
 }
 
 # =============================================================================
-# 3단계: Probe 확인용 서비스 안내
+# Step 3: Service guidance for Probe verification
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "4/4  ConsoleYAMLSample 등록"
+    print_step "4/4  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-liveness-vm.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -161,7 +161,7 @@ metadata:
   name: poc-liveness-vm
 spec:
   title: "POC VM Liveness/Readiness Probe"
-  description: "HTTP Liveness/Readiness Probe가 설정된 VirtualMachine 예시입니다. port 80으로 주기적으로 헬스체크를 수행하며, 3회 실패 시 VM을 재시작합니다."
+  description: "A VirtualMachine example with HTTP Liveness/Readiness Probe configured. Performs periodic health checks on port 80, and restarts the VM after 3 consecutive failures."
   targetResource:
     apiVersion: kubevirt.io/v1
     kind: VirtualMachine
@@ -220,44 +220,44 @@ spec:
               namespace: openshift-virtualization-os-images
 EOF
     oc apply -f consoleyamlsample-liveness-vm.yaml
-    print_ok "ConsoleYAMLSample poc-liveness-vm 등록 완료"
+    print_ok "ConsoleYAMLSample poc-liveness-vm registered"
 }
 
 step_service() {
-    print_step "3/4  VM 내부 httpd 포트 안내"
+    print_step "3/4  VM internal httpd port guidance"
 
-    print_info "KubeVirt Probe는 virt-probe가 VMI 내부 IP로 직접 접속합니다."
-    print_info "httpGet.port 는 VM 내부 포트를 지정합니다 (Service 불필요)."
+    print_info "KubeVirt Probe uses virt-probe to connect directly to VMI internal IP."
+    print_info "httpGet.port specifies the port inside the VM (no Service required)."
     echo ""
-    print_info "VM 내부에서 port 80 HTTP 서버가 실행 중이어야 Probe가 성공합니다."
-    print_info "poc 황금 이미지에 httpd 가 설치되어 있으면 자동으로 통과됩니다."
+    print_info "A port 80 HTTP server must be running inside the VM for the Probe to succeed."
+    print_info "If httpd is installed in the poc golden image, it will pass automatically."
     echo ""
-    print_info "httpd 미설치 시 VM 접속 후 간이 서버 실행:"
+    print_info "If httpd is not installed, run a simple server after accessing the VM:"
     echo -e "    ${CYAN}virtctl console $VM_NAME -n $NS${NC}"
-    echo -e "    ${CYAN}# VM 내부에서:${NC}"
+    echo -e "    ${CYAN}# Inside VM:${NC}"
     echo -e "    ${CYAN}nohup python3 -m http.server 80 &>/dev/null &${NC}"
-    echo -e "    ${CYAN}# python3 미설치 시: nohup nc -lk -p 80 -e /bin/echo &>/dev/null &${NC}"
+    echo -e "    ${CYAN}# If python3 is not installed: nohup nc -lk -p 80 -e /bin/echo &>/dev/null &${NC}"
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! Liveness Probe 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! Liveness Probe practice environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  VM 상태 확인:"
+    echo -e "  Check VM status:"
     echo -e "    ${CYAN}oc get vm,vmi -n ${NS}${NC}"
     echo ""
-    echo -e "  Probe 상태 확인:"
+    echo -e "  Check Probe status:"
     echo -e "    ${CYAN}oc get vmi $VM_NAME -n $NS -o jsonpath='{range .status.conditions[*]}{.type}: {.status}  {.message}{\"\\n\"}{end}'${NC}"
     echo ""
-    echo -e "  VM 콘솔 접속:"
+    echo -e "  VM console access:"
     echo -e "    ${CYAN}virtctl console $VM_NAME -n $NS${NC}"
     echo ""
-    echo -e "  자세한 내용: ${CYAN}10-liveness-probe.md${NC} 참조"
+    echo -e "  For details: refer to ${CYAN}10-liveness-probe.md${NC}"
     echo ""
 }
 
@@ -265,19 +265,19 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 08-liveness-probe 리소스 삭제"
+    print_step "--cleanup: Delete 08-liveness-probe resources"
     oc delete project poc-liveness-probe --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-liveness-vm --ignore-not-found 2>/dev/null || true
-    print_ok "08-liveness-probe 리소스 삭제 완료"
+    print_ok "08-liveness-probe resources deleted"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  VM Liveness Probe 실습 환경 구성${NC}"
+    echo -e "${CYAN}  VM Liveness Probe Practice Environment Setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

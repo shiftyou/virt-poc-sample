@@ -2,19 +2,19 @@
 # =============================================================================
 # 14-node-maintenance.sh
 #
-# Node Maintenance 실습 환경 구성
-#   1. poc-maintenance 네임스페이스 생성
-#   2. poc 템플릿으로 VM 2개 배포 → TEST_NODE에 Live Migration으로 집중
-#   3. NodeMaintenance 생성 → cordon + drain → VM 자동 Migration 확인
+# Node Maintenance lab environment setup
+#   1. Create poc-maintenance namespace
+#   2. Deploy 2 VMs using poc template → consolidate on TEST_NODE via Live Migration
+#   3. Create NodeMaintenance → cordon + drain → verify VM auto-Migration
 #
-# 사용법: ./14-node-maintenance.sh
+# Usage: ./14-node-maintenance.sh
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# env.conf 자동 로드 (단독 실행 시)
+# Auto-load env.conf (when running standalone)
 ENV_FILE="${SCRIPT_DIR}/../env.conf"
 if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
@@ -36,8 +36,8 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
+# spec.running(deprecated) -> spec.runStrategy migration
+# Call before oc patch vm to remove admission webhook warnings
 ensure_runstrategy() {
     local vm="$1" ns="$2"
     local running
@@ -53,91 +53,91 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight check
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight check"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged in to OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        print_error "poc Template not found. Please run 01-template first."
         exit 1
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 
     if ! oc get node "$NODE1" &>/dev/null; then
-        print_error "노드 $NODE1 를 찾을 수 없습니다. env.conf 의 TEST_NODE 를 확인하세요."
+        print_error "Node $NODE1 not found. Please check TEST_NODE in env.conf."
         exit 1
     fi
-    print_ok "대상 노드: $NODE1"
+    print_ok "Target node: $NODE1"
 
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
-        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        print_warn "OpenShift Virtualization Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/kubevirt-hyperconverged-operator.md"
         exit 77
     fi
-    print_ok "OpenShift Virtualization Operator 확인"
+    print_ok "OpenShift Virtualization Operator confirmed"
 
-    # Node Maintenance Operator 설치 확인 (env.conf: NMO_INSTALLED)
+    # Check Node Maintenance Operator installation (env.conf: NMO_INSTALLED)
     if [ "${NMO_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "node-maintenance"; then
-            print_warn "Node Maintenance Operator 미설치 → 건너뜁니다."
-            print_warn "  설치 가이드: 00-operator/node-maintenance-operator.md"
+            print_warn "Node Maintenance Operator not installed → skipping."
+            print_warn "  Installation guide: 00-operator/node-maintenance-operator.md"
             exit 77
         fi
     fi
-    print_ok "Node Maintenance Operator 확인"
+    print_ok "Node Maintenance Operator confirmed"
 
-    # 워커 노드 2개 이상 확인
+    # Verify at least 2 worker nodes
     local worker_count
     worker_count=$(oc get node -l node-role.kubernetes.io/worker --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$worker_count" -lt 2 ]; then
-        print_error "워커 노드가 2개 이상 필요합니다. (현재: ${worker_count}개)"
+        print_error "At least 2 worker nodes are required. (Current: ${worker_count})"
         exit 1
     fi
-    print_ok "워커 노드: ${worker_count}개 확인"
+    print_ok "Worker nodes: ${worker_count} confirmed"
 
     print_info "  NS    : ${NS}"
     print_info "  NODE1 : ${NODE1}"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# Step 1: Create namespace
 # =============================================================================
 step_namespace() {
-    print_step "1/3  네임스페이스 생성 (${NS})"
+    print_step "1/3  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created successfully"
     fi
 }
 
 # =============================================================================
-# 2단계: VM 2개 배포 → TEST_NODE로 Live Migration
+# Step 2: Deploy 2 VMs → Live Migration to TEST_NODE
 # =============================================================================
 step_vms() {
-    print_step "2/4  VM 2개 배포 → ${NODE1} 로 Live Migration"
+    print_step "2/4  Deploy 2 VMs → Live Migration to ${NODE1}"
 
     for VM in poc-maintenance-vm-1 poc-maintenance-vm-2; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
-            print_ok "VM $VM 이미 존재 — 스킵"
+            print_ok "VM $VM already exists — skipping"
             continue
         fi
 
         oc process -n openshift poc -p NAME="$VM" | \
         sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
-        echo "생성된 파일: ${VM}.yaml"
+        echo "Generated file: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
-        # evictionStrategy: LiveMigrate 설정
+        # Set evictionStrategy: LiveMigrate
         ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p '{
           "spec": {
@@ -150,11 +150,11 @@ step_vms() {
         }'
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 배포 완료"
+        print_ok "VM $VM deployed successfully"
     done
 
-    # Running 상태 대기
-    print_info "VM Running 상태 대기 중..."
+    # Wait for Running state
+    print_info "Waiting for VM Running state..."
     for VM in poc-maintenance-vm-1 poc-maintenance-vm-2; do
         local retries=36
         local i=0
@@ -165,26 +165,26 @@ step_vms() {
                 print_ok "VMI $VM Running"
                 break
             fi
-            printf "  [%d/%d] %s 대기 중... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
+            printf "  [%d/%d] Waiting for %s... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
             sleep 5
             i=$((i+1))
         done
         echo ""
     done
 
-    # TEST_NODE로 Live Migration
+    # Live Migration to TEST_NODE
     for VM in poc-maintenance-vm-1 poc-maintenance-vm-2; do
         local current_node
         current_node=$(oc get vmi "$VM" -n "$NS" -o jsonpath='{.status.nodeName}' 2>/dev/null || true)
 
         if [ "$current_node" = "$NODE1" ]; then
-            print_ok "VM $VM 이미 ${NODE1} 에 있음 — Migration 스킵"
+            print_ok "VM $VM is already on ${NODE1} — skipping Migration"
             continue
         fi
 
-        print_info "VM $VM Migration 시작: ${current_node} → ${NODE1}"
+        print_info "Starting VM $VM Migration: ${current_node} → ${NODE1}"
 
-        # nodeSelector 임시 설정
+        # Temporarily set nodeSelector
         ensure_runstrategy "$VM" "$NS"
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
@@ -206,23 +206,23 @@ metadata:
 spec:
   vmiName: ${VM}
 EOF
-        echo "생성된 파일: vmim-${VM}.yaml"
-        print_info "  아래 명령으로 직접 적용하세요:"
+        echo "Generated file: vmim-${VM}.yaml"
+        print_info "  Apply directly with the following command:"
         echo -e "    ${CYAN}oc apply -f vmim-${VM}.yaml${NC}"
     done
 
     echo ""
-    print_info "현재 VM 배치:"
+    print_info "Current VM placement:"
     oc get vmi -n "$NS" \
       -o custom-columns=NAME:.metadata.name,NODE:.status.nodeName,PHASE:.status.phase \
       2>/dev/null || true
 }
 
 # =============================================================================
-# 3단계: NodeMaintenance 생성 → Migration 확인
+# Step 3: Create NodeMaintenance → Verify Migration
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "4/4  ConsoleYAMLSample 등록"
+    print_step "4/4  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-nodemaintenance.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -231,7 +231,7 @@ metadata:
   name: poc-nodemaintenance
 spec:
   title: "POC NodeMaintenance"
-  description: "노드를 유지보수 모드로 전환하는 NodeMaintenance CR 예시입니다. 생성 시 해당 노드가 cordon되고 VM이 자동으로 Live Migration됩니다."
+  description: "Example NodeMaintenance CR for putting a node into maintenance mode. When created, the node is cordoned and VMs are automatically Live Migrated."
   targetResource:
     apiVersion: nodemaintenance.medik8s.io/v1beta1
     kind: NodeMaintenance
@@ -242,17 +242,17 @@ spec:
       name: maintenance-worker-0
     spec:
       nodeName: worker-0
-      reason: "POC 유지보수 실습"
+      reason: "POC maintenance lab"
 EOF
     oc apply -f consoleyamlsample-nodemaintenance.yaml
-    print_ok "ConsoleYAMLSample poc-nodemaintenance 등록 완료"
+    print_ok "ConsoleYAMLSample poc-nodemaintenance registered successfully"
 }
 
 step_maintenance() {
-    print_step "3/4  NodeMaintenance 생성 (${NODE1})"
+    print_step "3/4  Create NodeMaintenance (${NODE1})"
 
     if oc get nodemaintenance "maintenance-${NODE1}" &>/dev/null; then
-        print_ok "NodeMaintenance maintenance-${NODE1} 이미 존재 — 스킵"
+        print_ok "NodeMaintenance maintenance-${NODE1} already exists — skipping"
         return
     fi
 
@@ -263,33 +263,33 @@ metadata:
   name: maintenance-${NODE1}
 spec:
   nodeName: ${NODE1}
-  reason: "POC 유지보수 실습"
+  reason: "POC maintenance lab"
 EOF
-    echo "생성된 파일: nodemaintenance-${NODE1}.yaml"
-    print_ok "NodeMaintenance YAML 생성 완료 (apply 는 하지 않음)"
-    print_info "아래 명령으로 직접 적용하세요:"
+    echo "Generated file: nodemaintenance-${NODE1}.yaml"
+    print_ok "NodeMaintenance YAML generated successfully (not applied)"
+    print_info "Apply directly with the following command:"
     echo -e "    ${CYAN}oc apply -f nodemaintenance-${NODE1}.yaml${NC}"
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! Node Maintenance 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! Node Maintenance lab environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  VM 이동 확인:"
+    echo -e "  Verify VM migration:"
     echo -e "    ${CYAN}oc get vmi -n ${NS} -o wide${NC}"
     echo ""
-    echo -e "  NodeMaintenance 상태:"
+    echo -e "  NodeMaintenance status:"
     echo -e "    ${CYAN}oc get nodemaintenance${NC}"
     echo ""
-    echo -e "  유지보수 종료 (노드 복구):"
+    echo -e "  End maintenance (recover node):"
     echo -e "    ${CYAN}oc delete nodemaintenance maintenance-${NODE1}${NC}"
     echo ""
-    echo -e "  자세한 내용: 07-node-maintenance.md 참조"
+    echo -e "  For details: 07-node-maintenance.md"
     echo ""
 }
 
@@ -297,19 +297,19 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 14-node-maintenance 리소스 삭제"
+    print_step "--cleanup: Delete 14-node-maintenance resources"
     oc delete project poc-maintenance --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-nodemaintenance --ignore-not-found 2>/dev/null || true
-    print_ok "14-node-maintenance 리소스 삭제 완료"
+    print_ok "14-node-maintenance resources deleted successfully"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  Node Maintenance 실습 환경 구성${NC}"
+    echo -e "${CYAN}  Node Maintenance lab environment setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

@@ -2,33 +2,33 @@
 # =============================================================================
 # 06-descheduler.sh
 #
-# Descheduler 실습 환경 구성
-#   1. poc-descheduler 네임스페이스 생성
-#   2. poc 템플릿으로 3개 VM 배포
-#      - vm-1, vm-2, vm-3 : nodeSelector로 NODE1에 배치 → Running 후 nodeSelector 제거
-#      - vm-fixed         : NODE1 고정 + descheduler evict 제외
-#   3. KubeDescheduler — LifecycleAndUtilization / High / 네임스페이스 한정
-#   4. TEST_NODE의 CPU/Memory 현황 분석 → 트리거 VM 리소스 산출
-#   5. 트리거 VM을 TEST_NODE에 배포 → 노드 임계값 초과 → Descheduler 발동
+# Descheduler practice environment setup
+#   1. Create poc-descheduler namespace
+#   2. Deploy 3 VMs using poc template
+#      - vm-1, vm-2, vm-3 : place on NODE1 via nodeSelector → remove nodeSelector after Running
+#      - vm-fixed         : pin to NODE1 + exclude from descheduler eviction
+#   3. KubeDescheduler — LifecycleAndUtilization / High / namespace-scoped
+#   4. Analyze CPU/Memory status of TEST_NODE → calculate trigger VM resources
+#   5. Deploy trigger VM on TEST_NODE → exceed node threshold → trigger Descheduler
 #
-# 사용법: ./06-descheduler.sh
+# Usage: ./06-descheduler.sh
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# env.conf 자동 로드 (단독 실행 시)
+# Auto-load env.conf (when running standalone)
 ENV_FILE="${SCRIPT_DIR}/../env.conf"
 if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
 fi
 
 NS="poc-descheduler"
-NODE1="${TEST_NODE}"           # env.conf 의 TEST_NODE 사용
+NODE1="${TEST_NODE}"           # Uses TEST_NODE from env.conf
 DESCHEDULER_NS="openshift-kube-descheduler-operator"
 
-# 초기 VM CPU request (각 250m)
+# Initial VM CPU request (250m each)
 VM_CPU_REQUEST="250m"
 VM_MEM_REQUEST="512Mi"
 
@@ -45,8 +45,8 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
+# Migrate spec.running (deprecated) -> spec.runStrategy
+# Call before oc patch vm to remove admission webhook warnings
 ensure_runstrategy() {
     local vm="$1" ns="$2"
     local running
@@ -62,84 +62,84 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight checks
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        print_error "poc Template not found. Run 01-template first."
         exit 1
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 
     if ! oc get node "$NODE1" &>/dev/null; then
-        print_error "노드 $NODE1 를 찾을 수 없습니다. env.conf 의 TEST_NODE 를 확인하세요."
+        print_error "Node $NODE1 not found. Check TEST_NODE in env.conf."
         exit 1
     fi
-    print_ok "대상 노드: $NODE1"
+    print_ok "Target node: $NODE1"
 
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
-        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        print_warn "OpenShift Virtualization Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/kubevirt-hyperconverged-operator.md"
         exit 77
     fi
-    print_ok "OpenShift Virtualization Operator 확인"
+    print_ok "OpenShift Virtualization Operator confirmed"
 
     if [ "${DESCHEDULER_INSTALLED:-false}" != "true" ]; then
-        print_warn "Kube Descheduler Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/descheduler-operator.md"
+        print_warn "Kube Descheduler Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/descheduler-operator.md"
         exit 77
     fi
-    print_ok "Kube Descheduler Operator 확인"
+    print_ok "Kube Descheduler Operator confirmed"
 
     print_info "  NS    : ${NS}"
     print_info "  NODE1 : ${NODE1}"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# Step 1: Create namespace
 # =============================================================================
 step_namespace() {
-    print_step "1/5  네임스페이스 생성 (${NS})"
+    print_step "1/5  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created"
     fi
 }
 
 # =============================================================================
-# 2단계: 4개 VM 배포
+# Step 2: Deploy 4 VMs
 # =============================================================================
 step_vms() {
-    print_step "2/5  VM 4개 배포"
+    print_step "2/5  Deploy 4 VMs"
 
-    # vm-1, vm-2, vm-3: descheduler 대상 / vm-fixed: nodeSelector 고정 + evict 제외
+    # vm-1, vm-2, vm-3: descheduler targets / vm-fixed: nodeSelector pinned + eviction excluded
     for VM in poc-descheduler-vm-1 poc-descheduler-vm-2 poc-descheduler-vm-3 poc-descheduler-vm-fixed; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
-            print_ok "VM $VM 이미 존재 — 스킵"
+            print_ok "VM $VM already exists — skipping"
             continue
         fi
 
-        # poc 템플릿으로 VM 생성
+        # Create VM from poc template
         oc process -n openshift poc -p NAME="$VM" | \
         sed 's/runStrategy: Halted/runStrategy: Always/' > "${VM}.yaml"
-        echo "생성된 파일: ${VM}.yaml"
+        echo "Generated file: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
         ensure_runstrategy "$VM" "$NS"
 
         if [ "$VM" = "poc-descheduler-vm-fixed" ]; then
-            # vm-fixed: NODE1 고정 + descheduler evict 제외
+            # vm-fixed: pin to NODE1 + exclude from descheduler eviction
             oc patch vm "$VM" -n "$NS" --type=merge -p "{
               \"spec\": {
                 \"template\": {
@@ -155,13 +155,13 @@ step_vms() {
                 }
               }
             }"
-            print_info "  → nodeSelector: ${NODE1} 고정, descheduler evict 제외"
+            print_info "  → nodeSelector: ${NODE1} pinned, excluded from descheduler eviction"
             virtctl start "$VM" -n "$NS" 2>/dev/null || true
-            print_ok "VM $VM 배포 완료 (nodeSelector 유지)"
+            print_ok "VM $VM deployed (nodeSelector retained)"
             continue
         fi
 
-        # vm-1, vm-2, vm-3: nodeSelector로 NODE1 배치 + descheduler evict 허용
+        # vm-1, vm-2, vm-3: place on NODE1 via nodeSelector + allow descheduler eviction
         oc patch vm "$VM" -n "$NS" --type=merge -p "{
           \"spec\": {
             \"template\": {
@@ -177,13 +177,13 @@ step_vms() {
             }
           }
         }"
-        print_info "  → nodeSelector: ${NODE1} 설정, descheduler evict 허용"
+        print_info "  → nodeSelector: ${NODE1} set, descheduler eviction allowed"
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 배포 완료"
+        print_ok "VM $VM deployed"
 
-        # Running 대기 후 nodeSelector 제거 (descheduler 자유 대상)
-        print_info "  → Running 대기 후 nodeSelector 제거..."
+        # Wait for Running then remove nodeSelector (descheduler can freely target)
+        print_info "  → Waiting for Running state then removing nodeSelector..."
         local retries=36
         local i=0
         while [ $i -lt $retries ]; do
@@ -193,7 +193,7 @@ step_vms() {
                 print_ok "  VMI $VM Running"
                 break
             fi
-            printf "  [%d/%d] %s 대기 중... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
+            printf "  [%d/%d] Waiting for %s... (%s)\r" "$((i+1))" "$retries" "$VM" "${phase:-Pending}"
             sleep 5
             i=$((i+1))
         done
@@ -208,26 +208,26 @@ step_vms() {
             }
           }
         }'
-        print_ok "  → nodeSelector 제거 완료 (descheduler 자유 대상)"
+        print_ok "  → nodeSelector removed (descheduler can freely target)"
     done
 }
 
 # =============================================================================
-# 3단계: KubeDescheduler 설정 (LifecycleAndUtilization / High / 네임스페이스 한정)
+# Step 3: KubeDescheduler configuration (LifecycleAndUtilization / High / namespace-scoped)
 # =============================================================================
 step_descheduler() {
-    print_step "3/5  KubeDescheduler 설정"
+    print_step "3/5  KubeDescheduler configuration"
 
-    # 기존 KubeDescheduler가 있으면 스크립트가 생성한 것이 아님을 기록
+    # If KubeDescheduler already exists, note it was not created by this script
     if oc get kubedescheduler cluster -n openshift-kube-descheduler-operator &>/dev/null; then
-        print_warn "KubeDescheduler 'cluster' 이 이미 존재합니다."
-        print_warn "  → 기존 설정을 보존하고 poc-descheduler 네임스페이스만 추가합니다."
+        print_warn "KubeDescheduler 'cluster' already exists."
+        print_warn "  → Preserving existing configuration and adding poc-descheduler namespace only."
         oc patch kubedescheduler cluster -n openshift-kube-descheduler-operator \
             --type=json \
             -p='[{"op":"add","path":"/spec/profileCustomizations/namespaces/included/-","value":"poc-descheduler"}]' \
             2>/dev/null || true
         touch .kubedescheduler-preexisted
-        print_ok "기존 KubeDescheduler에 poc-descheduler 네임스페이스 추가 완료"
+        print_ok "poc-descheduler namespace added to existing KubeDescheduler"
         return
     fi
 
@@ -249,15 +249,15 @@ spec:
       included:
         - poc-descheduler
 EOF
-    echo "생성된 파일: kubedescheduler.yaml"
+    echo "Generated file: kubedescheduler.yaml"
     if ! oc apply -f kubedescheduler.yaml; then
-        print_error "KubeDescheduler 적용 실패"
+        print_error "KubeDescheduler apply failed"
         exit 1
     fi
 
-    # 적용 후 상태 확인 — *Degraded 조건이 모두 False이면 정상
-    # (KubeDescheduler 는 Available 조건 없이 *Degraded 조건만 보고함)
-    print_info "KubeDescheduler 상태 확인 중..."
+    # Verify status after apply — normal if all *Degraded conditions are False
+    # (KubeDescheduler only reports *Degraded conditions, no Available condition)
+    print_info "Checking KubeDescheduler status..."
     local retries=12
     local i=0
     local healthy=false
@@ -269,16 +269,16 @@ EOF
             2>/dev/null | grep -i "Degraded" | grep "True" || true)
         if [ -z "$degraded_true" ]; then
             healthy=true
-            print_ok "KubeDescheduler 정상 (Degraded 조건 없음)"
+            print_ok "KubeDescheduler healthy (no Degraded conditions)"
             break
         fi
-        printf "  [%d/%d] 대기 중...\r" "$((i+1))" "$retries"
+        printf "  [%d/%d] Waiting...\r" "$((i+1))" "$retries"
         sleep 5
         i=$((i+1))
     done
     echo ""
 
-    # 최종 상태 출력 (TYPE / STATUS / REASON / MESSAGE)
+    # Print final status (TYPE / STATUS / REASON / MESSAGE)
     echo ""
     printf "  %-30s %-8s %-20s %s\n" "TYPE" "STATUS" "REASON" "MESSAGE"
     printf "  %-30s %-8s %-20s %s\n" "------------------------------" "--------" "--------------------" "-------"
@@ -292,25 +292,25 @@ EOF
     echo ""
 
     if [ "$healthy" != "true" ]; then
-        print_warn "KubeDescheduler 준비 시간 초과. 위 상태를 확인하세요."
+        print_warn "KubeDescheduler readiness timed out. Check the status above."
     fi
 
     print_info "  managementState: Managed"
     print_info "  Profile        : LifecycleAndUtilization"
     print_info "  Threshold      : High (underutilized <40%, overutilized >70%)"
-    print_info "  Interval       : 60초"
+    print_info "  Interval       : 60 seconds"
     print_info "  Namespace      : ${NS}"
 }
 
 # =============================================================================
-# 5단계: 노드 리소스 분석 → 트리거 VM 산출 및 배포
+# Step 5: Analyze node resources → calculate and deploy trigger VM
 # =============================================================================
 step_trigger_vm() {
-    print_step "4/5  트리거 VM 배포 (노드 임계값 초과)"
+    print_step "4/5  Deploy trigger VM (exceed node threshold)"
 
-    print_info "${NODE1} 리소스 현황 분석 중..."
+    print_info "Analyzing ${NODE1} resource status..."
 
-    # Allocatable CPU → 밀리코어
+    # Allocatable CPU → millicores
     ALLOC_CPU_RAW=$(oc get node "$NODE1" -o jsonpath='{.status.allocatable.cpu}')
     if [[ "$ALLOC_CPU_RAW" == *m ]]; then
         ALLOC_CPU="${ALLOC_CPU_RAW%m}"
@@ -326,7 +326,7 @@ step_trigger_vm() {
         /Gi$/ { printf "%d", $0*1024; next }
     ')
 
-    # 현재 노드의 CPU requests 합산 (밀리코어)
+    # Sum current CPU requests on node (millicores)
     USED_CPU=$(oc get pods --all-namespaces \
         --field-selector="spec.nodeName=${NODE1}" \
         -o jsonpath='{range .items[*].spec.containers[*]}{.resources.requests.cpu}{"\n"}{end}' \
@@ -335,7 +335,7 @@ step_trigger_vm() {
         /^[0-9]+(\.[0-9]+)?$/ { sum += $0*1000; next }
         END { print int(sum) }')
 
-    # 현재 노드의 Memory requests 합산 (MiB)
+    # Sum current Memory requests on node (MiB)
     USED_MEM_MIB=$(oc get pods --all-namespaces \
         --field-selector="spec.nodeName=${NODE1}" \
         -o jsonpath='{range .items[*].spec.containers[*]}{.resources.requests.memory}{"\n"}{end}' \
@@ -353,9 +353,9 @@ step_trigger_vm() {
     print_info "  Allocatable Mem  : ${ALLOC_MEM_MIB}Mi"
     print_info "  Used CPU requests: ${USED_CPU}m  (${CPU_PCT}%)"
     print_info "  Used Mem requests: ${USED_MEM_MIB}Mi (${MEM_PCT}%)"
-    print_info "  Descheduler 임계값: overutilized > 70%"
+    print_info "  Descheduler threshold: overutilized > 70%"
 
-    # 71% 초과를 위해 필요한 추가 CPU requests 계산
+    # Calculate additional CPU requests needed to exceed 71%
     THRESHOLD_CPU=$((ALLOC_CPU * 71 / 100))
     NEEDED_CPU=$((THRESHOLD_CPU - USED_CPU))
 
@@ -363,7 +363,7 @@ step_trigger_vm() {
     NEEDED_MEM=$((THRESHOLD_MEM - USED_MEM_MIB))
 
     if [ "$NEEDED_CPU" -le 0 ]; then
-        print_warn "이미 CPU 71% 초과 상태 — 소규모 트리거 VM 배포"
+        print_warn "Already exceeding CPU 71% — deploying small trigger VM"
         TRIGGER_CPU="250m"
     else
         TRIGGER_CPU="${NEEDED_CPU}m"
@@ -375,18 +375,18 @@ step_trigger_vm() {
         TRIGGER_MEM="${NEEDED_MEM}Mi"
     fi
 
-    print_ok "트리거 VM 리소스 산출"
-    print_info "  TRIGGER_CPU : ${TRIGGER_CPU}  (노드 ${NODE1} CPU를 71% 이상으로)"
+    print_ok "Trigger VM resources calculated"
+    print_info "  TRIGGER_CPU : ${TRIGGER_CPU}  (bring node ${NODE1} CPU above 71%)"
     print_info "  TRIGGER_MEM : ${TRIGGER_MEM}"
 
     local TRIGGER_YAML="${SCRIPT_DIR}/poc-descheduler-vm-trigger.yaml"
     local TRIGGER_BASE="${SCRIPT_DIR}/poc-descheduler-vm-trigger-base.yaml"
 
-    # base yaml 생성 (클러스터 적용 없이)
+    # Generate base yaml (without applying to cluster)
     oc process -n openshift poc -p NAME="poc-descheduler-vm-trigger" | \
         sed 's/runStrategy: Halted/runStrategy: Always/' > "${TRIGGER_BASE}"
 
-    # nodeSelector + evictionStrategy + resources 를 dry-run 으로 병합 → 최종 yaml 저장
+    # Merge nodeSelector + evictionStrategy + resources via dry-run → save final yaml
     oc patch -f "${TRIGGER_BASE}" --dry-run=client --type=merge \
         -p "{
           \"spec\": {
@@ -408,17 +408,17 @@ step_trigger_vm() {
         }" -o yaml > "${TRIGGER_YAML}" 2>/dev/null || mv "${TRIGGER_BASE}" "${TRIGGER_YAML}"
 
     rm -f "${TRIGGER_BASE}"
-    echo "생성된 파일: ${TRIGGER_YAML}"
-    print_ok "트리거 VM yaml 저장 완료 — 준비되면 수동으로 적용하세요:"
+    echo "Generated file: ${TRIGGER_YAML}"
+    print_ok "Trigger VM yaml saved — apply manually when ready:"
     print_info "  oc apply -n ${NS} -f ${TRIGGER_YAML}"
     print_info "  virtctl start poc-descheduler-vm-trigger -n ${NS}"
 }
 
 # =============================================================================
-# 5단계: ConsoleYAMLSample 등록
+# Step 5: Register ConsoleYAMLSample
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "5/5  ConsoleYAMLSample 등록"
+    print_step "5/5  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-kubedescheduler.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -426,8 +426,8 @@ kind: ConsoleYAMLSample
 metadata:
   name: poc-kubedescheduler
 spec:
-  title: "POC KubeDescheduler 설정"
-  description: "LifecycleAndUtilization 프로파일로 과부하 노드의 VM을 자동 재배치합니다. High 임계값: underutilized<40%, overutilized>70%. Kube Descheduler Operator 설치 후 적용하세요."
+  title: "POC KubeDescheduler Configuration"
+  description: "Automatically relocates VMs from overloaded nodes using the LifecycleAndUtilization profile. High threshold: underutilized<40%, overutilized>70%. Apply after installing the Kube Descheduler Operator."
   targetResource:
     apiVersion: operator.openshift.io/v1
     kind: KubeDescheduler
@@ -446,40 +446,40 @@ spec:
         devLowNodeUtilizationThresholds: High
         namespaces:
           included:
-            - ${NS}    # 대상 네임스페이스로 변경
+            - ${NS}    # Change to target namespace
 EOF
-    echo "생성된 파일: consoleyamlsample-kubedescheduler.yaml"
+    echo "Generated file: consoleyamlsample-kubedescheduler.yaml"
     oc apply -f consoleyamlsample-kubedescheduler.yaml
-    print_ok "ConsoleYAMLSample poc-kubedescheduler 등록 완료"
+    print_ok "ConsoleYAMLSample poc-kubedescheduler registered"
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! Descheduler 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! Descheduler practice environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  VM 노드 배치 확인:"
+    echo -e "  Check VM node placement:"
     echo -e "    ${CYAN}oc get vmi -n ${NS} -o wide${NC}"
     echo ""
-    echo -e "  Descheduler 동작 확인 (60초 후):"
+    echo -e "  Verify Descheduler operation (after 60 seconds):"
     echo -e "    ${CYAN}oc get vmi -n ${NS} -o wide --watch${NC}"
     echo ""
-    echo -e "  트리거 VM 수동 적용 (준비되면 실행):"
+    echo -e "  Apply trigger VM manually (when ready):"
     echo -e "    ${CYAN}oc apply -n ${NS} -f ${SCRIPT_DIR}/poc-descheduler-vm-trigger.yaml${NC}"
     echo -e "    ${CYAN}virtctl start poc-descheduler-vm-trigger -n ${NS}${NC}"
     echo ""
-    echo -e "  예상 결과 (트리거 VM 적용 후 60초 이내):"
-    echo -e "    poc-descheduler-vm-1       → 다른 노드로 Migration"
-    echo -e "    poc-descheduler-vm-2       → 다른 노드로 Migration"
-    echo -e "    poc-descheduler-vm-3       → 다른 노드로 Migration"
-    echo -e "    poc-descheduler-vm-fixed   → ${NODE1} 유지 (evict 제외)"
-    echo -e "    poc-descheduler-vm-trigger → ${NODE1} 유지 (가장 최근 배포)"
+    echo -e "  Expected results (within 60 seconds after trigger VM applied):"
+    echo -e "    poc-descheduler-vm-1       → Migrated to another node"
+    echo -e "    poc-descheduler-vm-2       → Migrated to another node"
+    echo -e "    poc-descheduler-vm-3       → Migrated to another node"
+    echo -e "    poc-descheduler-vm-fixed   → Stays on ${NODE1} (eviction excluded)"
+    echo -e "    poc-descheduler-vm-trigger → Stays on ${NODE1} (most recently deployed)"
     echo ""
-    echo -e "  자세한 내용: 06-descheduler.md 참조"
+    echo -e "  For details: refer to 06-descheduler.md"
     echo ""
 }
 
@@ -487,14 +487,14 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 07-descheduler 리소스 삭제"
+    print_step "--cleanup: Delete 07-descheduler resources"
     oc delete project poc-descheduler --ignore-not-found 2>/dev/null || true
 
     local _pre="${SCRIPT_DIR}/.kubedescheduler-preexisted"
     if [ -f "$_pre" ]; then
-        # 스크립트 실행 전에 이미 존재했던 경우 — poc-descheduler 항목만 제거
-        print_info "KubeDescheduler는 기존 설정이므로 삭제하지 않습니다."
-        print_info "  → poc-descheduler 네임스페이스 항목만 제거합니다."
+        # Already existed before this script ran — only remove poc-descheduler entry
+        print_info "KubeDescheduler was pre-existing — not deleting."
+        print_info "  → Removing only the poc-descheduler namespace entry."
         local _idx
         _idx=$(oc get kubedescheduler cluster -n openshift-kube-descheduler-operator \
             -o json 2>/dev/null | \
@@ -505,7 +505,7 @@ cleanup() {
             oc patch kubedescheduler cluster -n openshift-kube-descheduler-operator \
                 --type=json \
                 -p="[{\"op\":\"remove\",\"path\":\"/spec/profileCustomizations/namespaces/included/${_idx}\"}]" \
-                2>/dev/null && print_ok "poc-descheduler 항목 제거 완료" || true
+                2>/dev/null && print_ok "poc-descheduler entry removed" || true
         fi
         rm -f "$_pre"
     else
@@ -513,16 +513,16 @@ cleanup() {
     fi
 
     oc delete consoleyamlsample poc-kubedescheduler --ignore-not-found 2>/dev/null || true
-    print_ok "07-descheduler 리소스 삭제 완료"
+    print_ok "07-descheduler resources deleted"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  Descheduler 실습 환경 구성${NC}"
+    echo -e "${CYAN}  Descheduler Practice Environment Setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

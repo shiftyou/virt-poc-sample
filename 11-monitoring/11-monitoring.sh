@@ -2,14 +2,14 @@
 # =============================================================================
 # 11-monitoring.sh
 #
-# 모니터링 실습 환경 구성 (Grafana + Cluster Observability Operator)
-#   1. poc-monitoring 네임스페이스 생성
-#   2. Grafana 인스턴스 배포 (Grafana Operator 필요)
-#   3. Prometheus DataSource 연동
-#   4. poc 템플릿 VM + node-exporter Service 배포 (COO + Virt 필요)
-#   5. COO MonitoringStack + ServiceMonitor + PrometheusRule 배포 (COO 필요)
+# Monitoring practice environment setup (Grafana + Cluster Observability Operator)
+#   1. Create poc-monitoring namespace
+#   2. Deploy Grafana instance (requires Grafana Operator)
+#   3. Integrate Prometheus DataSource
+#   4. Deploy poc template VM + node-exporter Service (requires COO + Virt)
+#   5. Deploy COO MonitoringStack + ServiceMonitor + PrometheusRule (requires COO)
 #
-# 사용법: ./11-monitoring.sh
+# Usage: ./11-monitoring.sh
 # =============================================================================
 
 set -euo pipefail
@@ -39,9 +39,9 @@ print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 step_install_grafana_guide() {
     echo ""
-    print_warn "Grafana 커뮤니티 Operator 미설치 — 아래 절차로 설치 후 setup.sh 재실행하세요."
+    print_warn "Grafana Community Operator not installed — install using the procedure below then re-run setup.sh."
     echo ""
-    echo -e "  ${CYAN}# 1. Grafana Operator (커뮤니티) 설치 — poc-monitoring 네임스페이스 범위${NC}"
+    echo -e "  ${CYAN}# 1. Install Grafana Operator (community) — scoped to poc-monitoring namespace${NC}"
     echo -e "  ${CYAN}oc apply -f - <<'EOF'${NC}"
     cat <<'YAML'
 apiVersion: operators.coreos.com/v1
@@ -66,27 +66,27 @@ spec:
 YAML
     echo -e "  ${CYAN}EOF${NC}"
     echo ""
-    print_info "설치 완료 후 확인:"
+    print_info "After installation, verify:"
     echo -e "  ${CYAN}oc get csv -n poc-monitoring | grep grafana${NC}"
-    print_info "설치 완료 후 setup.sh 재실행하여 GRAFANA_INSTALLED=true 로 업데이트하세요."
+    print_info "After installation, re-run setup.sh to update GRAFANA_INSTALLED=true."
     echo ""
 }
 
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # env.conf에 없으면 클러스터 CSV에서 자동 감지
+    # Auto-detect from cluster CSV if not in env.conf
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
         if oc get csv --all-namespaces --no-headers 2>/dev/null \
             | grep -qi "grafana-operator"; then
             GRAFANA_INSTALLED=true
-            print_ok "Grafana 커뮤니티 Operator 자동 감지 (CSV)"
+            print_ok "Grafana Community Operator auto-detected (CSV)"
         fi
     fi
 
@@ -94,7 +94,7 @@ preflight() {
         if oc get csv --all-namespaces --no-headers 2>/dev/null \
             | grep -qi "cluster-observability-operator"; then
             COO_INSTALLED=true
-            print_ok "Cluster Observability Operator 자동 감지 (CSV)"
+            print_ok "Cluster Observability Operator auto-detected (CSV)"
         fi
     fi
 
@@ -102,73 +102,73 @@ preflight() {
         if oc get csv --all-namespaces --no-headers 2>/dev/null \
             | grep -qi "kubevirt-hyperconverged"; then
             VIRT_INSTALLED=true
-            print_ok "OpenShift Virtualization 자동 감지 (CSV)"
+            print_ok "OpenShift Virtualization auto-detected (CSV)"
         fi
     fi
 
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ] && [ "${COO_INSTALLED:-false}" != "true" ]; then
-        print_warn "Grafana Operator 및 Cluster Observability Operator 모두 미설치 → 건너뜁니다."
+        print_warn "Both Grafana Operator and Cluster Observability Operator are not installed → skipping."
         step_install_grafana_guide
-        print_warn "  COO 설치 가이드: 00-operator/coo-operator.md"
+        print_warn "  COO installation guide: 00-operator/coo-operator.md"
         exit 77
     fi
 
     if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-        print_ok "Grafana 커뮤니티 Operator 확인"
+        print_ok "Grafana Community Operator confirmed"
     else
-        print_warn "Grafana Operator 미설치 — Grafana 스텝 건너뜁니다."
+        print_warn "Grafana Operator not installed — skipping Grafana steps."
         step_install_grafana_guide
     fi
 
     if [ "${COO_INSTALLED:-false}" = "true" ]; then
-        print_ok "Cluster Observability Operator 확인"
+        print_ok "Cluster Observability Operator confirmed"
         if [ "${VIRT_INSTALLED:-false}" = "true" ]; then
-            print_ok "OpenShift Virtualization 확인 — VM 생성 스텝 실행됩니다."
+            print_ok "OpenShift Virtualization confirmed — VM creation step will run."
         else
-            print_warn "OpenShift Virtualization 미설치 — VM 생성 스텝 건너뜁니다."
+            print_warn "OpenShift Virtualization not installed — skipping VM creation step."
         fi
     else
-        print_warn "Cluster Observability Operator 미설치 — COO 스텝 건너뜁니다."
+        print_warn "Cluster Observability Operator not installed — skipping COO steps."
     fi
 }
 
 step_namespace() {
-    print_step "1/5  네임스페이스 생성 (${NS})"
+    print_step "1/5  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
         local ns_phase
         ns_phase=$(oc get namespace "$NS" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
 
         if [ "$ns_phase" = "Terminating" ]; then
-            print_warn "네임스페이스 $NS 가 Terminating 상태 — 삭제 완료 대기 중..."
+            print_warn "Namespace $NS is in Terminating state — waiting for deletion to complete..."
             local retries=36
             local i=0
             while [ "$i" -lt "$retries" ]; do
                 if ! oc get namespace "$NS" &>/dev/null; then
-                    print_ok "네임스페이스 삭제 완료"
+                    print_ok "Namespace deletion complete"
                     break
                 fi
-                printf "  [%d/%d] Terminating 대기 중...\r" "$((i+1))" "$retries"
+                printf "  [%d/%d] Waiting for Terminating...\r" "$((i+1))" "$retries"
                 sleep 5
                 i=$((i+1))
             done
             echo ""
 
             if oc get namespace "$NS" &>/dev/null; then
-                print_error "네임스페이스 $NS 가 여전히 Terminating 상태입니다."
-                print_info "수동 확인: oc get namespace $NS -o yaml"
-                print_info "Finalizer 강제 제거: oc patch namespace $NS -p '{\"metadata\":{\"finalizers\":[]}}' --type=merge"
+                print_error "Namespace $NS is still in Terminating state."
+                print_info "Manual check: oc get namespace $NS -o yaml"
+                print_info "Force remove finalizer: oc patch namespace $NS -p '{\"metadata\":{\"finalizers\":[]}}' --type=merge"
                 exit 1
             fi
 
             oc new-project "$NS" > /dev/null
-            print_ok "네임스페이스 $NS 재생성 완료"
+            print_ok "Namespace $NS recreated"
         else
-            print_ok "네임스페이스 $NS 이미 존재 (Active) — 스킵"
+            print_ok "Namespace $NS already exists (Active) — skipping"
         fi
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created"
     fi
 }
 
@@ -176,12 +176,12 @@ step_grafana() {
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "2/6  Grafana 인스턴스 배포"
+    print_step "2/6  Deploy Grafana instance"
 
     local grafana_pass="${GRAFANA_ADMIN_PASS:-grafana123}"
 
     if oc get grafana poc-grafana -n "$NS" &>/dev/null; then
-        print_ok "Grafana poc-grafana 이미 존재 — 스킵"
+        print_ok "Grafana poc-grafana already exists — skipping"
     else
         cat > ./poc-grafana.yaml <<EOF
 apiVersion: grafana.integreatly.org/v1beta1
@@ -202,11 +202,11 @@ spec:
       admin_password: ${grafana_pass}
 EOF
         oc apply -f ./poc-grafana.yaml
-        print_ok "Grafana poc-grafana 배포 완료 (admin 비밀번호: ${grafana_pass})"
+        print_ok "Grafana poc-grafana deployed (admin password: ${grafana_pass})"
     fi
 
-    # Grafana Pod Ready 대기
-    print_info "Grafana Pod 준비 대기 중..."
+    # Wait for Grafana Pod Ready
+    print_info "Waiting for Grafana Pod to be ready..."
     local retries=24
     local i=0
     while [ "$i" -lt "$retries" ]; do
@@ -217,15 +217,15 @@ EOF
             print_ok "Grafana Pod Ready"
             break
         fi
-        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${ready:--}"
+        printf "  [%d/%d] Waiting... (%s)\r" "$((i+1))" "$retries" "${ready:--}"
         sleep 5
         i=$((i+1))
     done
     echo ""
 
-    # OpenShift Route 생성 (ingress 대신 Route 직접 생성)
+    # Create OpenShift Route (create Route directly instead of ingress)
     if oc get route poc-grafana-route -n "$NS" &>/dev/null; then
-        print_ok "Route poc-grafana-route 이미 존재 — 스킵"
+        print_ok "Route poc-grafana-route already exists — skipping"
     else
         cat > ./poc-grafana-route.yaml <<EOF
 apiVersion: route.openshift.io/v1
@@ -246,32 +246,32 @@ spec:
     insecureEdgeTerminationPolicy: Redirect
 EOF
         oc apply -f ./poc-grafana-route.yaml
-        print_ok "Route poc-grafana-route 생성 완료"
+        print_ok "Route poc-grafana-route created"
     fi
 
     local grafana_url
     grafana_url=$(oc get route poc-grafana-route -n "$NS" \
         -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
     [ -n "$grafana_url" ] && print_ok "Grafana URL: https://${grafana_url}"
-    print_info "  로그인: admin / ${grafana_pass}"
+    print_info "  Login: admin / ${grafana_pass}"
 
-    # Grafana SA 생성 대기 (Grafana Operator가 SA를 비동기로 생성)
-    print_info "ServiceAccount poc-grafana-sa 생성 대기 중..."
+    # Wait for Grafana SA creation (Grafana Operator creates SA asynchronously)
+    print_info "Waiting for ServiceAccount poc-grafana-sa to be created..."
     local sa_retries=24
     local si=0
     while [ "$si" -lt "$sa_retries" ]; do
         if oc get serviceaccount poc-grafana-sa -n "$NS" &>/dev/null; then
-            print_ok "ServiceAccount poc-grafana-sa 확인"
+            print_ok "ServiceAccount poc-grafana-sa confirmed"
             break
         fi
-        printf "  [%d/%d] SA 대기 중...\r" "$((si+1))" "$sa_retries"
+        printf "  [%d/%d] Waiting for SA...\r" "$((si+1))" "$sa_retries"
         sleep 5
         si=$((si+1))
     done
     echo ""
 
-    # Grafana SA에 cluster-monitoring-view 권한 부여 (oc apply — 멱등)
-    print_info "Prometheus 접근 권한 설정 중..."
+    # Grant cluster-monitoring-view permission to Grafana SA (oc apply — idempotent)
+    print_info "Configuring Prometheus access permissions..."
     cat > ./grafana-monitoring-crb.yaml <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -287,23 +287,23 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 EOF
     oc apply --server-side -f ./grafana-monitoring-crb.yaml
-    print_ok "cluster-monitoring-view ClusterRoleBinding 적용 완료"
+    print_ok "cluster-monitoring-view ClusterRoleBinding applied"
 }
 
 step_datasource() {
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "3/6  Prometheus DataSource 연동"
+    print_step "3/6  Integrate Prometheus DataSource"
 
-    # ServiceAccount 존재 확인 (step_grafana에서 대기했지만 한 번 더 보장)
+    # Verify ServiceAccount exists (waited in step_grafana, but ensure once more)
     if ! oc get serviceaccount poc-grafana-sa -n "$NS" &>/dev/null; then
-        print_warn "ServiceAccount poc-grafana-sa 없음 — DataSource 스텝 건너뜁니다."
-        print_info "수동 확인: oc get sa -n ${NS}"
+        print_warn "ServiceAccount poc-grafana-sa not found — skipping DataSource step."
+        print_info "Manual check: oc get sa -n ${NS}"
         return
     fi
 
-    # ServiceAccount 토큰 생성 (재시도 3회)
+    # Generate ServiceAccount token (retry 3 times)
     TOKEN=""
     local t=0
     while [ "$t" -lt 3 ] && [ -z "$TOKEN" ]; do
@@ -312,8 +312,8 @@ step_datasource() {
         t=$((t+1))
     done
     if [ -z "$TOKEN" ]; then
-        print_warn "Grafana SA 토큰 생성 실패 — Grafana Pod가 아직 준비 중일 수 있습니다."
-        print_info "수동으로 실행: oc create token poc-grafana-sa -n ${NS} --duration=8760h"
+        print_warn "Grafana SA token creation failed — Grafana Pod may still be starting."
+        print_info "Run manually: oc create token poc-grafana-sa -n ${NS} --duration=8760h"
         return
     fi
 
@@ -341,23 +341,23 @@ spec:
       httpHeaderValue1: Bearer ${TOKEN}
 EOF
     oc apply -f ./prometheus-datasource.yaml
-    print_ok "Prometheus DataSource 연동 완료"
+    print_ok "Prometheus DataSource integrated"
 }
 
 step_dashboard() {
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "4/6  VM 전체 현황 대시보드 배포"
+    print_step "4/6  Deploy VM overall status dashboard"
 
-    # 기존 CR 삭제 후 재생성 — oc apply unchanged 방지 및 Grafana UI 삭제 후 복구 보장
+    # Delete existing CR then recreate — prevents oc apply unchanged and ensures recovery after Grafana UI deletion
     if oc get grafanadashboard poc-vm-overview -n "$NS" &>/dev/null; then
-        print_info "GrafanaDashboard poc-vm-overview 기존 CR 삭제 후 재생성..."
+        print_info "GrafanaDashboard poc-vm-overview: deleting existing CR and recreating..."
         oc delete grafanadashboard poc-vm-overview -n "$NS" --wait=false 2>/dev/null || true
         sleep 2
     fi
 
-    # Dashboard JSON ($-확장 방지: single-quoted heredoc 사용)
+    # Dashboard JSON (use single-quoted heredoc to prevent $-expansion)
     cat > ./poc-vm-dashboard.json << 'DASHBOARD_EOF'
 {
   "annotations": {
@@ -373,7 +373,7 @@ step_dashboard() {
       }
     ]
   },
-  "description": "OpenShift Virtualization 전체 VM 운영 현황 모니터링",
+  "description": "OpenShift Virtualization overall VM operations monitoring",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -388,7 +388,7 @@ step_dashboard() {
         "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
         "hide": 0,
         "includeAll": false,
-        "label": "데이터소스",
+        "label": "Datasource",
         "multi": false,
         "name": "datasource",
         "options": [],
@@ -403,7 +403,7 @@ step_dashboard() {
         "definition": "label_values(kubevirt_vmi_info, namespace)",
         "hide": 0,
         "includeAll": true,
-        "label": "네임스페이스",
+        "label": "Namespace",
         "multi": true,
         "name": "namespace",
         "options": [],
@@ -420,7 +420,7 @@ step_dashboard() {
         "definition": "label_values(kubevirt_vmi_info, name)",
         "hide": 0,
         "includeAll": true,
-        "label": "VM 이름",
+        "label": "VM Name",
         "multi": true,
         "name": "vm",
         "options": [],
@@ -435,7 +435,7 @@ step_dashboard() {
   "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
-  "title": "KubeVirt VM 전체 현황",
+  "title": "KubeVirt VM Overall Status",
   "uid": "poc-vm-overview",
   "version": 1,
   "panels": [
@@ -443,7 +443,7 @@ step_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
       "id": 100,
-      "title": "VM 상태 요약",
+      "title": "VM Status Summary",
       "type": "row"
     },
     {
@@ -467,7 +467,7 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "실행 중 (Running) — 클러스터 전체",
+      "title": "Running — Cluster Total",
       "type": "stat",
       "targets": [
         {
@@ -499,7 +499,7 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "일시정지 (Paused) — 클러스터 전체",
+      "title": "Paused — Cluster Total",
       "type": "stat",
       "targets": [
         {
@@ -531,13 +531,13 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "비정상 VMI (Pending / Failed) — 클러스터 전체",
+      "title": "Abnormal VMI (Pending / Failed) — Cluster Total",
       "type": "stat",
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
           "expr": "sum(kubevirt_vmi_phase_count{phase!~\"Running|running|Paused|paused\"}) or vector(0)",
-          "legendFormat": "비정상 (Pending/Failed 등)",
+          "legendFormat": "Abnormal (Pending/Failed etc.)",
           "refId": "A"
         }
       ]
@@ -563,7 +563,7 @@ step_dashboard() {
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
         "textMode": "auto"
       },
-      "title": "전체 활성 VMI — 클러스터 전체",
+      "title": "Total Active VMI — Cluster Total",
       "type": "stat",
       "targets": [
         {
@@ -578,7 +578,7 @@ step_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
       "id": 101,
-      "title": "VM 인벤토리",
+      "title": "VM Inventory",
       "type": "row"
     },
     {
@@ -618,12 +618,12 @@ step_dashboard() {
           {"matcher": {"id": "byName", "options": "service"},  "properties": [{"id": "custom.hidden", "value": true}]},
           {"matcher": {"id": "byName", "options": "pod"},      "properties": [{"id": "custom.hidden", "value": true}]},
           {"matcher": {"id": "byName", "options": "container"},"properties": [{"id": "custom.hidden", "value": true}]},
-          {"matcher": {"id": "byName", "options": "namespace"}, "properties": [{"id": "displayName", "value": "네임스페이스"}]},
-          {"matcher": {"id": "byName", "options": "name"},      "properties": [{"id": "displayName", "value": "VM 이름"}]},
-          {"matcher": {"id": "byName", "options": "node"},      "properties": [{"id": "displayName", "value": "노드"}]},
-          {"matcher": {"id": "byName", "options": "ready"},     "properties": [{"id": "displayName", "value": "Ready 상태"}]},
+          {"matcher": {"id": "byName", "options": "namespace"}, "properties": [{"id": "displayName", "value": "Namespace"}]},
+          {"matcher": {"id": "byName", "options": "name"},      "properties": [{"id": "displayName", "value": "VM Name"}]},
+          {"matcher": {"id": "byName", "options": "node"},      "properties": [{"id": "displayName", "value": "Node"}]},
+          {"matcher": {"id": "byName", "options": "ready"},     "properties": [{"id": "displayName", "value": "Ready Status"}]},
           {"matcher": {"id": "byName", "options": "os"},        "properties": [{"id": "displayName", "value": "OS"}]},
-          {"matcher": {"id": "byName", "options": "workload"},  "properties": [{"id": "displayName", "value": "워크로드"}]}
+          {"matcher": {"id": "byName", "options": "workload"},  "properties": [{"id": "displayName", "value": "Workload"}]}
         ]
       },
       "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6},
@@ -632,9 +632,9 @@ step_dashboard() {
         "cellHeight": "sm",
         "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
         "showHeader": true,
-        "sortBy": [{"desc": false, "displayName": "네임스페이스"}]
+        "sortBy": [{"desc": false, "displayName": "Namespace"}]
       },
-      "title": "VM 목록 (클러스터 전체)",
+      "title": "VM List (Cluster Total)",
       "transformations": [
         {"id": "merge", "options": {}}
       ],
@@ -684,7 +684,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "CPU 사용률 (vCPU seconds/s)",
+      "title": "CPU Utilization (vCPU seconds/s)",
       "type": "timeseries",
       "targets": [
         {
@@ -699,7 +699,7 @@ step_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
       "id": 103,
-      "title": "메모리",
+      "title": "Memory",
       "type": "row"
     },
     {
@@ -729,7 +729,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "메모리 사용량 (Resident)",
+      "title": "Memory Usage (Resident)",
       "type": "timeseries",
       "targets": [
         {
@@ -769,7 +769,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "메모리 사용률 (%)",
+      "title": "Memory Utilization (%)",
       "type": "timeseries",
       "targets": [
         {
@@ -784,7 +784,7 @@ step_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
       "id": 104,
-      "title": "네트워크 I/O",
+      "title": "Network I/O",
       "type": "row"
     },
     {
@@ -814,7 +814,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "네트워크 수신 (RX)",
+      "title": "Network Receive (RX)",
       "type": "timeseries",
       "targets": [
         {
@@ -852,7 +852,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "네트워크 송신 (TX)",
+      "title": "Network Transmit (TX)",
       "type": "timeseries",
       "targets": [
         {
@@ -867,7 +867,7 @@ step_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
       "id": 105,
-      "title": "스토리지 I/O",
+      "title": "Storage I/O",
       "type": "row"
     },
     {
@@ -897,7 +897,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "스토리지 읽기 (Read)",
+      "title": "Storage Read",
       "type": "timeseries",
       "targets": [
         {
@@ -935,7 +935,7 @@ step_dashboard() {
         "legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
-      "title": "스토리지 쓰기 (Write)",
+      "title": "Storage Write",
       "type": "timeseries",
       "targets": [
         {
@@ -950,7 +950,7 @@ step_dashboard() {
 }
 DASHBOARD_EOF
 
-    # YAML 래퍼 생성 (bash 변수 ${NS} 사용)
+    # Create YAML wrapper (using bash variable ${NS})
     {
         printf 'apiVersion: grafana.integreatly.org/v1beta1\n'
         printf 'kind: GrafanaDashboard\n'
@@ -969,10 +969,10 @@ DASHBOARD_EOF
     } > ./poc-vm-dashboard.yaml
 
     oc create -f ./poc-vm-dashboard.yaml
-    print_ok "GrafanaDashboard poc-vm-overview 배포 완료"
+    print_ok "GrafanaDashboard poc-vm-overview deployed"
 
-    # Grafana Operator 동기화 대기 (최대 90초)
-    print_info "  Grafana 대시보드 동기화 대기 중..."
+    # Wait for Grafana Operator synchronization (up to 90 seconds)
+    print_info "  Waiting for Grafana dashboard synchronization..."
     local synced=false
     for i in $(seq 1 18); do
         sleep 5
@@ -982,44 +982,44 @@ DASHBOARD_EOF
             synced=true
             break
         fi
-        printf "    대기 중... (%ds)\n" $((i * 5))
+        printf "    Waiting... (%ds)\n" $((i * 5))
     done
 
     if [ "${synced}" = "true" ]; then
-        print_ok "  대시보드 동기화 완료"
+        print_ok "  Dashboard synchronization complete"
     else
-        print_warn "  동기화 확인 불가 — Grafana에서 직접 확인하세요 (resyncPeriod: 5m)"
+        print_warn "  Synchronization could not be confirmed — check directly in Grafana (resyncPeriod: 5m)"
     fi
-    print_info "  대시보드: Grafana → Dashboards → KubeVirt VM 전체 현황"
+    print_info "  Dashboard: Grafana → Dashboards → KubeVirt VM Overall Status"
 }
 
 step_vm() {
     if [ "${COO_INSTALLED:-false}" != "true" ] || [ "${VIRT_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "5/6  poc 템플릿 VM 생성 (${VM_NAME})"
+    print_step "5/6  Create poc template VM (${VM_NAME})"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_warn "poc Template 없음 — 01-template 을 먼저 실행하세요. VM 생성 건너뜁니다."
+        print_warn "poc Template not found — run 01-template first. Skipping VM creation."
         return
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 
     if ! command -v virtctl &>/dev/null; then
-        print_warn "virtctl 없음 — VM 생성 건너뜁니다."
+        print_warn "virtctl not found — skipping VM creation."
         return
     fi
 
-    # VM 생성
+    # Create VM
     if oc get vm "$VM_NAME" -n "$NS" &>/dev/null; then
-        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+        print_ok "VM $VM_NAME already exists — skipping"
     else
         oc process -n openshift poc -p NAME="$VM_NAME" > ./${VM_NAME}.yaml
         oc apply -n "$NS" -f ./${VM_NAME}.yaml
-        print_ok "VM $VM_NAME 생성 완료"
+        print_ok "VM $VM_NAME created"
     fi
 
-    # virt-launcher Pod에 monitor=metrics 레이블 전파
+    # Propagate monitor=metrics label to virt-launcher Pod
     oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
       "spec": {
         "template": {
@@ -1030,12 +1030,12 @@ step_vm() {
           }
         }
       }
-    }' 2>/dev/null && print_ok "레이블 monitor=metrics 설정 완료" || true
+    }' 2>/dev/null && print_ok "Label monitor=metrics configured" || true
 
-    # node-exporter Service 생성
-    # virt-launcher Pod(monitor=metrics)에서 VM 내부 node-exporter(9100)로 트래픽 전달
+    # Create node-exporter Service
+    # Forward traffic from virt-launcher Pod (monitor=metrics) to node-exporter (9100) inside VM
     if oc get svc poc-monitoring-node-exporter -n "$NS" &>/dev/null; then
-        print_ok "Service poc-monitoring-node-exporter 이미 존재 — 스킵"
+        print_ok "Service poc-monitoring-node-exporter already exists — skipping"
     else
         cat > ./poc-monitoring-vm-service.yaml <<EOF
 apiVersion: v1
@@ -1057,16 +1057,16 @@ spec:
   type: ClusterIP
 EOF
         oc apply -f ./poc-monitoring-vm-service.yaml
-        print_ok "Service poc-monitoring-node-exporter 생성 완료"
+        print_ok "Service poc-monitoring-node-exporter created"
     fi
 
-    # 네임스페이스에 user-workload 모니터링 레이블 추가 (OpenShift Console 가시성)
+    # Add user-workload monitoring label to namespace (OpenShift Console visibility)
     oc label namespace "$NS" openshift.io/cluster-monitoring=true --overwrite 2>/dev/null || true
-    print_ok "user-workload 모니터링 레이블 설정 완료"
+    print_ok "user-workload monitoring label configured"
 
-    # OpenShift Console Observe 탭용 ServiceMonitor (monitoring.coreos.com/v1)
+    # ServiceMonitor for OpenShift Console Observe tab (monitoring.coreos.com/v1)
     if oc get servicemonitor poc-vm-node-exporter-console -n "$NS" &>/dev/null; then
-        print_ok "ServiceMonitor poc-vm-node-exporter-console 이미 존재 — 스킵"
+        print_ok "ServiceMonitor poc-vm-node-exporter-console already exists — skipping"
     else
         cat > ./poc-vm-servicemonitor-console.yaml <<EOF
 apiVersion: monitoring.coreos.com/v1
@@ -1091,13 +1091,13 @@ spec:
           targetLabel: vmname
 EOF
         oc apply -f ./poc-vm-servicemonitor-console.yaml
-        print_ok "ServiceMonitor poc-vm-node-exporter-console 생성 완료 (OpenShift Console 용)"
+        print_ok "ServiceMonitor poc-vm-node-exporter-console created (for OpenShift Console)"
     fi
 
-    # VM 시작
+    # Start VM
     virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
-    print_info "VM 시작 요청 완료 — Running 상태까지 시간이 걸릴 수 있습니다."
-    print_warn "VM에 node_exporter 설치가 필요합니다 (09-node-exporter/node-exporter-install.sh 참조)"
+    print_info "VM start requested — may take time to reach Running state."
+    print_warn "node_exporter installation inside VM is required (refer to 09-node-exporter/node-exporter-install.sh)"
     print_info "  oc get vmi $VM_NAME -n $NS"
 }
 
@@ -1105,18 +1105,18 @@ step_coo() {
     if [ "${COO_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "6/7  Cluster Observability Operator (COO) 구성"
+    print_step "6/7  Configure Cluster Observability Operator (COO)"
 
-    # MonitoringStack CRD 확인
+    # Check MonitoringStack CRD
     if ! oc get crd monitoringstacks.monitoring.rhobs &>/dev/null; then
-        print_warn "MonitoringStack CRD 없음 — COO가 완전히 설치되지 않았습니다."
+        print_warn "MonitoringStack CRD not found — COO is not fully installed."
         return
     fi
-    print_ok "MonitoringStack CRD 확인"
+    print_ok "MonitoringStack CRD confirmed"
 
-    # MonitoringStack 생성
+    # Create MonitoringStack
     if oc get monitoringstack poc-monitoring-stack -n "$NS" &>/dev/null; then
-        print_ok "MonitoringStack poc-monitoring-stack 이미 존재 — 스킵"
+        print_ok "MonitoringStack poc-monitoring-stack already exists — skipping"
     else
         cat > ./poc-monitoring-stack.yaml <<EOF
 apiVersion: monitoring.rhobs/v1alpha1
@@ -1143,13 +1143,13 @@ spec:
     enabled: true
 EOF
         oc apply -f ./poc-monitoring-stack.yaml
-        print_ok "MonitoringStack poc-monitoring-stack 배포 완료"
+        print_ok "MonitoringStack poc-monitoring-stack deployed"
     fi
 
-    # ServiceMonitor for VM node-exporter (monitoring.rhobs/v1 — COO용)
+    # ServiceMonitor for VM node-exporter (monitoring.rhobs/v1 — for COO)
     if [ "${VIRT_INSTALLED:-false}" = "true" ]; then
         if oc get servicemonitor.monitoring.rhobs poc-vm-node-exporter -n "$NS" &>/dev/null; then
-            print_ok "ServiceMonitor poc-vm-node-exporter 이미 존재 — 스킵"
+            print_ok "ServiceMonitor poc-vm-node-exporter already exists — skipping"
         else
             cat > ./poc-vm-servicemonitor-coo.yaml <<EOF
 apiVersion: monitoring.rhobs/v1
@@ -1174,13 +1174,13 @@ spec:
           targetLabel: vmname
 EOF
             oc apply -f ./poc-vm-servicemonitor-coo.yaml
-            print_ok "ServiceMonitor poc-vm-node-exporter 생성 완료 (COO 전용)"
+            print_ok "ServiceMonitor poc-vm-node-exporter created (COO only)"
         fi
     fi
 
-    # PrometheusRule (VM 알림 규칙)
+    # PrometheusRule (VM alert rules)
     if oc get prometheusrule poc-vm-alerts -n "$NS" &>/dev/null; then
-        print_ok "PrometheusRule poc-vm-alerts 이미 존재 — 스킵"
+        print_ok "PrometheusRule poc-vm-alerts already exists — skipping"
     else
         cat > ./poc-vm-alerts.yaml <<EOF
 apiVersion: monitoring.rhobs/v1
@@ -1201,8 +1201,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "VM이 Running 상태가 아닙니다"
-            description: "VM {{ \$labels.name }} 상태: {{ \$labels.phase }}"
+            summary: "VM is not in Running state"
+            description: "VM {{ \$labels.name }} state: {{ \$labels.phase }}"
         - alert: VMHighMemoryUsage
           expr: >
             (kubevirt_vmi_memory_resident_bytes /
@@ -1211,30 +1211,30 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "VM 메모리 사용률 90% 초과"
-            description: "VM {{ \$labels.name }} 의 메모리 사용률이 높습니다."
+            summary: "VM memory usage exceeds 90%"
+            description: "VM {{ \$labels.name }} has high memory usage."
 EOF
         oc apply -f ./poc-vm-alerts.yaml
-        print_ok "PrometheusRule poc-vm-alerts 생성 완료"
+        print_ok "PrometheusRule poc-vm-alerts created"
     fi
 
-    # 전체 네임스페이스의 VMI node_exporter 스크랩 설정
-    print_info "클러스터 전체 VMI node_exporter Service/ServiceMonitor 설정 중..."
+    # Configure node_exporter scraping for VMIs across all namespaces
+    print_info "Configuring node_exporter Service/ServiceMonitor for all cluster VMIs..."
     local vmi_ns_list
     vmi_ns_list=$(oc get vmi --all-namespaces --no-headers 2>/dev/null \
         | awk '{print $1}' | sort -u || true)
 
     if [ -z "$vmi_ns_list" ]; then
-        print_warn "실행 중인 VMI 없음 — 네임스페이스별 node_exporter 설정 건너뜁니다."
+        print_warn "No running VMIs found — skipping per-namespace node_exporter configuration."
     else
         while IFS= read -r vmi_ns; do
             [ -z "$vmi_ns" ] && continue
 
-            # virt-launcher 파드에 monitor=metrics 레이블 부여
+            # Add monitor=metrics label to virt-launcher pods
             oc label pods -n "$vmi_ns" -l "kubevirt.io=virt-launcher" \
                 monitor=metrics --overwrite 2>/dev/null || true
 
-            # Headless Service — 각 파드에서 node_exporter(9100) 직접 수집
+            # Headless Service — collect node_exporter (9100) directly from each pod
             cat > ./vm-ne-svc.yaml <<EOF
 apiVersion: v1
 kind: Service
@@ -1255,7 +1255,7 @@ spec:
 EOF
             oc apply -f ./vm-ne-svc.yaml
 
-            # ServiceMonitor (monitoring.rhobs/v1 — COO 전용)
+            # ServiceMonitor (monitoring.rhobs/v1 — COO only)
             cat > ./vm-ne-sm.yaml <<EOF
 apiVersion: monitoring.rhobs/v1
 kind: ServiceMonitor
@@ -1282,15 +1282,15 @@ spec:
 EOF
             oc apply -f ./vm-ne-sm.yaml
 
-            print_ok "  [${vmi_ns}] Service + ServiceMonitor 완료"
+            print_ok "  [${vmi_ns}] Service + ServiceMonitor complete"
         done <<< "$vmi_ns_list"
     fi
 
-    # Grafana가 함께 설치된 경우 COO Prometheus를 추가 DataSource로 등록
+    # Register COO Prometheus as additional DataSource in Grafana if installed together
     if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
-        print_info "COO Prometheus → Grafana DataSource 등록 중..."
+        print_info "Registering COO Prometheus as Grafana DataSource..."
         if oc get grafanadatasource coo-prometheus-datasource -n "$NS" &>/dev/null; then
-            print_ok "GrafanaDatasource coo-prometheus-datasource 이미 존재 — 스킵"
+            print_ok "GrafanaDatasource coo-prometheus-datasource already exists — skipping"
         else
             cat > ./coo-prometheus-datasource.yaml <<EOF
 apiVersion: grafana.integreatly.org/v1beta1
@@ -1312,11 +1312,11 @@ spec:
       timeInterval: 5s
 EOF
             oc apply -f ./coo-prometheus-datasource.yaml
-            print_ok "GrafanaDatasource coo-prometheus-datasource 등록 완료"
+            print_ok "GrafanaDatasource coo-prometheus-datasource registered"
         fi
     fi
 
-    print_info "MonitoringStack Pod 기동 대기 중..."
+    print_info "Waiting for MonitoringStack Pod to start..."
     local retries=12
     local i=0
     while [ $i -lt $retries ]; do
@@ -1324,10 +1324,10 @@ EOF
         ready=$(oc get pods -n "$NS" -l app.kubernetes.io/name=prometheus \
             --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
         if [ "$ready" -ge 1 ]; then
-            print_ok "COO Prometheus Pod 실행 중"
+            print_ok "COO Prometheus Pod running"
             break
         fi
-        printf "  [%d/%d] COO Prometheus 대기 중...\r" "$((i+1))" "$retries"
+        printf "  [%d/%d] Waiting for COO Prometheus...\r" "$((i+1))" "$retries"
         sleep 5
         i=$((i+1))
     done
@@ -1338,11 +1338,11 @@ step_coo_dashboard() {
     if [ "${GRAFANA_INSTALLED:-false}" != "true" ] || [ "${COO_INSTALLED:-false}" != "true" ]; then
         return
     fi
-    print_step "7/7  VM OS 메트릭 대시보드 배포 (COO-Prometheus / node_exporter)"
+    print_step "7/7  Deploy VM OS Metrics Dashboard (COO-Prometheus / node_exporter)"
 
-    # 기존 CR 삭제 후 재생성
+    # Delete existing CR then recreate
     if oc get grafanadashboard poc-vm-node-exporter -n "$NS" &>/dev/null; then
-        print_info "GrafanaDashboard poc-vm-node-exporter 기존 CR 삭제 후 재생성..."
+        print_info "GrafanaDashboard poc-vm-node-exporter: deleting existing CR and recreating..."
         oc delete grafanadashboard poc-vm-node-exporter -n "$NS" --wait=false 2>/dev/null || true
         sleep 2
     fi
@@ -1350,7 +1350,7 @@ step_coo_dashboard() {
     cat > ./poc-vm-node-exporter-dashboard.json << 'NEDASHEOF'
 {
   "annotations": {"list": [{"builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": true, "hide": true, "iconColor": "rgba(0,211,255,1)", "name": "Annotations & Alerts", "type": "dashboard"}]},
-  "description": "VM 내부 OS 메트릭 (node_exporter) — COO-Prometheus 기반",
+  "description": "VM internal OS metrics (node_exporter) — COO-Prometheus based",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -1365,7 +1365,7 @@ step_coo_dashboard() {
         "current": {"selected": false, "text": "COO-Prometheus", "value": "COO-Prometheus"},
         "hide": 0,
         "includeAll": false,
-        "label": "데이터소스",
+        "label": "Datasource",
         "multi": false,
         "name": "datasource",
         "options": [],
@@ -1380,7 +1380,7 @@ step_coo_dashboard() {
         "definition": "label_values(node_cpu_seconds_total{job=\"vm-node-exporter\"}, vm_namespace)",
         "hide": 0,
         "includeAll": true,
-        "label": "네임스페이스",
+        "label": "Namespace",
         "multi": true,
         "name": "vm_namespace",
         "options": [],
@@ -1397,7 +1397,7 @@ step_coo_dashboard() {
         "definition": "label_values(node_cpu_seconds_total{job=\"vm-node-exporter\", vm_namespace=~\"$vm_namespace\"}, vmname)",
         "hide": 0,
         "includeAll": true,
-        "label": "VM 이름",
+        "label": "VM Name",
         "multi": true,
         "name": "vmname",
         "options": [],
@@ -1412,7 +1412,7 @@ step_coo_dashboard() {
   "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
-  "title": "VM OS 메트릭 (node_exporter / COO)",
+  "title": "VM OS Metrics (node_exporter / COO)",
   "uid": "poc-vm-node-exporter",
   "version": 1,
   "panels": [
@@ -1420,7 +1420,7 @@ step_coo_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
       "id": 100,
-      "title": "VM 현황 요약",
+      "title": "VM Status Summary",
       "type": "row"
     },
     {
@@ -1437,7 +1437,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 4, "w": 12, "x": 0, "y": 1},
       "id": 1,
       "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "title": "VM CPU 평균 사용률",
+      "title": "VM Average CPU Utilization",
       "type": "stat",
       "targets": [
         {
@@ -1462,13 +1462,13 @@ step_coo_dashboard() {
       "gridPos": {"h": 4, "w": 12, "x": 12, "y": 1},
       "id": 2,
       "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "title": "VM 메모리 평균 사용률",
+      "title": "VM Average Memory Utilization",
       "type": "stat",
       "targets": [
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
           "expr": "100 * (1 - avg(node_memory_MemAvailable_bytes{job=\"vm-node-exporter\", vm_namespace=~\"$vm_namespace\", vmname=~\"$vmname\"} / node_memory_MemTotal_bytes{job=\"vm-node-exporter\", vm_namespace=~\"$vm_namespace\", vmname=~\"$vmname\"}))",
-          "legendFormat": "메모리 %",
+          "legendFormat": "Memory %",
           "refId": "A"
         }
       ]
@@ -1495,7 +1495,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 6},
       "id": 3,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "CPU 사용률 (%) — VM별",
+      "title": "CPU Utilization (%) — Per VM",
       "type": "timeseries",
       "targets": [
         {
@@ -1510,7 +1510,7 @@ step_coo_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
       "id": 102,
-      "title": "메모리",
+      "title": "Memory",
       "type": "row"
     },
     {
@@ -1528,7 +1528,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
       "id": 4,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "메모리 사용량 (Used)",
+      "title": "Memory Usage (Used)",
       "type": "timeseries",
       "targets": [
         {
@@ -1560,7 +1560,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
       "id": 5,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "메모리 사용률 (%)",
+      "title": "Memory Utilization (%)",
       "type": "timeseries",
       "targets": [
         {
@@ -1575,7 +1575,7 @@ step_coo_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
       "id": 103,
-      "title": "디스크 I/O",
+      "title": "Disk I/O",
       "type": "row"
     },
     {
@@ -1593,7 +1593,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
       "id": 6,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "디스크 읽기 (Read)",
+      "title": "Disk Read",
       "type": "timeseries",
       "targets": [
         {
@@ -1619,7 +1619,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
       "id": 7,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "디스크 쓰기 (Write)",
+      "title": "Disk Write",
       "type": "timeseries",
       "targets": [
         {
@@ -1634,7 +1634,7 @@ step_coo_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
       "id": 104,
-      "title": "네트워크 I/O",
+      "title": "Network I/O",
       "type": "row"
     },
     {
@@ -1652,7 +1652,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
       "id": 8,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "네트워크 수신 (RX)",
+      "title": "Network Receive (RX)",
       "type": "timeseries",
       "targets": [
         {
@@ -1678,7 +1678,7 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 33},
       "id": 9,
       "options": {"legend": {"calcs": ["mean", "max", "last"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "title": "네트워크 송신 (TX)",
+      "title": "Network Transmit (TX)",
       "type": "timeseries",
       "targets": [
         {
@@ -1693,7 +1693,7 @@ step_coo_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
       "id": 105,
-      "title": "시스템 부하 (Load Average)",
+      "title": "System Load (Load Average)",
       "type": "row"
     },
     {
@@ -1738,7 +1738,7 @@ step_coo_dashboard() {
       "collapsed": false,
       "gridPos": {"h": 1, "w": 24, "x": 0, "y": 50},
       "id": 106,
-      "title": "파일시스템",
+      "title": "Filesystem",
       "type": "row"
     },
     {
@@ -1751,7 +1751,7 @@ step_coo_dashboard() {
           "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}
         },
         "overrides": [
-          {"matcher": {"id": "byName", "options": "사용률 (%)"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}}]},
+          {"matcher": {"id": "byName", "options": "Utilization (%)"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}}]},
           {"matcher": {"id": "byName", "options": "Total"}, "properties": [{"id": "unit", "value": "bytes"}]},
           {"matcher": {"id": "byName", "options": "Used"}, "properties": [{"id": "unit", "value": "bytes"}]},
           {"matcher": {"id": "byName", "options": "Available"}, "properties": [{"id": "unit", "value": "bytes"}]}
@@ -1760,21 +1760,21 @@ step_coo_dashboard() {
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 51},
       "id": 11,
       "options": {"cellHeight": "sm", "footer": {"countRows": false, "reducer": ["sum"], "show": false}, "showHeader": true},
-      "title": "파일시스템 사용 현황",
+      "title": "Filesystem Usage Status",
       "transformations": [
         {"id": "merge", "options": {}},
         {
           "id": "organize",
           "options": {
             "renameByName": {
-              "vm_namespace": "네임스페이스",
-              "vmname": "VM 이름",
-              "device": "디바이스",
-              "mountpoint": "마운트 포인트",
+              "vm_namespace": "Namespace",
+              "vmname": "VM Name",
+              "device": "Device",
+              "mountpoint": "Mount Point",
               "Value #A": "Total",
               "Value #B": "Used",
               "Value #C": "Available",
-              "Value #D": "사용률 (%)"
+              "Value #D": "Utilization (%)"
             }
           }
         }
@@ -1833,8 +1833,8 @@ NEDASHEOF
     } > ./poc-vm-node-exporter-dashboard.yaml
 
     oc create -f ./poc-vm-node-exporter-dashboard.yaml
-    print_ok "GrafanaDashboard poc-vm-node-exporter 배포 완료"
-    print_info "  대시보드: Grafana → Dashboards → VM OS 메트릭 (node_exporter / COO)"
+    print_ok "GrafanaDashboard poc-vm-node-exporter deployed"
+    print_info "  Dashboard: Grafana → Dashboards → VM OS Metrics (node_exporter / COO)"
 }
 
 print_summary() {
@@ -1844,16 +1844,16 @@ print_summary() {
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! 모니터링 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! Monitoring practice environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
     if [ "${GRAFANA_INSTALLED:-false}" = "true" ]; then
         if [ -n "$grafana_route" ]; then
-            echo -e "  Grafana URL : ${CYAN}https://${grafana_route}${NC}"
-            echo -e "  계정        : admin / ${GRAFANA_ADMIN_PASS:-grafana123}"
-            echo -e "  VM 대시보드 : ${CYAN}https://${grafana_route}/d/poc-vm-overview${NC}"
-            echo -e "  OS 대시보드 : ${CYAN}https://${grafana_route}/d/poc-vm-node-exporter${NC}"
+            echo -e "  Grafana URL  : ${CYAN}https://${grafana_route}${NC}"
+            echo -e "  Credentials  : admin / ${GRAFANA_ADMIN_PASS:-grafana123}"
+            echo -e "  VM Dashboard : ${CYAN}https://${grafana_route}/d/poc-vm-overview${NC}"
+            echo -e "  OS Dashboard : ${CYAN}https://${grafana_route}/d/poc-vm-node-exporter${NC}"
         else
             echo -e "  Grafana Route: ${CYAN}oc get route -n ${NS}${NC}"
         fi
@@ -1868,24 +1868,24 @@ print_summary() {
         echo -e "  PrometheusRule:"
         echo -e "    ${CYAN}oc get prometheusrule -n ${NS}${NC}"
         echo ""
-        echo -e "  COO Prometheus 직접 접근 (port-forward):"
+        echo -e "  Direct access to COO Prometheus (port-forward):"
         echo -e "    ${CYAN}oc port-forward svc/prometheus-operated 9090:9090 -n ${NS}${NC}"
-        echo -e "    브라우저: ${CYAN}http://localhost:9090${NC}"
+        echo -e "    Browser: ${CYAN}http://localhost:9090${NC}"
         echo ""
     fi
 
     if [ "${VIRT_INSTALLED:-false}" = "true" ] && [ "${COO_INSTALLED:-false}" = "true" ]; then
-        echo -e "  VM 상태:"
+        echo -e "  VM status:"
         echo -e "    ${CYAN}oc get vmi ${VM_NAME} -n ${NS}${NC}"
         echo -e "  OpenShift Console → Observe → Metrics:"
         echo -e "    ${CYAN}node_memory_MemAvailable_bytes{job=\"poc-monitoring-vm\"}${NC}"
         echo ""
     fi
 
-    echo -e "  Pod 상태 확인:"
+    echo -e "  Check Pod status:"
     echo -e "    ${CYAN}oc get pods -n ${NS}${NC}"
     echo ""
-    echo -e "  자세한 내용: 10-monitoring.md 참조"
+    echo -e "  For details: refer to 10-monitoring.md"
     echo ""
 }
 
@@ -1893,16 +1893,16 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 11-monitoring 리소스 삭제"
+    print_step "--cleanup: Delete 11-monitoring resources"
     oc delete project poc-monitoring --ignore-not-found 2>/dev/null || true
     oc delete clusterrolebinding grafana-cluster-monitoring-view --ignore-not-found 2>/dev/null || true
-    print_ok "11-monitoring 리소스 삭제 완료"
+    print_ok "11-monitoring resources deleted"
 }
 
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  모니터링 실습 환경 구성${NC}"
+    echo -e "${CYAN}  Monitoring Practice Environment Setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

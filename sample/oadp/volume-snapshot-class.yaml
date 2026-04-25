@@ -4,7 +4,7 @@ driver: hspc.csi.hitachi.com
 kind: VolumeSnapshotClass
 metadata:
   labels:
-    velero.io/csi-volumesnapshot-class: "true"  # 이 부분이 중요 
+    velero.io/csi-volumesnapshot-class: "true"  # This part is important
   name: snapshotclass-vm-sc
 parameters:
   csi.storage.k8s.io/snapshotter-secret-name: storage-secret

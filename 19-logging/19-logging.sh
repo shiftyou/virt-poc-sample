@@ -2,17 +2,17 @@
 # =============================================================================
 # 19-logging.sh
 #
-# OpenShift Audit Logging 구성
-# APIServer Audit Policy 설정 + OpenShift Logging Operator를 통한 수집·전달
+# OpenShift Audit Logging Configuration
+# APIServer Audit Policy setup + collection/forwarding through OpenShift Logging Operator
 #
-#   1. APIServer Audit Policy 선택·설정
-#   2. OpenShift Logging Operator 확인
-#   3. ClusterLogging 인스턴스 생성
-#   4. LokiStack 생성 (Loki Operator 설치 시, MinIO S3 사용)
-#   5. ClusterLogForwarder (Audit 로그 포함) 구성
-#   6. 상태 확인
+#   1. Select and configure APIServer Audit Policy
+#   2. Check OpenShift Logging Operator
+#   3. Create ClusterLogging instance
+#   4. Create LokiStack (when Loki Operator installed, using MinIO S3)
+#   5. Configure ClusterLogForwarder (including Audit logs)
+#   6. Status check
 #
-# 사용법: ./19-logging.sh
+# Usage: ./19-logging.sh
 # =============================================================================
 
 set -euo pipefail
@@ -30,7 +30,7 @@ CLF_NAME="instance"
 CL_NAME="instance"
 STORAGE_CLASS="${STORAGE_CLASS:-ocs-storagecluster-ceph-rbd}"
 
-# Object Storage (S3) — LokiStack 전용 (preflight 에서 소스에 따라 결정)
+# Object Storage (S3) — dedicated for LokiStack (determined by source in preflight)
 S3_ENDPOINT=""
 S3_BUCKET=""
 S3_ACCESS_KEY=""
@@ -55,44 +55,44 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# YAML 미리보기 후 확인하고 적용
+# Preview YAML and apply after confirmation
 confirm_and_apply() {
     local file="$1"
     echo ""
-    print_info "적용할 YAML:"
+    print_info "YAML to apply:"
     echo "────────────────────────────────────────"
     cat "$file"
     echo "────────────────────────────────────────"
-    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
-    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    read -r -p "Apply the above YAML to the cluster? [y/N]: " confirm
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "Cancelled."; exit 0; }
     oc apply -f "$file"
 }
 
 # =============================================================================
-# Audit Policy 프로필 선택
+# Select Audit Policy profile
 # =============================================================================
 choose_audit_profile() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  APIServer Audit Policy 프로필을 선택하세요${NC}"
+    echo -e "${CYAN}  Select APIServer Audit Policy profile${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  ${GREEN}1)${NC} Default"
-    echo -e "     메타데이터만 기록 (URL, HTTP Method, 응답 코드, 사용자, 시간)."
-    echo -e "     요청/응답 본문 없음. 로그 용량 최소."
+    echo -e "     Record metadata only (URL, HTTP Method, response code, user, time)."
+    echo -e "     No request/response body. Minimum log volume."
     echo ""
-    echo -e "  ${GREEN}2)${NC} WriteRequestBodies  ${YELLOW}[권장]${NC}"
-    echo -e "     쓰기 요청(create/update/patch/delete) 본문 기록."
-    echo -e "     감사 목적으로 충분하며 읽기 요청 본문은 제외."
+    echo -e "  ${GREEN}2)${NC} WriteRequestBodies  ${YELLOW}[Recommended]${NC}"
+    echo -e "     Record write request (create/update/patch/delete) bodies."
+    echo -e "     Sufficient for audit purposes, excludes read request bodies."
     echo ""
     echo -e "  ${GREEN}3)${NC} AllRequestBodies"
-    echo -e "     모든 요청·응답 본문 기록. 가장 상세하나 로그 용량 대폭 증가."
-    echo -e "     민감 정보(Secret 값 등) 포함 가능 — 주의 필요."
+    echo -e "     Record all request/response bodies. Most detailed but significantly increases log volume."
+    echo -e "     May include sensitive information (Secret values, etc.) — use with caution."
     echo ""
     echo -e "  ${GREEN}4)${NC} None"
-    echo -e "     Audit 로그 비활성화. ${RED}보안 권장사항에 맞지 않습니다.${NC}"
+    echo -e "     Disable Audit logging. ${RED}Does not meet security recommendations.${NC}"
     echo ""
-    read -r -p "  선택 [1-4, 기본값: 2]: " choice
+    read -r -p "  Select [1-4, default: 2]: " choice
     choice="${choice:-2}"
 
     case "$choice" in
@@ -101,42 +101,42 @@ choose_audit_profile() {
         3) AUDIT_PROFILE="AllRequestBodies" ;;
         4) AUDIT_PROFILE="None" ;;
         *)
-            print_error "1~4 사이의 값을 입력하세요."
+            print_error "Please enter a value between 1 and 4."
             exit 1
             ;;
     esac
-    print_ok "선택: Audit Profile = ${AUDIT_PROFILE}"
+    print_ok "Selected: Audit Profile = ${AUDIT_PROFILE}"
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight check
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight Check"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift에 로그인되어 있지 않습니다."
+        print_error "Not logged in to OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster access: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # OpenShift Logging Operator 확인
+    # Check OpenShift Logging Operator
     if [ "${LOGGING_INSTALLED:-false}" = "true" ]; then
         HAS_LOGGING=true
-        print_ok "OpenShift Logging Operator 확인"
+        print_ok "OpenShift Logging Operator confirmed"
     else
         HAS_LOGGING=false
-        print_warn "OpenShift Logging Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/"
+        print_warn "OpenShift Logging Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/"
         exit 77
     fi
 
-    # Loki Operator 확인
+    # Check Loki Operator
     if [ "${LOKI_INSTALLED:-false}" = "true" ]; then
         HAS_LOKI=true
-        print_ok "Loki Operator 확인"
+        print_ok "Loki Operator confirmed"
 
-        # S3 초기값 결정: MinIO 우선, 없으면 ODF, 없으면 빈값(직접 입력)
+        # Determine S3 initial values: MinIO first, then ODF, then empty (manual input)
         if [ -n "${MINIO_ENDPOINT:-}" ]; then
             S3_ENDPOINT="${MINIO_ENDPOINT}"
             S3_BUCKET="${LOGGING_S3_BUCKET:-${MINIO_BUCKET:-loki}}"
@@ -145,7 +145,7 @@ preflight() {
             S3_REGION="${LOGGING_S3_REGION:-us-east-1}"
         elif [ -n "${ODF_S3_ENDPOINT:-}" ]; then
             S3_ENDPOINT="${ODF_S3_ENDPOINT}"
-            S3_BUCKET="(OBC 자동 생성 — step_loki_obc 에서 결정)"
+            S3_BUCKET="(OBC auto-generated — determined in step_loki_obc)"
             S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
             S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
             S3_REGION="${LOGGING_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"
@@ -155,19 +155,19 @@ preflight() {
             S3_ACCESS_KEY="${LOGGING_S3_ACCESS_KEY:-}"
             S3_SECRET_KEY="${LOGGING_S3_SECRET_KEY:-}"
             S3_REGION="${LOGGING_S3_REGION:-us-east-1}"
-            print_warn "Object Storage 자동 감지 실패 — 아래에서 직접 입력하세요."
+            print_warn "Object Storage auto-detection failed — please enter manually below."
         fi
 
-        # Object Storage 확인 및 재입력
+        # Check and re-enter Object Storage info
         echo ""
-        print_info "── Object Storage (S3) — LokiStack 전용 ──"
-        print_info "  S3 Endpoint  : ${S3_ENDPOINT:-(미설정)}"
+        print_info "── Object Storage (S3) — dedicated for LokiStack ──"
+        print_info "  S3 Endpoint  : ${S3_ENDPOINT:-(not set)}"
         print_info "  S3 Bucket    : ${S3_BUCKET}"
         print_info "  S3 Region    : ${S3_REGION}"
-        print_info "  S3 AccessKey : ${S3_ACCESS_KEY:-(미설정)}"
+        print_info "  S3 AccessKey : ${S3_ACCESS_KEY:-(not set)}"
         print_info "  S3 SecretKey : ****"
         echo ""
-        read -r -p "  위 내용이 맞습니까? (Y/n): " _confirm
+        read -r -p "  Is the above information correct? (Y/n): " _confirm
         if [[ "${_confirm:-}" =~ ^[Nn]$ ]]; then
             read -r -p "  S3 Endpoint  [${S3_ENDPOINT}]: " _input
             [ -n "$_input" ] && S3_ENDPOINT="$_input"
@@ -181,38 +181,38 @@ preflight() {
             echo ""
             [ -n "$_input" ] && S3_SECRET_KEY="$_input"
         fi
-        print_ok "Object Storage 설정 확인 완료 (bucket: ${S3_BUCKET})"
+        print_ok "Object Storage configuration confirmed (bucket: ${S3_BUCKET})"
     else
         HAS_LOKI=false
-        print_warn "Loki Operator 미설치 → LokiStack 생성을 건너뜁니다."
+        print_warn "Loki Operator not installed → skipping LokiStack creation."
         if [ "$HAS_LOGGING" = "true" ]; then
-            print_warn "  → ClusterLogForwarder는 Loki 없이 기본 출력(default)만 사용합니다."
+            print_warn "  → ClusterLogForwarder will use default output only without Loki."
         fi
     fi
 
-    # Logging 버전 감지 (v6에서 ClusterLogging CRD 제거됨)
+    # Detect Logging version (ClusterLogging CRD removed in v6)
     if ! oc get crd clusterloggings.logging.openshift.io &>/dev/null; then
         LOGGING_V6=true
-        print_ok "OpenShift Logging v6 감지 (observability.openshift.io/v1 사용)"
+        print_ok "OpenShift Logging v6 detected (using observability.openshift.io/v1)"
     else
         LOGGING_V6=false
-        print_ok "OpenShift Logging v5 감지 (logging.openshift.io/v1 사용)"
+        print_ok "OpenShift Logging v5 detected (using logging.openshift.io/v1)"
     fi
 }
 
 # =============================================================================
-# Step 1: APIServer Audit Policy 설정
+# Step 1: Configure APIServer Audit Policy
 # =============================================================================
 step_audit_policy() {
-    print_step "1/5  APIServer Audit Policy 설정 (프로필: ${AUDIT_PROFILE})"
+    print_step "1/5  APIServer Audit Policy Configuration (profile: ${AUDIT_PROFILE})"
 
     local current
     current=$(oc get apiserver cluster -o jsonpath='{.spec.audit.profile}' 2>/dev/null || echo "")
     if [ "${current}" = "${AUDIT_PROFILE}" ]; then
-        print_ok "이미 동일한 프로필이 적용되어 있습니다 (${AUDIT_PROFILE}) — 건너뜁니다."
+        print_ok "The same profile is already applied (${AUDIT_PROFILE}) — skipping."
         return
     fi
-    [ -n "$current" ] && print_info "현재 프로필: ${current} → 변경: ${AUDIT_PROFILE}"
+    [ -n "$current" ] && print_info "Current profile: ${current} → Change to: ${AUDIT_PROFILE}"
 
     cat > ./audit-policy.yaml <<EOF
 apiVersion: config.openshift.io/v1
@@ -225,40 +225,40 @@ spec:
 EOF
 
     confirm_and_apply ./audit-policy.yaml
-    print_ok "Audit Policy 적용 완료"
-    print_info "kube-apiserver 롤아웃에 수분이 소요될 수 있습니다."
-    print_info "  확인: oc get co kube-apiserver"
+    print_ok "Audit Policy applied successfully"
+    print_info "kube-apiserver rollout may take several minutes."
+    print_info "  Check: oc get co kube-apiserver"
 }
 
 # =============================================================================
-# Step 2: openshift-logging 네임스페이스 확인
+# Step 2: Verify openshift-logging namespace
 # =============================================================================
 step_namespace() {
-    print_step "2/5  openshift-logging 네임스페이스 확인"
+    print_step "2/5  Verify openshift-logging Namespace"
 
     if oc get namespace "${LOGGING_NS}" &>/dev/null; then
-        print_ok "네임스페이스 ${LOGGING_NS} 존재"
+        print_ok "Namespace ${LOGGING_NS} exists"
     else
-        print_error "네임스페이스 ${LOGGING_NS} 가 없습니다."
-        print_error "  OpenShift Logging Operator가 정상 설치되면 자동으로 생성됩니다."
-        print_error "  00-operator/ 설치 가이드를 확인하세요."
+        print_error "Namespace ${LOGGING_NS} does not exist."
+        print_error "  It will be created automatically when OpenShift Logging Operator is properly installed."
+        print_error "  Check the 00-operator/ installation guide."
         exit 1
     fi
 }
 
 # =============================================================================
-# Step 3: ClusterLogging 인스턴스 생성
+# Step 3: Create ClusterLogging instance
 # =============================================================================
 step_cluster_logging() {
-    print_step "3/5  ClusterLogging 인스턴스 생성"
+    print_step "3/5  Create ClusterLogging Instance"
 
     if [ "$LOGGING_V6" = "true" ]; then
-        print_info "Logging v6 — ClusterLogging CR 없음, 건너뜁니다."
+        print_info "Logging v6 — no ClusterLogging CR, skipping."
         return
     fi
 
     if oc get clusterlogging "${CL_NAME}" -n "${LOGGING_NS}" &>/dev/null; then
-        print_ok "ClusterLogging '${CL_NAME}' 이미 존재합니다 — 건너뜁니다."
+        print_ok "ClusterLogging '${CL_NAME}' already exists — skipping."
         return
     fi
 
@@ -278,8 +278,8 @@ step_cluster_logging() {
       infrastructure:
         maxAge: 7d"
     else
-        # Loki 없을 경우 logStore 블록 생략 (Vector만 수집)
-        log_store_block="  # logStore: Loki Operator 미설치로 생략"
+        # Omit logStore block when Loki is not present (Vector collection only)
+        log_store_block="  # logStore: omitted because Loki Operator is not installed"
     fi
 
     cat > ./cluster-logging.yaml <<EOF
@@ -296,21 +296,21 @@ ${log_store_block}
 EOF
 
     confirm_and_apply ./cluster-logging.yaml
-    print_ok "ClusterLogging '${CL_NAME}' 생성 완료"
+    print_ok "ClusterLogging '${CL_NAME}' created successfully"
 }
 
 # =============================================================================
-# Step 4a: ODF 백엔드일 때 OBC로 Loki 전용 버킷 생성
+# Step 4a: Create OBC for dedicated Loki bucket when ODF backend is used
 # =============================================================================
 step_loki_obc() {
-    # ODF가 아니면 스킵
+    # Skip if not ODF
     [ -z "${ODF_S3_ENDPOINT:-}" ] && [ -z "${MINIO_ENDPOINT:-}" ] && return
-    [ -n "${MINIO_ENDPOINT:-}" ] && return   # MinIO는 OBC 불필요
+    [ -n "${MINIO_ENDPOINT:-}" ] && return   # OBC not needed for MinIO
 
-    print_step "4a  Loki 전용 ObjectBucketClaim 생성"
+    print_step "4a  Create ObjectBucketClaim dedicated for Loki"
 
     if oc get obc obc-loki -n "${LOGGING_NS}" &>/dev/null; then
-        print_ok "OBC obc-loki 이미 존재 — 버킷 이름 취득"
+        print_ok "OBC obc-loki already exists — retrieving bucket name"
     else
         local _obc_sc
         _obc_sc=$(oc get storageclass -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
@@ -327,52 +327,52 @@ spec:
   generateBucketName: loki
   storageClassName: ${_obc_sc}
 EOF
-        echo "생성된 파일: obc-loki.yaml"
+        echo "Generated file: obc-loki.yaml"
         oc apply -f ./obc-loki.yaml
-        print_ok "OBC obc-loki 생성 완료"
+        print_ok "OBC obc-loki created successfully"
     fi
 
-    # Bound 대기
-    print_info "OBC Bound 대기 중..."
+    # Wait for Bound
+    print_info "Waiting for OBC to be Bound..."
     local i=0
     while [ $i -lt 12 ]; do
         local phase
         phase=$(oc get obc obc-loki -n "${LOGGING_NS}" \
             -o jsonpath='{.status.phase}' 2>/dev/null || true)
         [ "$phase" = "Bound" ] && break
-        printf "  [%d/12] 대기 중... (%s)\r" "$((i+1))" "${phase:-Pending}"
+        printf "  [%d/12] Waiting... (%s)\r" "$((i+1))" "${phase:-Pending}"
         sleep 5
         i=$((i+1))
     done
     echo ""
     if [ $i -eq 12 ]; then
-        print_error "OBC Bound 시간 초과."
+        print_error "OBC Bound timed out."
         exit 1
     fi
-    print_ok "OBC 상태: Bound"
+    print_ok "OBC status: Bound"
 
-    # 버킷 이름 및 자격증명 취득
+    # Retrieve bucket name and credentials
     S3_BUCKET=$(oc get cm obc-loki -n "${LOGGING_NS}" \
         -o jsonpath='{.data.BUCKET_NAME}' 2>/dev/null || true)
     S3_ACCESS_KEY=$(oc get secret obc-loki -n "${LOGGING_NS}" \
         -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d || true)
     S3_SECRET_KEY=$(oc get secret obc-loki -n "${LOGGING_NS}" \
         -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d || true)
-    print_ok "Loki OBC 버킷/자격증명 취득 완료"
+    print_ok "Loki OBC bucket/credentials retrieved successfully"
     print_info "  Bucket : ${S3_BUCKET}"
 }
 
 # =============================================================================
-# Step 4: LokiStack + S3 Secret 생성 (Loki Operator 설치 시)
+# Step 4: Create LokiStack + S3 Secret (when Loki Operator is installed)
 # =============================================================================
 step_loki_secret() {
     if oc get secret logging-loki-s3 -n "${LOGGING_NS}" &>/dev/null; then
-        print_ok "S3 Secret 'logging-loki-s3' 이미 존재합니다."
+        print_ok "S3 Secret 'logging-loki-s3' already exists."
         return
     fi
 
     if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_ACCESS_KEY}" ]; then
-        print_error "Object Storage 정보가 없습니다. preflight 단계에서 S3 정보를 입력하세요."
+        print_error "Object Storage information is missing. Please enter S3 information in the preflight step."
         exit 1
     fi
 
@@ -383,16 +383,16 @@ step_loki_secret() {
         --from-literal=bucketnames="${S3_BUCKET}" \
         --from-literal=endpoint="${S3_ENDPOINT}" \
         --from-literal=region="${S3_REGION}"
-    print_ok "S3 Secret 'logging-loki-s3' 생성 완료"
+    print_ok "S3 Secret 'logging-loki-s3' created successfully"
     print_info "  endpoint : ${S3_ENDPOINT}"
     print_info "  bucket   : ${S3_BUCKET}"
 }
 
 step_loki_stack() {
-    print_step "4/5  LokiStack 생성"
+    print_step "4/5  Create LokiStack"
 
     if oc get lokistack "${LOKI_NAME}" -n "${LOGGING_NS}" &>/dev/null; then
-        print_ok "LokiStack '${LOKI_NAME}' 이미 존재합니다 — 건너뜁니다."
+        print_ok "LokiStack '${LOKI_NAME}' already exists — skipping."
         return
     fi
 
@@ -421,24 +421,24 @@ EOF
 
     confirm_and_apply ./loki-stack.yaml
 
-    # POC 환경 resource 절감 (LokiStack CRD가 resource override를 미지원 → StatefulSet 직접 패치)
-    # 기본 1x.small: ingester cpu=4/mem=20Gi → worker 노드 CPU 부족으로 Pending 발생
-    print_info "LokiStack StatefulSet resource 축소 (POC 환경)..."
-    sleep 5  # StatefulSet 생성 대기
+    # Reduce resources for POC environment (LokiStack CRD does not support resource override → patch StatefulSet directly)
+    # Default 1x.small: ingester cpu=4/mem=20Gi → causes Pending due to insufficient CPU on worker nodes
+    print_info "Reducing LokiStack StatefulSet resources (POC environment)..."
+    sleep 5  # Wait for StatefulSet creation
     oc patch statefulset "${LOKI_NAME}-ingester" -n "${LOGGING_NS}" --type=json -p '[
       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"500m"},
       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"2Gi"}
-    ]' 2>/dev/null && print_ok "ingester resource 축소 완료" || print_warn "ingester patch 실패 (수동 적용 필요)"
+    ]' 2>/dev/null && print_ok "ingester resource reduction complete" || print_warn "ingester patch failed (manual application required)"
     oc patch statefulset "${LOKI_NAME}-compactor" -n "${LOGGING_NS}" --type=json -p '[
       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"200m"},
       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"512Mi"}
-    ]' 2>/dev/null && print_ok "compactor resource 축소 완료" || print_warn "compactor patch 실패 (수동 적용 필요)"
+    ]' 2>/dev/null && print_ok "compactor resource reduction complete" || print_warn "compactor patch failed (manual application required)"
     oc patch deployment "${LOKI_NAME}-query-frontend" -n "${LOGGING_NS}" --type=json -p '[
       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"200m"},
       {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"512Mi"}
-    ]' 2>/dev/null && print_ok "query-frontend resource 축소 완료" || print_warn "query-frontend patch 실패 (수동 적용 필요)"
+    ]' 2>/dev/null && print_ok "query-frontend resource reduction complete" || print_warn "query-frontend patch failed (manual application required)"
 
-    print_info "LokiStack 준비 대기 중 (최대 5분)..."
+    print_info "Waiting for LokiStack to be ready (up to 5 minutes)..."
     local retries=30 i=0
     while [ "$i" -lt "$retries" ]; do
         local phase
@@ -448,38 +448,38 @@ EOF
             print_ok "LokiStack '${LOKI_NAME}' Ready"
             break
         fi
-        printf "  [%d/%d] 대기 중...\r" "$((i+1))" "$retries"
+        printf "  [%d/%d] Waiting...\r" "$((i+1))" "$retries"
         sleep 10
         i=$((i+1))
     done
     echo ""
-    [ "$i" -eq "$retries" ] && print_warn "LokiStack 준비 시간 초과. 상태 확인: oc get lokistack -n ${LOGGING_NS}"
+    [ "$i" -eq "$retries" ] && print_warn "LokiStack ready timed out. Check status: oc get lokistack -n ${LOGGING_NS}"
 }
 
 # =============================================================================
-# Step 5: ClusterLogForwarder (Audit 로그 포함)
+# Step 5: ClusterLogForwarder (including Audit logs)
 # =============================================================================
 step_log_forwarder() {
-    print_step "5/5  ClusterLogForwarder 구성 (audit + infrastructure + application)"
+    print_step "5/5  Configure ClusterLogForwarder (audit + infrastructure + application)"
 
     if oc get clusterlogforwarder "${CLF_NAME}" -n "${LOGGING_NS}" &>/dev/null; then
-        print_warn "ClusterLogForwarder '${CLF_NAME}' 이미 존재합니다."
-        read -r -p "기존 설정을 덮어쓰시겠습니까? [y/N]: " overwrite
-        [[ "$overwrite" != "y" && "$overwrite" != "Y" ]] && { print_info "건너뜁니다."; return; }
+        print_warn "ClusterLogForwarder '${CLF_NAME}' already exists."
+        read -r -p "Overwrite the existing configuration? [y/N]: " overwrite
+        [[ "$overwrite" != "y" && "$overwrite" != "Y" ]] && { print_info "Skipping."; return; }
     fi
 
     if [ "$LOGGING_V6" = "true" ]; then
-        # v6: observability.openshift.io/v1, ServiceAccount 필요
+        # v6: observability.openshift.io/v1, ServiceAccount required
         if ! oc get serviceaccount collector -n "${LOGGING_NS}" &>/dev/null; then
             oc create serviceaccount collector -n "${LOGGING_NS}"
-            print_ok "ServiceAccount collector 생성"
+            print_ok "ServiceAccount collector created"
         fi
-        # 노드 로그 수집 권한
+        # Node log collection permissions
         for role in collect-application-logs collect-infrastructure-logs collect-audit-logs; do
             oc adm policy add-cluster-role-to-user "${role}" \
                 -z collector -n "${LOGGING_NS}" 2>/dev/null || true
         done
-        # LokiStack 쓰기 권한 (없으면 gateway에서 403 반환)
+        # LokiStack write permissions (returns 403 from gateway without this)
         for role in \
             cluster-logging-write-application-logs \
             cluster-logging-write-infrastructure-logs \
@@ -488,7 +488,7 @@ step_log_forwarder() {
             oc adm policy add-cluster-role-to-user "${role}" \
                 -z collector -n "${LOGGING_NS}" 2>/dev/null || true
         done
-        print_ok "collector ServiceAccount 권한 부여 (수집 + Loki 쓰기)"
+        print_ok "collector ServiceAccount permissions granted (collection + Loki write)"
 
         local output_section
         if [ "$HAS_LOKI" = "true" ]; then
@@ -579,25 +579,25 @@ EOF
     fi
 
     confirm_and_apply ./cluster-log-forwarder.yaml
-    print_ok "ClusterLogForwarder '${CLF_NAME}' 적용 완료"
+    print_ok "ClusterLogForwarder '${CLF_NAME}' applied successfully"
 }
 
 # =============================================================================
-# Console Plugin 활성화 (Observe > Logs 메뉴 표시)
+# Enable Console Plugin (show Observe > Logs menu)
 # =============================================================================
 step_console_plugin() {
-    print_step "6/6  Console Plugin 활성화 (Observe > Logs)"
+    print_step "6/6  Enable Console Plugin (Observe > Logs)"
 
     if [ "$LOGGING_V6" = "true" ]; then
-        # v6: UIPlugin CR (console.operator plugins 배열을 건드리지 않아 안전)
+        # v6: UIPlugin CR (safe as it does not touch the console.operator plugins array)
         if oc get uiplugin logging &>/dev/null; then
-            print_ok "UIPlugin 'logging' 이미 존재합니다 — 건너뜁니다."
+            print_ok "UIPlugin 'logging' already exists — skipping."
             return
         fi
 
         if ! oc get crd uiplugins.observability.openshift.io &>/dev/null; then
-            print_warn "UIPlugin CRD 없음 — cluster-observability-operator 미설치"
-            print_info "  OperatorHub에서 'Cluster Observability Operator' 설치 후 재실행하세요."
+            print_warn "UIPlugin CRD not found — cluster-observability-operator not installed"
+            print_info "  Install 'Cluster Observability Operator' from OperatorHub and re-run."
             return
         fi
 
@@ -614,48 +614,48 @@ spec:
       namespace: ${LOGGING_NS}
 EOF
         oc apply -f ./uiplugin-logging.yaml
-        print_ok "UIPlugin 'logging' 생성 완료"
-        print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
+        print_ok "UIPlugin 'logging' created successfully"
+        print_info "  The Observe > Logs menu will appear after reloading the Console."
     else
-        # v5: consoleplugin 방식 — 기존 plugins 목록에 append (덮어쓰지 않음)
+        # v5: consoleplugin method — append to existing plugins list (do not overwrite)
         if ! oc get consoleplugin logging-view-plugin &>/dev/null; then
-            print_warn "logging-view-plugin ConsolePlugin 이 없습니다."
-            print_info "  OpenShift Logging Operator가 자동 생성합니다."
+            print_warn "logging-view-plugin ConsolePlugin does not exist."
+            print_info "  OpenShift Logging Operator will create it automatically."
             print_info "    oc get consoleplugin"
             return
         fi
-        print_ok "logging-view-plugin ConsolePlugin 확인"
+        print_ok "logging-view-plugin ConsolePlugin confirmed"
 
         local _enabled
         _enabled=$(oc get console.operator.openshift.io cluster \
             -o jsonpath='{.spec.plugins}' 2>/dev/null || echo "")
         if echo "${_enabled}" | grep -q "logging-view-plugin"; then
-            print_ok "logging-view-plugin 이미 활성화됨"
+            print_ok "logging-view-plugin already enabled"
             return
         fi
 
-        # /spec/plugins 배열 없으면 초기화 후 append
+        # Initialize /spec/plugins array if not present, then append
         if ! echo "${_enabled}" | grep -q '\['; then
             oc patch console.operator.openshift.io cluster --type=merge \
                 -p '{"spec":{"plugins":[]}}' 2>/dev/null || true
         fi
         oc patch console.operator.openshift.io cluster --type=json \
             -p '[{"op":"add","path":"/spec/plugins/-","value":"logging-view-plugin"}]'
-        print_ok "logging-view-plugin 활성화 완료"
-        print_info "  Console 재로드 후 Observe > Logs 메뉴가 나타납니다."
+        print_ok "logging-view-plugin enabled successfully"
+        print_info "  The Observe > Logs menu will appear after reloading the Console."
     fi
 }
 
 # =============================================================================
-# 상태 확인
+# Status check
 # =============================================================================
 step_verify() {
-    print_step "상태 확인"
+    print_step "Status Check"
 
     echo ""
     echo -e "${CYAN}  [ APIServer Audit Policy ]${NC}"
     oc get apiserver cluster -o jsonpath='    profile: {.spec.audit.profile}{"\n"}' 2>/dev/null || \
-        echo "    (확인 불가)"
+        echo "    (unable to check)"
 
     echo ""
     echo -e "${CYAN}  [ kube-apiserver Cluster Operator ]${NC}"
@@ -666,28 +666,28 @@ step_verify() {
         echo ""
         echo -e "${CYAN}  [ ClusterLogging ]${NC}"
         oc get clusterlogging -n "${LOGGING_NS}" 2>/dev/null | \
-            awk '{printf "    %s\n", $0}' || echo "    (없음)"
+            awk '{printf "    %s\n", $0}' || echo "    (none)"
 
         echo ""
         echo -e "${CYAN}  [ ClusterLogForwarder ]${NC}"
         oc get clusterlogforwarder -n "${LOGGING_NS}" 2>/dev/null | \
-            awk '{printf "    %s\n", $0}' || echo "    (없음)"
+            awk '{printf "    %s\n", $0}' || echo "    (none)"
 
         if [ "$HAS_LOKI" = "true" ]; then
             echo ""
             echo -e "${CYAN}  [ LokiStack ]${NC}"
             oc get lokistack -n "${LOGGING_NS}" 2>/dev/null | \
-                awk '{printf "    %s\n", $0}' || echo "    (없음)"
+                awk '{printf "    %s\n", $0}' || echo "    (none)"
         fi
 
         echo ""
         echo -e "${CYAN}  [ Collector Pods ]${NC}"
         oc get pods -n "${LOGGING_NS}" -l component=collector 2>/dev/null | \
-            awk '{printf "    %s\n", $0}' || echo "    (없음)"
+            awk '{printf "    %s\n", $0}' || echo "    (none)"
     fi
 
     echo ""
-    print_info "Audit 로그 실시간 확인 (예시):"
+    print_info "Real-time Audit log check (example):"
     echo -e "    ${CYAN}oc adm node-logs --role=master --path=kube-apiserver/ | grep audit${NC}"
     if [ "$HAS_LOGGING" = "true" ]; then
         echo -e "    ${CYAN}oc logs -n ${LOGGING_NS} -l component=collector --tail=20${NC}"
@@ -699,15 +699,15 @@ step_verify() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 19-logging 리소스 삭제"
+    print_step "--cleanup: Delete 19-logging resources"
     local _logging_ns="openshift-logging"
     oc delete clusterlogforwarder --all -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete clusterlogging instance -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete lokistack logging-loki -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete secret logging-loki-s3 -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
     oc delete obc obc-loki -n "$_logging_ns" --ignore-not-found 2>/dev/null || true
-    print_ok "19-logging 리소스 삭제 완료"
-    print_info "  네임스페이스 ${_logging_ns} 는 Logging Operator가 관리하므로 삭제하지 않습니다."
+    print_ok "19-logging resources deleted successfully"
+    print_info "  Namespace ${_logging_ns} is managed by Logging Operator and will not be deleted."
 }
 
 # =============================================================================
@@ -716,7 +716,7 @@ cleanup() {
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  OpenShift Audit Logging 구성${NC}"
+    echo -e "${CYAN}  OpenShift Audit Logging Configuration${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     choose_audit_profile
@@ -730,53 +730,53 @@ main() {
         if [ "$HAS_LOKI" = "true" ]; then
             step_loki_stack
         else
-            print_step "4/5  LokiStack 생성"
-            print_warn "Loki Operator 미설치 — 건너뜁니다."
+            print_step "4/5  Create LokiStack"
+            print_warn "Loki Operator not installed — skipping."
         fi
         step_log_forwarder
         step_console_plugin
     else
         print_step "3/5  ClusterLogging"
-        print_warn "OpenShift Logging Operator 미설치 — 건너뜁니다."
+        print_warn "OpenShift Logging Operator not installed — skipping."
         print_step "4/5  LokiStack"
-        print_warn "OpenShift Logging Operator 미설치 — 건너뜁니다."
+        print_warn "OpenShift Logging Operator not installed — skipping."
         print_step "5/5  ClusterLogForwarder"
-        print_warn "OpenShift Logging Operator 미설치 — 건너뜁니다."
+        print_warn "OpenShift Logging Operator not installed — skipping."
     fi
 
     step_verify
 
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  Audit Logging 구성 완료${NC}"
+    echo -e "${GREEN}  Audit Logging configuration complete${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  [샘플] 누가 언제 로그인했는지 확인${NC}"
+    echo -e "${CYAN}  [Sample] Check who logged in and when${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  ${YELLOW}※ Loki 수집 완료 후 OpenShift Console → Observe → Logs 에서 조회${NC}"
+    echo -e "  ${YELLOW}* Query from OpenShift Console → Observe → Logs after Loki collection is complete${NC}"
     echo ""
-    echo -e "  ${GREEN}1) OAuth 로그인 이벤트 (토큰 발급 = 로그인 시점)${NC}"
+    echo -e "  ${GREEN}1) OAuth login events (token issuance = login point)${NC}"
     echo -e "     ${CYAN}{log_type=\"audit\"} | json | requestURI=~\"/apis/oauth.openshift.io/v1/oauthaccesstokens.*\" | verb=\"create\"${NC}"
     echo ""
-    echo -e "  ${GREEN}2) 사용자별 최근 로그인 (username 기준)${NC}"
+    echo -e "  ${GREEN}2) Recent logins by user (by username)${NC}"
     echo -e "     ${CYAN}{log_type=\"audit\"} | json | requestURI=~\"/apis/oauth.openshift.io/v1/oauthaccesstokens.*\" | verb=\"create\" | line_format \"{{.requestReceivedTimestamp}} {{.user_username}}\"${NC}"
     echo ""
-    echo -e "  ${GREEN}3) 특정 사용자 로그인만 필터${NC}"
+    echo -e "  ${GREEN}3) Filter by specific user login${NC}"
     echo -e "     ${CYAN}{log_type=\"audit\"} | json | requestURI=~\"/apis/oauth.openshift.io/v1/oauthaccesstokens.*\" | verb=\"create\" | user_username=\"admin\"${NC}"
     echo ""
-    echo -e "  ${GREEN}4) 로그인 실패 (HTTP 401/403)${NC}"
+    echo -e "  ${GREEN}4) Login failures (HTTP 401/403)${NC}"
     echo -e "     ${CYAN}{log_type=\"audit\"} | json | requestURI=~\"/apis/oauth.openshift.io/v1/oauthaccesstokens.*\" | responseStatus_code=~\"40[13]\"${NC}"
     echo ""
-    echo -e "  ${GREEN}5) CLI 방식: 노드 Audit 로그에서 직접 확인 (Loki 불필요)${NC}"
+    echo -e "  ${GREEN}5) CLI method: Check directly from node Audit logs (Loki not required)${NC}"
     echo -e "     ${CYAN}oc adm node-logs --role=master --path=oauth-server/ | grep '\"verb\":\"create\"' | grep oauthaccesstokens | awk -F'\"' '{print \$4, \$8}'${NC}"
     echo ""
-    echo -e "  ${YELLOW}조회 필드 설명${NC}"
-    echo -e "    requestReceivedTimestamp : 요청 시각 (ISO 8601)"
-    echo -e "    user.username            : 로그인한 사용자 이름"
-    echo -e "    sourceIPs                : 접속 출발지 IP"
-    echo -e "    responseStatus.code      : HTTP 응답 코드 (201=성공, 401=인증실패, 403=권한없음)"
+    echo -e "  ${YELLOW}Query field descriptions${NC}"
+    echo -e "    requestReceivedTimestamp : Request timestamp (ISO 8601)"
+    echo -e "    user.username            : Logged-in username"
+    echo -e "    sourceIPs                : Source IP of the connection"
+    echo -e "    responseStatus.code      : HTTP response code (201=success, 401=auth failure, 403=forbidden)"
     echo ""
 }
 

@@ -1,50 +1,50 @@
-# Migration Toolkit for Virtualization (MTV) Operator 설치
+# Migration Toolkit for Virtualization (MTV) Operator Installation
 
-## 개요
+## Overview
 
-MTV(Migration Toolkit for Virtualization)는 VMware vSphere, Red Hat Virtualization(RHV),
-OpenStack 등의 환경에서 OpenShift Virtualization으로 VM을 마이그레이션하는 Operator입니다.
-콜드 마이그레이션과 웜 마이그레이션을 지원하며, Console UI에서 마이그레이션 계획을 수립하고 실행할 수 있습니다.
+MTV (Migration Toolkit for Virtualization) is an Operator that migrates VMs from environments
+such as VMware vSphere, Red Hat Virtualization (RHV), and OpenStack to OpenShift Virtualization.
+It supports cold migration and warm migration, and allows migration plans to be created and executed from the Console UI.
 
 ```
 VMware vSphere / RHV / OpenStack
-        │  MTV 마이그레이션
+        │  MTV migration
         ▼
 OpenShift Virtualization (KubeVirt)
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- cluster-admin 권한
-- OpenShift Virtualization Operator 설치 완료 (`openshift-virtualization-operator.md` 참조)
-- VMware 마이그레이션 시: VDDK(Virtual Disk Development Kit) 이미지 준비
+- cluster-admin privileges
+- OpenShift Virtualization Operator installation complete (refer to `openshift-virtualization-operator.md`)
+- For VMware migration: VDDK (Virtual Disk Development Kit) image prepared
 
 ---
 
-## 설치 방법
+## Installation Methods
 
-### 방법 1: OpenShift Console (Web UI)
+### Method 1: OpenShift Console (Web UI)
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Migration Toolkit for Virtualization` 검색
-3. **Migration Toolkit for Virtualization** 선택
-4. `Install` 클릭
-5. 설정:
-   - Update channel: `release-v2.7` (최신 채널 선택)
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Migration Toolkit for Virtualization`
+3. Select **Migration Toolkit for Virtualization**
+4. Click `Install`
+5. Settings:
+   - Update channel: `release-v2.7` (select latest channel)
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-mtv`
-6. `Install` 클릭 후 완료 대기
-7. 설치 완료 후 **ForkliftController 인스턴스 생성**:
+6. Click `Install` and wait for completion
+7. After installation, **Create ForkliftController instance**:
    - Operators > Installed Operators > Migration Toolkit for Virtualization
-   - **ForkliftController** 탭 > `Create ForkliftController` 클릭
-   - 기본값으로 생성
+   - **ForkliftController** tab > Click `Create ForkliftController`
+   - Create with default values
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# 1. Namespace 생성
+# 1. Create Namespace
 oc apply -f - <<'EOF'
 apiVersion: v1
 kind: Namespace
@@ -54,7 +54,7 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
-# 2. OperatorGroup 생성
+# 2. Create OperatorGroup
 oc apply -f - <<'EOF'
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -66,7 +66,7 @@ spec:
     - openshift-mtv
 EOF
 
-# 3. Subscription 생성
+# 3. Create Subscription
 oc apply -f - <<'EOF'
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -80,13 +80,13 @@ spec:
   sourceNamespace: openshift-marketplace
 EOF
 
-# 4. Operator 설치 완료 대기
+# 4. Wait for Operator installation to complete
 oc wait csv -n openshift-mtv \
   -l operators.coreos.com/mtv-operator.openshift-mtv \
   --for=jsonpath='{.status.phase}'=Succeeded \
   --timeout=5m
 
-# 5. ForkliftController 인스턴스 생성
+# 5. Create ForkliftController instance
 oc apply -f - <<'EOF'
 apiVersion: forklift.konveyor.io/v1beta1
 kind: ForkliftController
@@ -100,34 +100,34 @@ EOF
 
 ---
 
-## 설치 확인
+## Verify Installation
 
 ```bash
-# Operator 설치 상태 확인
+# Check Operator installation status
 oc get csv -n openshift-mtv | grep mtv
 
-# ForkliftController 상태 확인
+# Check ForkliftController status
 oc get forkliftcontroller -n openshift-mtv
 
-# Pod 전체 상태 확인
+# Check all Pod statuses
 oc get pods -n openshift-mtv
 
-# MTV Console 플러그인 활성화 확인
+# Check MTV Console plugin activation
 oc get consolePlugin forklift-console-plugin
 ```
 
 ---
 
-## VMware 마이그레이션 준비 (VDDK)
+## VMware Migration Preparation (VDDK)
 
-VMware에서 마이그레이션 시 VDDK 이미지가 필요합니다.
+A VDDK image is required when migrating from VMware.
 
 ```bash
-# 1. VMware 사이트에서 VDDK 다운로드
+# 1. Download VDDK from VMware site
 #    https://developer.vmware.com/web/sdk/8.0/vddk
 
-# 2. VDDK 이미지 빌드 및 내부 레지스트리에 Push
-# Dockerfile 예시:
+# 2. Build VDDK image and push to internal registry
+# Dockerfile example:
 cat > Dockerfile.vddk <<'EOF'
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 COPY vmware-vix-disklib-distrib /vmware-vix-disklib-distrib
@@ -135,12 +135,12 @@ RUN mkdir -p /opt
 ENTRYPOINT ["cp", "-r", "/vmware-vix-disklib-distrib", "/opt"]
 EOF
 
-# 3. 빌드 및 Push
+# 3. Build and Push
 VDDK_IMAGE="image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest"
 podman build -f Dockerfile.vddk -t ${VDDK_IMAGE} .
 podman push ${VDDK_IMAGE}
 
-# 4. MTV에 VDDK 이미지 등록
+# 4. Register VDDK image in MTV
 oc patch forkliftcontroller forklift-controller -n openshift-mtv \
   --type=merge \
   -p "{\"spec\":{\"vddk_job_image\":\"${VDDK_IMAGE}\"}}"
@@ -148,47 +148,47 @@ oc patch forkliftcontroller forklift-controller -n openshift-mtv \
 
 ---
 
-## 마이그레이션 절차 개요
+## Migration Procedure Overview
 
 ```bash
-# 1. Provider 등록 (VMware vCenter)
+# 1. Register Provider (VMware vCenter)
 #    Migration > Providers > Add Provider
 
-# 2. Network Mapping 생성
+# 2. Create Network Mapping
 #    Migration > NetworkMaps > Create NetworkMap
 
-# 3. Storage Mapping 생성
+# 3. Create Storage Mapping
 #    Migration > StorageMaps > Create StorageMap
 
-# 4. Migration Plan 생성 및 실행
+# 4. Create and run Migration Plan
 #    Migration > Plans > Create Plan
 
-# Provider 목록 확인
+# Check Provider list
 oc get providers -n openshift-mtv
 
-# Migration Plan 상태 확인
+# Check Migration Plan status
 oc get migrationplans -n openshift-mtv
 
-# VM 마이그레이션 상태 확인
+# Check VM migration status
 oc get migrations -n openshift-mtv
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# ForkliftController 이벤트 확인
+# Check ForkliftController events
 oc describe forkliftcontroller -n openshift-mtv forklift-controller
 
-# Operator 로그 확인
+# Check Operator logs
 oc logs -n openshift-mtv deployment/forklift-operator
 
-# 개별 컴포넌트 로그
+# Individual component logs
 oc logs -n openshift-mtv deployment/forklift-controller
 oc logs -n openshift-mtv deployment/forklift-api
 
-# VMware Provider 연결 상태 확인
+# Check VMware Provider connection status
 oc get providers -n openshift-mtv
 oc describe provider <provider-name> -n openshift-mtv
 ```

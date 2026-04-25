@@ -1,36 +1,36 @@
-# Self Node Remediation (SNR) Operator 설치
+# Self Node Remediation (SNR) Operator Installation
 
-## 개요
+## Overview
 
-Self Node Remediation(SNR)은 노드 장애 시 해당 노드가 스스로를 재시작하여 복구하는 Operator입니다.
-FAR과 달리 외부 IPMI 없이도 동작하며, 노드 간 통신을 통해 장애 노드를 감지하고 재시작합니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
-- openshift-workload-availability 네임스페이스 (FAR과 공유)
+Self Node Remediation (SNR) is an Operator where a node restarts itself to recover when a node failure occurs.
+Unlike FAR, it operates without external IPMI, detecting failed nodes through inter-node communication and restarting them.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
+- openshift-workload-availability namespace (shared with FAR)
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Self Node Remediation` 검색
-3. **Self Node Remediation Operator** 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Self Node Remediation`
+3. Select **Self Node Remediation Operator**
+4. Click `Install`
+5. Settings:
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-workload-availability`
-6. `Install` 클릭
+6. Click `Install`
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# Namespace가 없는 경우 생성 (FAR과 공유)
+# Create Namespace if it does not exist (shared with FAR)
 oc apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
@@ -40,7 +40,7 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
-# OperatorGroup (FAR과 공유, 이미 있으면 skip)
+# OperatorGroup (shared with FAR, skip if already exists)
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -52,7 +52,7 @@ spec:
     - openshift-workload-availability
 EOF
 
-# Subscription 생성
+# Create Subscription
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -69,46 +69,46 @@ EOF
 
 ---
 
-## 설치 확인
+## Verify Installation
 
 ```bash
-# CSV 상태 확인
+# Check CSV status
 oc get csv -n openshift-workload-availability | grep self-node
 
-# SNR DaemonSet 확인 (모든 노드에 배포됨)
+# Check SNR DaemonSet (deployed on all nodes)
 oc get daemonset -n openshift-workload-availability | grep self-node
 
-# SNR Pod 상태 확인
+# Check SNR Pod status
 oc get pods -n openshift-workload-availability | grep self-node
 ```
 
 ---
 
-## SNR 구성
+## SNR Configuration
 
-설치 후 `01-environment/snr/` 디렉토리의 apply.sh를 실행하면
-SNR 설정과 **Node Health Check(NHC)** CR이 함께 생성됩니다.
+After installation, running apply.sh in the `01-environment/snr/` directory
+will create SNR settings and the **Node Health Check (NHC)** CR together.
 
 ```bash
 cd 01-environment/snr
 ./apply.sh
 ```
 
-> **NHC(Node Health Check) Operator도 함께 설치해야** 자동 복구가 동작합니다.
-> NHC가 노드 상태를 감지하여 SNR을 트리거하는 구조입니다.
-> → [06-nhc-operator.md](./06-nhc-operator.md) 참조
+> **The NHC (Node Health Check) Operator must also be installed** for automatic recovery to work.
+> NHC detects the node state and triggers SNR.
+> → Refer to [06-nhc-operator.md](./06-nhc-operator.md)
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# SNR Operator 로그 확인
+# Check SNR Operator logs
 oc logs -n openshift-workload-availability deployment/self-node-remediation-operator-controller-manager
 
-# SNR DaemonSet Pod 로그 확인
+# Check SNR DaemonSet Pod logs
 oc logs -n openshift-workload-availability -l app.kubernetes.io/name=self-node-remediation
 
-# SelfNodeRemediation 상태 확인
+# Check SelfNodeRemediation status
 oc get selfnoderemediation -A
 ```

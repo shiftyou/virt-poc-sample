@@ -1,47 +1,47 @@
-# OADP (OpenShift API for Data Protection) 실습
+# OADP (OpenShift API for Data Protection) Lab
 
-OADP를 사용하여 VM을 백업하고 복원하는 실습입니다.
+This is a lab for backing up and restoring VMs using OADP.
 
 ```
-VM (백업 대상 네임스페이스)
-  │  Backup CR 생성
+VM (backup target namespace)
+  │  Create Backup CR
   ▼
-OADP (Velero) — openshift-adp 네임스페이스
-  └─ VM 스냅샷 + PVC 데이터
-       │  S3 (MinIO 또는 ODF MCG) 저장
+OADP (Velero) — openshift-adp namespace
+  └─ VM snapshot + PVC data
+       │  Store in S3 (MinIO or ODF MCG)
        ▼
-  Backup 완료
+  Backup complete
 
-복원:
-  Restore CR 생성 → OADP → VM 재생성
+Restore:
+  Create Restore CR → OADP → Recreate VM
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- OADP Operator 설치 (`00-operator/oadp-operator.md` 참조) — **`openshift-adp` 네임스페이스에 설치**
-- S3 백엔드: **MinIO 커뮤니티 버전** 배포 또는 **ODF Operator** 설치 (아래 MinIO 설치 가이드 참조)
-- `setup.sh` 실행 완료 (MinIO/ODF 자동 감지 및 `env.conf` 저장)
-- `13-oadp.sh` 실행 완료
+- OADP Operator installed (`00-operator/oadp-operator.md` for reference) — **installed in `openshift-adp` namespace**
+- S3 backend: Deploy **MinIO community version** or install **ODF Operator** (see MinIO installation guide below)
+- `setup.sh` execution completed (auto-detects MinIO/ODF and saves to `env.conf`)
+- `13-oadp.sh` execution completed
 
 ---
 
-## MinIO 커뮤니티 버전 설치
+## MinIO Community Version Installation
 
-Operator 없이 단순 Deployment로 MinIO를 배포하는 방법입니다.
-ODF 없이 빠르게 S3 백엔드를 구성할 때 사용합니다.
+A method to deploy MinIO as a simple Deployment without an Operator.
+Use this when you want to quickly set up an S3 backend without ODF.
 
-### 1. Namespace 및 SCC 설정
+### 1. Namespace and SCC Setup
 
 ```bash
 oc new-project minio
 
-# MinIO 컨테이너는 /data 디렉토리에 임의 UID로 쓰기가 필요 — anyuid 부여
+# MinIO container needs write access to /data directory with arbitrary UID — grant anyuid
 oc adm policy add-scc-to-user anyuid -z default -n minio
 ```
 
-### 2. 리소스 배포
+### 2. Deploy Resources
 
 ```bash
 oc apply -f - <<'EOF'
@@ -147,7 +147,7 @@ spec:
 EOF
 ```
 
-### 3. 기동 확인
+### 3. Verify Startup
 
 ```bash
 oc get pods -n minio
@@ -160,37 +160,37 @@ oc get route -n minio
 # minio-console   minio-console-minio.apps.cluster.com   ...
 ```
 
-### 4. 버킷 생성
+### 4. Create Bucket
 
-#### 방법 A — MinIO Console (웹 UI)
+#### Method A — MinIO Console (Web UI)
 
-1. `https://minio-console-minio.apps.<cluster-domain>` 접속
-2. ID: `minioadmin` / PW: `minioadmin` 로 로그인
-3. **Buckets → Create Bucket** → 이름: `velero-backups`
+1. Access `https://minio-console-minio.apps.<cluster-domain>`
+2. Login with ID: `minioadmin` / PW: `minioadmin`
+3. **Buckets → Create Bucket** → Name: `velero-backups`
 
-#### 방법 B — mc 클라이언트 (CLI)
+#### Method B — mc client (CLI)
 
 ```bash
-# mc 설치 (bastion 또는 로컬)
+# Install mc (on bastion or locally)
 curl -sO https://dl.min.io/client/mc/release/linux-amd64/mc
 chmod +x mc && mv mc /usr/local/bin/
 
-# MinIO API Route 주소 확인
+# Check MinIO API Route address
 MINIO_API=$(oc get route minio-api -n minio -o jsonpath='{.status.ingress[0].host}')
 
-# alias 등록
+# Register alias
 mc alias set poc https://${MINIO_API} minioadmin minioadmin --insecure
 
-# 버킷 생성
+# Create bucket
 mc mb poc/velero-backups --insecure
 
-# 확인
+# Verify
 mc ls poc --insecure
 ```
 
-### 5. env.conf 수동 설정
+### 5. Manual env.conf Settings
 
-`setup.sh`가 MinIO를 감지하지 못한 경우 아래 값을 `env.conf`에 직접 추가합니다.
+If `setup.sh` fails to detect MinIO, add the following values directly to `env.conf`.
 
 ```bash
 MINIO_INSTALLED=true
@@ -200,67 +200,67 @@ MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=velero-backups
 ```
 
-이후 `13-oadp.sh`를 실행하면 이 값으로 DPA가 구성됩니다.
+After that, run `13-oadp.sh` to configure DPA with these values.
 
 ---
 
-## 구성 개요
+## Configuration Overview
 
-| 항목 | 값 |
+| Item | Value |
 |------|-----|
-| OADP / DPA 네임스페이스 | `openshift-adp` (없으면 `OADP_NS` 감지값) |
+| OADP / DPA namespace | `openshift-adp` (or `OADP_NS` detected value if not found) |
 | cloud-credentials Secret | `openshift-adp` |
 | BackupStorageLocation | `openshift-adp` |
 | Backup / Restore | `openshift-adp` |
-| S3 백엔드 | MinIO 우선, 없으면 ODF MCG |
+| S3 backend | MinIO preferred, ODF MCG if not available |
 
 ```
-OBC obc-backups (openshift-adp) — ODF 백엔드 시 자동 생성
+OBC obc-backups (openshift-adp) — auto-created when ODF backend is used
   └─ cloud-credentials Secret (openshift-adp)
        └─ DataProtectionApplication poc-dpa (openshift-adp)
             └─ BackupStorageLocation default
                  │
-                 ├─ Backup CR   → S3 버킷에 저장
-                 └─ Restore CR  → S3 버킷에서 복원
+                 ├─ Backup CR   → Store in S3 bucket
+                 └─ Restore CR  → Restore from S3 bucket
 ```
 
 ---
 
-## 백엔드별 S3 변수
+## S3 Variables by Backend
 
-`setup.sh` 실행 시 MinIO/ODF 자동 감지 후 `env.conf`에 저장됩니다.
-ODF 백엔드는 버킷명과 자격증명을 OBC(ObjectBucketClaim)에서 추가로 취득합니다.
+When `setup.sh` runs, it auto-detects MinIO/ODF and saves to `env.conf`.
+For ODF backend, bucket name and credentials are additionally obtained from OBC (ObjectBucketClaim).
 
-| 변수 | MinIO | ODF (NooBaa MCG) |
+| Variable | MinIO | ODF (NooBaa MCG) |
 |------|-------|-----------------|
 | `S3_ENDPOINT` | `MINIO_ENDPOINT` (env.conf) | `ODF_S3_ENDPOINT` (env.conf) |
 | `S3_BUCKET` | `MINIO_BUCKET` (env.conf) | OBC ConfigMap `BUCKET_NAME` |
 | `S3_ACCESS_KEY` | `MINIO_ACCESS_KEY` (env.conf) | OBC Secret `AWS_ACCESS_KEY_ID` |
 | `S3_SECRET_KEY` | `MINIO_SECRET_KEY` (env.conf) | OBC Secret `AWS_SECRET_ACCESS_KEY` |
-| `S3_REGION` | `minio` (고정) | `ODF_S3_REGION` (env.conf, 기본: `localstorage`) |
+| `S3_REGION` | `minio` (fixed) | `ODF_S3_REGION` (env.conf, default: `localstorage`) |
 
 ---
 
-## ObjectBucketClaim (ODF 백엔드 전용)
+## ObjectBucketClaim (ODF backend only)
 
-`13-oadp.sh`가 ODF 백엔드 감지 시 자동으로 OBC를 생성합니다.
-OBC가 Bound 되면 버킷명과 per-bucket 자격증명을 읽어 DPA에 등록합니다.
+`13-oadp.sh` automatically creates an OBC when ODF backend is detected.
+Once the OBC is Bound, it reads the bucket name and per-bucket credentials to register with DPA.
 
 ```bash
-# OBC 상태 확인
+# Check OBC status
 oc get obc obc-backups -n openshift-adp
 
-# OBC ConfigMap 에서 버킷명 확인
+# Get bucket name from OBC ConfigMap
 oc get cm obc-backups -n openshift-adp -o jsonpath='{.data.BUCKET_NAME}'
 
-# OBC Secret 에서 자격증명 확인
+# Get credentials from OBC Secret
 oc get secret obc-backups -n openshift-adp -o go-template='{{.data.AWS_ACCESS_KEY_ID | base64decode}}'
 ```
 
-수동으로 생성할 경우:
+To create manually:
 
 ```bash
-# NooBaa StorageClass 확인
+# Check NooBaa StorageClass
 oc get storageclass | grep noobaa
 
 oc apply -f - <<EOF
@@ -277,12 +277,12 @@ EOF
 
 ---
 
-## DataProtectionApplication 설정
+## DataProtectionApplication Settings
 
-`13-oadp.sh`가 자동으로 생성·적용합니다. 수동 적용 시 아래를 참고하세요.
+`13-oadp.sh` automatically creates and applies this. Refer to the following for manual application.
 
 ```bash
-# 1. cloud-credentials Secret 생성 (openshift-adp)
+# 1. Create cloud-credentials Secret (openshift-adp)
 oc apply -f - <<EOF
 apiVersion: v1
 kind: Secret
@@ -296,7 +296,7 @@ stringData:
     aws_secret_access_key=${S3_SECRET_KEY}
 EOF
 
-# 2. DataProtectionApplication 생성
+# 2. Create DataProtectionApplication
 oc apply -f - <<EOF
 apiVersion: oadp.openshift.io/v1alpha1
 kind: DataProtectionApplication
@@ -337,28 +337,28 @@ EOF
 
 ---
 
-## VolumeSnapshotClass (CSI 스냅샷)
+## VolumeSnapshotClass (CSI snapshot)
 
-`13-oadp.sh`가 클러스터의 CSI 드라이버를 자동 감지하여 `volumesnapshotclass.yaml`을 생성합니다.
-CSI 스냅샷을 사용하는 경우 직접 적용하세요.
+`13-oadp.sh` auto-detects the cluster's CSI driver and generates `volumesnapshotclass.yaml`.
+Apply directly if using CSI snapshots.
 
 ```bash
-# 생성된 파일 확인 후 적용
+# Review generated file and apply
 oc apply -f volumesnapshotclass.yaml
 
-# CSI 드라이버 목록 확인
+# Check list of CSI drivers
 oc get csidrivers
 ```
 
 ---
 
-## VM 백업
+## VM Backup
 
 ```bash
-# BSL 이름 확인 (OADP가 DPA 이름 기반으로 자동 생성, 예: poc-dpa-1)
+# Get BSL name (OADP auto-creates based on DPA name, e.g.: poc-dpa-1)
 BSL=$(oc get backupstoragelocation -n openshift-adp -o jsonpath='{.items[0].metadata.name}')
 
-# 백업 대상 네임스페이스의 VM 백업
+# Backup VMs in the target namespace
 oc apply -f - <<EOF
 apiVersion: velero.io/v1
 kind: Backup
@@ -367,25 +367,25 @@ metadata:
   namespace: openshift-adp
 spec:
   includedNamespaces:
-    - <백업할 VM 네임스페이스>
+    - <VM namespace to backup>
   storageLocation: ${BSL}
   ttl: 720h0m0s
   snapshotVolumes: true
 EOF
 
-# 백업 상태 확인
+# Check backup status
 oc get backup -n openshift-adp
 
-# 백업 상세 확인
+# Check backup details
 oc describe backup poc-vm-backup -n openshift-adp
 ```
 
 ---
 
-## VM 복원
+## VM Restore
 
 ```bash
-# 백업에서 복원
+# Restore from backup
 oc apply -f - <<EOF
 apiVersion: velero.io/v1
 kind: Restore
@@ -395,35 +395,35 @@ metadata:
 spec:
   backupName: poc-vm-backup
   includedNamespaces:
-    - <복원할 VM 네임스페이스>
+    - <VM namespace to restore>
   restorePVs: true
 EOF
 
-# 복원 상태 확인
+# Check restore status
 oc get restore -n openshift-adp
 
-# 복원된 VM 확인 (복원 대상 네임스페이스 지정)
-oc get vm -n <복원할 VM 네임스페이스>
+# Check restored VMs (specify the restore target namespace)
+oc get vm -n <VM namespace to restore>
 ```
 
 ---
 
-## BackupStorageLocation 확인
+## BackupStorageLocation Verification
 
 ```bash
-# BackupStorageLocation 상태 (Available 여야 함)
+# BackupStorageLocation status (must be Available)
 oc get backupstoragelocation -n openshift-adp
 
-# 상세 확인
+# Check details
 oc describe backupstoragelocation -n openshift-adp
 ```
 
 ---
 
-## Schedule — 정기 백업
+## Schedule — Periodic Backup
 
 ```bash
-# 매일 새벽 2시 자동 백업
+# Automatic backup every day at 2 AM
 oc apply -f - <<EOF
 apiVersion: velero.io/v1
 kind: Schedule
@@ -434,52 +434,52 @@ spec:
   schedule: "0 2 * * *"
   template:
     includedNamespaces:
-      - <백업할 VM 네임스페이스>
+      - <VM namespace to backup>
     storageLocation: default
     ttl: 168h0m0s
     snapshotVolumes: true
 EOF
 
-# Schedule 확인
+# Check Schedule
 oc get schedule -n openshift-adp
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# Velero Pod 로그
+# Velero Pod logs
 oc logs -n openshift-adp -l app.kubernetes.io/name=velero --tail=50
 
-# NodeAgent 로그 (PVC 백업/복원)
+# NodeAgent logs (PVC backup/restore)
 oc logs -n openshift-adp daemonset/node-agent --tail=30
 
-# BackupStorageLocation 상세
+# BackupStorageLocation details
 oc describe backupstoragelocation -n openshift-adp
 
-# DPA 상태 확인
+# Check DPA status
 oc get dpa poc-dpa -n openshift-adp -o yaml
 
-# OBC 상태 확인 (ODF 백엔드)
+# Check OBC status (ODF backend)
 oc get obc obc-backups -n openshift-adp
 oc describe obc obc-backups -n openshift-adp
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# Schedule 삭제
+# Delete Schedule
 oc delete schedule poc-daily-backup -n openshift-adp
 
-# DataProtectionApplication 삭제
+# Delete DataProtectionApplication
 oc delete dpa poc-dpa -n openshift-adp
 
-# cloud-credentials Secret 삭제
+# Delete cloud-credentials Secret
 oc delete secret cloud-credentials -n openshift-adp
 
-# OBC 삭제 (ODF 백엔드)
+# Delete OBC (ODF backend)
 oc delete obc obc-backups -n openshift-adp
 ```

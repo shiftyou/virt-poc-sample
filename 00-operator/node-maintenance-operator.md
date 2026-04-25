@@ -1,33 +1,33 @@
-# Node Maintenance Operator (NMO) 설치
+# Node Maintenance Operator (NMO) Installation
 
-## 개요
+## Overview
 
-Node Maintenance Operator(NMO)는 노드를 안전하게 유지보수 모드로 전환하는 Operator입니다.
-노드를 `cordon` + `drain` 처리하여 워크로드를 다른 노드로 이동시킨 뒤 유지보수 작업을 수행할 수 있습니다.
-OpenShift Virtualization 환경에서 VM 라이브 마이그레이션과 연동하여 무중단 유지보수를 지원합니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
+The Node Maintenance Operator (NMO) is an Operator that safely transitions nodes to maintenance mode.
+It processes nodes with `cordon` + `drain` to move workloads to other nodes before performing maintenance tasks.
+In OpenShift Virtualization environments, it supports zero-downtime maintenance by integrating with VM live migration.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Node Maintenance` 검색
-3. **Node Maintenance Operator** 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Node Maintenance`
+3. Select **Node Maintenance Operator**
+4. Click `Install`
+5. Settings:
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-operators`
-6. `Install` 클릭
+6. Click `Install`
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -49,7 +49,7 @@ spec:
 EOF
 ```
 
-### 설치 확인
+### Verify Installation
 
 ```bash
 oc get csv -n openshift-operators | grep node-maintenance
@@ -57,9 +57,9 @@ oc get csv -n openshift-operators | grep node-maintenance
 
 ---
 
-## 사용 방법
+## Usage
 
-### 노드 유지보수 시작
+### Start Node Maintenance
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -69,18 +69,18 @@ metadata:
   name: maintenance-worker-0
 spec:
   nodeName: worker-0
-  reason: "하드웨어 점검"
+  reason: "Hardware inspection"
 EOF
 ```
 
-### 유지보수 상태 확인
+### Check Maintenance Status
 
 ```bash
 oc get nodemaintenance
 oc describe nodemaintenance maintenance-worker-0
 ```
 
-### 유지보수 종료
+### End Maintenance
 
 ```bash
 oc delete nodemaintenance maintenance-worker-0

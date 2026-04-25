@@ -1,74 +1,74 @@
-# 워커 노드 제거 후 재조인 실습
+# Worker Node Removal and Rejoin Lab
 
-OpenShift 클러스터에서 워커 노드를 제거한 뒤 kubelet 재시작으로 다시 조인시키는 절차를 실습합니다.
+Practice removing a worker node from an OpenShift cluster and rejoining it by restarting kubelet.
 
 ```
 kubelet stop
-  └─ 노드 NotReady
+  └─ Node NotReady
        └─ oc delete node
-            └─ 클러스터에서 제거됨
+            └─ Removed from cluster
                  └─ kubelet start
-                      └─ 기존 인증서로 API 서버 재등록
-                           └─ CSR 승인 → 노드 Ready
+                      └─ Re-register with API server using existing certificate
+                           └─ CSR approval → Node Ready
 ```
 
 ---
 
-## 동작 원리
+## How It Works
 
-### kubelet과 노드 재조인
+### kubelet and Node Rejoin
 
-OpenShift 워커 노드(RHCOS)는 kubelet이 클러스터와의 통신을 담당합니다.
+On an OpenShift worker node (RHCOS), kubelet handles communication with the cluster.
 
-| 상황 | 동작 |
+| Situation | Behavior |
 |------|------|
-| kubelet 중지 | 노드 상태 → `NotReady`. 노드 오브젝트는 클러스터에 남아 있음 |
-| `oc delete node` | etcd에서 노드 오브젝트만 삭제. 실제 노드(OS)는 그대로 |
-| kubelet 재시작 | 기존 인증서(`/var/lib/kubelet/pki/`)로 API 서버에 재등록 요청 |
-| CSR 승인 | 새 노드 오브젝트 생성 → `Ready` |
+| kubelet stopped | Node status → `NotReady`. Node object remains in the cluster |
+| `oc delete node` | Only deletes the node object from etcd. The actual node (OS) remains intact |
+| kubelet restarted | Re-registration request to API server using existing certificate (`/var/lib/kubelet/pki/`) |
+| CSR approval | New node object created → `Ready` |
 
-### 인증서 흐름
+### Certificate Flow
 
-kubelet은 두 종류의 인증서를 사용합니다.
+kubelet uses two types of certificates.
 
-| 인증서 | 경로 | 용도 |
+| Certificate | Path | Purpose |
 |--------|------|------|
-| 클라이언트 인증서 | `/var/lib/kubelet/pki/kubelet-client-current.pem` | API 서버에 kubelet 자신을 인증 |
-| 서버 인증서 | `/var/lib/kubelet/pki/kubelet-server-current.pem` | API 서버가 kubelet에 접속할 때 사용 |
+| Client certificate | `/var/lib/kubelet/pki/kubelet-client-current.pem` | Authenticates kubelet itself to the API server |
+| Server certificate | `/var/lib/kubelet/pki/kubelet-server-current.pem` | Used when the API server connects to kubelet |
 
-노드 오브젝트를 삭제하더라도 이 인증서 파일은 노드 디스크에 그대로 남아 있습니다.
-kubelet 재시작 시 이 인증서로 API 서버에 재등록하므로 **처음 노드를 추가할 때와 달리 bootstrap token이 필요 없습니다**.
+Even if the node object is deleted, these certificate files remain on the node's disk.
+Since kubelet uses these certificates to re-register with the API server on restart, **a bootstrap token is not required, unlike when adding a node for the first time**.
 
-재등록 과정에서 2개의 CSR이 생성됩니다.
+Two CSRs are generated during the re-registration process.
 
 ```
-csr-xxxxx   system:node:<nodename>         (클라이언트 인증서 갱신)
-csr-yyyyy   system:serviceaccount:...      (서버 인증서 갱신)
+csr-xxxxx   system:node:<nodename>         (client certificate renewal)
+csr-yyyyy   system:serviceaccount:...      (server certificate renewal)
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- 워커 노드 2개 이상 (1개를 제거하는 동안 나머지 노드가 워크로드를 수용해야 함)
-- `oc` 로그인 (cluster-admin)
-- 대상 노드 SSH 접속 가능 (`ssh core@<node-ip>`)
+- 2 or more worker nodes (remaining nodes must accommodate workloads while one is being removed)
+- `oc` login (cluster-admin)
+- SSH access to the target node (`ssh core@<node-ip>`)
 
 ---
 
-## 절차
+## Procedure
 
-### 1단계. 노드 현황 확인 및 대상 선정
+### Step 1. Check Node Status and Select Target
 
 ```bash
-# 전체 노드 확인
+# Check all nodes
 oc get nodes -o wide
 
-# 워커 노드만 확인
+# Check worker nodes only
 oc get nodes -l node-role.kubernetes.io/worker
 ```
 
-대상 노드(예: `worker-2`)의 IP 주소를 확인합니다.
+Check the IP address of the target node (e.g., `worker-2`).
 
 ```bash
 TARGET_NODE="worker-2"
@@ -79,15 +79,15 @@ echo "SSH: ssh core@${NODE_IP}"
 
 ---
 
-### 2단계. Cordon + Drain
+### Step 2. Cordon + Drain
 
-노드를 Unschedulable로 설정하고 실행 중인 Pod/VM을 다른 노드로 이동합니다.
+Set the node to Unschedulable and move running Pods/VMs to other nodes.
 
 ```bash
-# Cordon — 신규 Pod 스케줄 차단
+# Cordon — block new Pod scheduling
 oc adm cordon $TARGET_NODE
 
-# Drain — 기존 Pod/VM 이동
+# Drain — move existing Pods/VMs
 oc adm drain $TARGET_NODE \
   --delete-emptydir-data \
   --ignore-daemonsets \
@@ -95,34 +95,34 @@ oc adm drain $TARGET_NODE \
   --timeout=300s
 ```
 
-> VM(VirtualMachineInstance)은 Live Migration으로 다른 노드로 이동됩니다.
-> `--ignore-daemonsets`는 DaemonSet Pod(node-exporter 등)를 무시합니다.
+> VMs (VirtualMachineInstances) are moved to other nodes via Live Migration.
+> `--ignore-daemonsets` ignores DaemonSet Pods (node-exporter, etc.).
 
 ---
 
-### 3단계. kubelet 중지 → 노드 NotReady 확인
+### Step 3. Stop kubelet → Verify Node NotReady
 
-대상 노드에 SSH 접속 후 kubelet을 중지합니다.
+SSH into the target node and stop kubelet.
 
 ```bash
-# 노드에 SSH 접속
+# SSH into the node
 ssh core@${NODE_IP}
 
-# kubelet 중지 (노드 내부에서 실행)
+# Stop kubelet (run inside the node)
 sudo systemctl stop kubelet
 
-# kubelet 상태 확인
+# Check kubelet status
 sudo systemctl status kubelet
 ```
 
-클러스터에서 노드 상태 변화를 확인합니다.
+Check the node status change in the cluster.
 
 ```bash
-# 약 40초 후 NotReady로 전환됨
+# Transitions to NotReady after approximately 40 seconds
 watch oc get nodes
 ```
 
-예상 출력:
+Expected output:
 ```
 NAME       STATUS     ROLES    AGE   VERSION
 master-0   Ready      master   10d   v1.30.x
@@ -130,41 +130,41 @@ master-1   Ready      master   10d   v1.30.x
 master-2   Ready      master   10d   v1.30.x
 worker-0   Ready      worker   10d   v1.30.x
 worker-1   Ready      worker   10d   v1.30.x
-worker-2   NotReady   worker   10d   v1.30.x   ← kubelet 중지됨
+worker-2   NotReady   worker   10d   v1.30.x   ← kubelet stopped
 ```
 
 ---
 
-### 4단계. 노드 오브젝트 삭제
+### Step 4. Delete Node Object
 
 ```bash
-# 클러스터에서 노드 오브젝트 삭제
+# Delete node object from the cluster
 oc delete node $TARGET_NODE
 ```
 
-> 이 시점에서 노드 OS는 여전히 동작 중입니다.
-> 단지 Kubernetes/OpenShift의 etcd에서 노드 정보만 삭제됩니다.
+> At this point, the node OS is still running.
+> Only the node information in Kubernetes/OpenShift etcd is deleted.
 
 ```bash
-# 노드가 목록에서 사라진 것 확인
+# Verify the node has disappeared from the list
 oc get nodes
 ```
 
 ---
 
-### 5단계. kubelet 재시작 → 재조인
+### Step 5. Restart kubelet → Rejoin
 
-노드에서 kubelet을 다시 시작합니다.
+Restart kubelet on the node.
 
 ```bash
-# 노드에서 (SSH)
+# On the node (SSH)
 sudo systemctl start kubelet
 
-# kubelet 로그 확인
+# Check kubelet logs
 sudo journalctl -u kubelet -f --since "1 min ago"
 ```
 
-kubelet 로그에서 API 서버 등록 시도를 확인할 수 있습니다.
+You can see the API server registration attempt in the kubelet logs.
 
 ```
 ...msg="Attempting to register node" node="worker-2"
@@ -173,26 +173,26 @@ kubelet 로그에서 API 서버 등록 시도를 확인할 수 있습니다.
 
 ---
 
-### 6단계. CSR 승인
+### Step 6. Approve CSR
 
-kubelet 재시작 후 1~2분 내에 CSR이 생성됩니다.
+CSRs are generated within 1-2 minutes after kubelet restarts.
 
 ```bash
-# CSR 목록 확인
+# Check CSR list
 oc get csr
 
-# Pending 상태 CSR 일괄 승인
+# Approve all Pending CSRs at once
 oc get csr --no-headers | awk '/Pending/ {print $1}' | xargs oc adm certificate approve
 ```
 
-예상 출력:
+Expected output:
 ```
 NAME        AGE   SIGNERNAME                                    REQUESTOR              CONDITION
 csr-abc12   30s   kubernetes.io/kube-apiserver-client-kubelet   system:node:worker-2   Pending
 csr-def34   45s   kubernetes.io/kubelet-serving                 system:node:worker-2   Pending
 ```
 
-승인 후:
+After approval:
 ```
 certificatesigningrequest.certificates.k8s.io/csr-abc12 approved
 certificatesigningrequest.certificates.k8s.io/csr-def34 approved
@@ -200,20 +200,20 @@ certificatesigningrequest.certificates.k8s.io/csr-def34 approved
 
 ---
 
-### 7단계. Ready 확인 + Uncordon
+### Step 7. Verify Ready + Uncordon
 
 ```bash
-# 노드 Ready 확인 (1~2분 소요)
+# Verify node Ready (takes 1-2 minutes)
 watch oc get nodes
 
-# Ready 확인 후 Uncordon
+# Uncordon after verifying Ready
 oc adm uncordon $TARGET_NODE
 
-# 최종 상태 확인
+# Check final status
 oc get nodes -o wide
 ```
 
-예상 출력:
+Expected output:
 ```
 NAME       STATUS   ROLES    AGE   VERSION
 master-0   Ready    master   10d   v1.30.x
@@ -221,73 +221,73 @@ master-1   Ready    master   10d   v1.30.x
 master-2   Ready    master   10d   v1.30.x
 worker-0   Ready    worker   10d   v1.30.x
 worker-1   Ready    worker   10d   v1.30.x
-worker-2   Ready    worker   10d   v1.30.x   ← 재조인 완료
+worker-2   Ready    worker   10d   v1.30.x   ← rejoin complete
 ```
 
 ---
 
-## CSR이 생성되지 않을 때
+## When CSRs Are Not Generated
 
-OpenShift 4.x는 `machine-approver`가 특정 조건의 CSR을 자동 승인합니다.
-CSR이 보이지 않는 경우 이미 자동 승인된 것일 수 있습니다.
+OpenShift 4.x has a `machine-approver` that automatically approves CSRs under certain conditions.
+If CSRs are not visible, they may have already been automatically approved.
 
 ```bash
-# 최근 승인된 CSR 확인
+# Check recently approved CSRs
 oc get csr | grep Approved
 
-# machine-approver 로그 확인
+# Check machine-approver logs
 oc logs -n openshift-cluster-machine-approver \
   deploy/machine-approver --tail=30
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
-### 노드가 NotReady에서 복구되지 않는 경우
+### When Node Does Not Recover from NotReady
 
 ```bash
-# kubelet 상태 확인 (노드 SSH)
+# Check kubelet status (node SSH)
 sudo systemctl status kubelet
 
-# kubelet 로그에서 오류 확인
+# Check kubelet logs for errors
 sudo journalctl -u kubelet --since "5 min ago" | grep -i error
 
-# 인증서 파일 존재 확인
+# Verify certificate files exist
 ls -la /var/lib/kubelet/pki/
 ```
 
-### CSR 승인 후에도 NotReady인 경우
+### Still NotReady After CSR Approval
 
 ```bash
-# 노드 이벤트 확인
+# Check node events
 oc describe node $TARGET_NODE | tail -20
 
-# CNI(네트워크 플러그인) 상태 확인
+# Check CNI (network plugin) status
 oc get pods -n openshift-ovn-kubernetes -o wide | grep $TARGET_NODE
 ```
 
-### 노드가 클러스터에 나타나지 않는 경우
+### When Node Does Not Appear in Cluster
 
 ```bash
-# API 서버 연결 확인 (노드 SSH)
+# Check API server connectivity (node SSH)
 curl -k https://<api-server>:6443/healthz
 
-# kubelet config 확인
+# Check kubelet config
 sudo cat /etc/kubernetes/kubelet.conf
 ```
 
 ---
 
-## 롤백
+## Rollback
 
-노드 재조인에 실패한 경우 Machine Config Operator를 통해 노드를 재프로비저닝합니다.
+If node rejoin fails, reprovision the node through the Machine Config Operator.
 
 ```bash
-# MachineConfig 강제 재적용 (노드 SSH)
+# Force re-apply MachineConfig (node SSH)
 sudo touch /run/machine-config-daemon-force
 
-# 또는 MachineConfigPool 상태 확인
+# Or check MachineConfigPool status
 oc get mcp
 oc describe mcp worker
 ```

@@ -2,15 +2,15 @@
 # =============================================================================
 # 02-network.sh
 #
-# NNCP(NodeNetworkConfigurationPolicy) + NAD(NetworkAttachmentDefinition) 구성
-# 4가지 네트워크 방식 중 선택하여 VM용 보조 네트워크를 구성합니다.
+# NNCP(NodeNetworkConfigurationPolicy) + NAD(NetworkAttachmentDefinition) configuration
+# Select one of 4 network methods to set up a secondary network for VMs.
 #
 #   1. Linux Bridge          — cnv-bridge CNI, NMState NNCP
 #   2. OVN Localnet          — ovn-k8s-cni-overlay, OVN bridge-mappings
 #   3. Linux Bridge + VLAN   — cnv-bridge CNI + VLAN ID, trunk port
 #   4. OVN Localnet + VLAN   — ovn-k8s-cni-overlay + vlanID
 #
-# 사용법: ./02-network.sh
+# Usage: ./02-network.sh
 # =============================================================================
 
 set -euo pipefail
@@ -29,7 +29,7 @@ NAD_NAMESPACE="poc-network"
 VLAN_ID="${VLAN_ID:-100}"
 SECONDARY_IP_PREFIX="${SECONDARY_IP_PREFIX:-192.168.100}"
 
-# 모드별로 설정되는 변수
+# Variables set per mode
 NET_TYPE=""
 NAD_NAME=""
 
@@ -61,88 +61,88 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
-# 네트워크 방식 선택
+# Select network method
 # =============================================================================
 choose_mode() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  네트워크 구성 방식을 선택하세요${NC}"
+    echo -e "${CYAN}  Select a network configuration method${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  ${GREEN}1)${NC} Linux Bridge"
-    echo -e "     NNCP로 Linux Bridge 생성 → cnv-bridge CNI"
-    echo -e "     단순 L2 연결. 추가 스위치 설정 불필요."
+    echo -e "     Create Linux Bridge via NNCP → cnv-bridge CNI"
+    echo -e "     Simple L2 connection. No additional switch configuration needed."
     echo ""
     echo -e "  ${GREEN}2)${NC} Linux Bridge + VLAN filtering"
-    echo -e "     NNCP로 Linux Bridge trunk 포트 구성 → cnv-bridge + VLAN ID"
-    echo -e "     단일 물리 NIC으로 여러 VLAN 분리."
+    echo -e "     Configure Linux Bridge trunk port via NNCP → cnv-bridge + VLAN ID"
+    echo -e "     Separate multiple VLANs with a single physical NIC."
     echo ""
-    echo -e "  현재 설정:"
+    echo -e "  Current settings:"
     echo -e "    NNCP_NAME        : ${CYAN}${NNCP_NAME}${NC}"
     echo -e "    BRIDGE_NAME      : ${CYAN}${BRIDGE_NAME}${NC}"
     echo -e "    BRIDGE_INTERFACE : ${CYAN}${BRIDGE_INTERFACE}${NC}"
-    echo -e "    네임스페이스      : ${CYAN}${NAD_NAMESPACE}${NC}"
+    echo -e "    Namespace        : ${CYAN}${NAD_NAMESPACE}${NC}"
     echo ""
-    read -r -p "  선택 [1-2]: " NET_TYPE
+    read -r -p "  Select [1-2]: " NET_TYPE
 
     case "$NET_TYPE" in
         1)
             NAD_NAME="poc-bridge-nad"
-            print_ok "선택: Linux Bridge"
+            print_ok "Selected: Linux Bridge"
             ;;
         2)
             NAD_NAME="poc-bridge-vlan-nad"
             echo ""
-            read -r -p "  VLAN ID를 입력하세요 [기본값: ${VLAN_ID}]: " input_vlan
+            read -r -p "  Enter VLAN ID [default: ${VLAN_ID}]: " input_vlan
             [ -n "$input_vlan" ] && VLAN_ID="$input_vlan"
-            print_ok "선택: Linux Bridge + VLAN ${VLAN_ID}"
+            print_ok "Selected: Linux Bridge + VLAN ${VLAN_ID}"
             ;;
         *)
-            print_error "1 또는 2를 입력하세요."
+            print_error "Please enter 1 or 2."
             exit 1
             ;;
     esac
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight checks
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # NNCP 정보 표시
+    # Display NNCP information
     echo ""
-    print_info "── NNCP 정보 ──"
+    print_info "── NNCP Info ──"
     print_info "  NNCP_NAME       : ${NNCP_NAME}"
     print_info "  BRIDGE_NAME     : ${BRIDGE_NAME}"
     print_info "  BRIDGE_INTERFACE: ${BRIDGE_INTERFACE}"
     _nncp_avail=$(oc get nncp "${NNCP_NAME}" \
         -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
     if [ -n "$_nncp_avail" ]; then
-        print_info "  클러스터 NNCP 상태: Available=${_nncp_avail}"
+        print_info "  Cluster NNCP status: Available=${_nncp_avail}"
         oc get nnce 2>/dev/null | grep "${NNCP_NAME}" | \
             awk '{printf "    %-40s %s\n", $1, $2}' || true
     else
-        print_info "  클러스터 NNCP 상태: 미적용 (신규 생성 예정)"
+        print_info "  Cluster NNCP status: Not applied (will be created)"
     fi
 
     if [ "${NMSTATE_INSTALLED:-false}" != "true" ]; then
         if ! oc get csv -A 2>/dev/null | grep -qi "kubernetes-nmstate"; then
-            print_warn "Kubernetes NMState Operator 미설치 → 건너뜁니다."
-            print_warn "  설치 가이드: 00-operator/nmstate-operator.md"
+            print_warn "Kubernetes NMState Operator not installed → skipping."
+            print_warn "  Installation guide: 00-operator/nmstate-operator.md"
             exit 77
         fi
     fi
-    print_ok "NMState Operator 확인"
+    print_ok "NMState Operator confirmed"
 
     if ! oc get nmstate 2>/dev/null | grep -q "."; then
-        print_warn "NMState CR이 없습니다. NMState 인스턴스를 생성합니다..."
+        print_warn "NMState CR not found. Creating NMState instance..."
         cat > nmstate-cr.yaml <<'NMEOF'
 apiVersion: nmstate.io/v1
 kind: NMState
@@ -150,23 +150,23 @@ metadata:
   name: nmstate
 NMEOF
         oc apply -f nmstate-cr.yaml
-        print_info "NMState 핸들러 준비 대기 중 (최대 60초)..."
+        print_info "Waiting for NMState handler to be ready (up to 60s)..."
         oc rollout status daemonset/nmstate-handler -n openshift-nmstate --timeout=60s 2>/dev/null || true
-        print_ok "NMState CR 생성 완료"
+        print_ok "NMState CR created"
     else
-        print_ok "NMState CR 확인"
+        print_ok "NMState CR confirmed"
     fi
 }
 
 # =============================================================================
-# NNCP 상태 확인
+# Check NNCP status
 # =============================================================================
 step_nncp() {
-    print_step "1/4  NNCP 상태 확인"
+    print_step "1/4  Check NNCP status"
 
     if ! oc get nncp "${NNCP_NAME}" &>/dev/null; then
-        print_warn "NNCP '${NNCP_NAME}'이 클러스터에 없습니다."
-        print_warn "  setup.sh 또는 nncp-gen.sh를 먼저 실행하세요."
+        print_warn "NNCP '${NNCP_NAME}' not found in cluster."
+        print_warn "  Please run setup.sh or nncp-gen.sh first."
         exit 1
     fi
 
@@ -179,12 +179,12 @@ step_nncp() {
 }
 
 # =============================================================================
-# NAD — 방식별 등록
+# NAD — register per method
 # =============================================================================
 _ensure_namespace() {
     oc new-project "${NAD_NAMESPACE}" >/dev/null 2>&1 || \
         oc project "${NAD_NAMESPACE}" >/dev/null 2>&1 || true
-    print_ok "네임스페이스: ${NAD_NAMESPACE}"
+    print_ok "Namespace: ${NAD_NAMESPACE}"
 }
 
 step_nad_linux_bridge() {
@@ -211,9 +211,9 @@ spec:
         "preserveDefaultVlan": false
     }
 EOF
-    echo "생성된 파일: nad-${NAD_NAME}.yaml"
+    echo "Generated file: nad-${NAD_NAME}.yaml"
     oc apply -f nad-${NAD_NAME}.yaml
-    print_ok "NAD ${NAD_NAME} 등록 완료"
+    print_ok "NAD ${NAD_NAME} registered"
 }
 
 step_nad_linux_bridge_vlan() {
@@ -241,16 +241,16 @@ spec:
         "preserveDefaultVlan": false
     }
 EOF
-    echo "생성된 파일: nad-${NAD_NAME}.yaml"
+    echo "Generated file: nad-${NAD_NAME}.yaml"
     oc apply -f nad-${NAD_NAME}.yaml
-    print_ok "NAD ${NAD_NAME} 등록 완료 (VLAN ${VLAN_ID})"
+    print_ok "NAD ${NAD_NAME} registered (VLAN ${VLAN_ID})"
 }
 
-# poc- 로 시작하는 모든 네임스페이스에 NAD 추가 배포
+# Deploy NAD to all namespaces starting with poc-
 _deploy_nad_to_poc_namespaces() {
     local nad_file="nad-${NAD_NAME}.yaml"
 
-    # NAD_NAMESPACE 를 제외한 poc- 네임스페이스 목록
+    # List of poc- namespaces excluding NAD_NAMESPACE
     local poc_namespaces
     poc_namespaces=$(oc get namespaces \
         -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
@@ -258,19 +258,19 @@ _deploy_nad_to_poc_namespaces() {
 
     [ -z "$poc_namespaces" ] && return 0
 
-    print_info "아래 poc- 네임스페이스에 NAD(${NAD_NAME})를 추가 배포할 수 있습니다:"
+    print_info "NAD (${NAD_NAME}) can be additionally deployed to the following poc- namespaces:"
     echo ""
     for ns in $poc_namespaces; do
         echo "    - ${ns}"
     done
     echo ""
-    read -r -p "  위 네임스페이스에도 NAD를 배포하시겠습니까? [y/N]: " _nad_confirm
+    read -r -p "  Deploy NAD to these namespaces as well? [y/N]: " _nad_confirm
     if [[ "$_nad_confirm" != "y" && "$_nad_confirm" != "Y" ]]; then
-        print_info "추가 배포를 건너뜁니다."
+        print_info "Skipping additional deployment."
         return 0
     fi
 
-    print_info "추가 poc- 네임스페이스에 NAD 배포 중..."
+    print_info "Deploying NAD to additional poc- namespaces..."
     for ns in $poc_namespaces; do
         sed "s|namespace: ${NAD_NAMESPACE}|namespace: ${ns}|g" \
             "$nad_file" | oc apply -f -
@@ -287,13 +287,13 @@ step_nad() {
 }
 
 # =============================================================================
-# VM 생성 (poc 템플릿 + 선택된 NAD)
+# VM creation (poc template + selected NAD)
 # =============================================================================
 step_vm() {
-    print_step "3/4  VM 생성 (poc 템플릿 + ${NAD_NAME})"
+    print_step "3/4  Create VMs (poc template + ${NAD_NAME})"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_warn "poc Template 없음 — VM 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        print_warn "poc Template not found — skipping VM creation. (Run 01-template first)"
         return
     fi
 
@@ -306,19 +306,19 @@ step_vm() {
         idx=$((idx + 1))
 
         if oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" &>/dev/null; then
-            print_ok "VM $VM_NAME 이미 존재 — 스킵"
+            print_ok "VM $VM_NAME already exists — skipping"
             continue
         fi
 
         local vm_yaml="${SCRIPT_DIR}/vm-${VM_NAME}.yaml"
         oc process -n openshift poc -p NAME="$VM_NAME" | \
             sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${vm_yaml}"
-        echo "생성된 파일: ${vm_yaml}"
+        echo "Generated file: ${vm_yaml}"
         oc apply -n "$NAD_NAMESPACE" -f "${vm_yaml}"
 
         ensure_runstrategy "$VM_NAME" "$NAD_NAMESPACE"
 
-        # 보조 NIC (NAD) 추가
+        # Add secondary NIC (NAD)
         oc patch vm "$VM_NAME" -n "$NAD_NAMESPACE" --type=json -p='[
           {
             "op": "add",
@@ -332,12 +332,12 @@ step_vm() {
           }
         ]'
 
-        # cloud-init networkData — 기존 cloudinitdisk 볼륨에 networkData 추가 (VM 시작 전)
+        # cloud-init networkData — add networkData to existing cloudinitdisk volume (before VM start)
         local ci_idx
         ci_idx=$(oc get vm "$VM_NAME" -n "$NAD_NAMESPACE" \
             -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' 2>/dev/null | \
             grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
-        # grep -n은 1-based, JSON patch는 0-based
+        # grep -n is 1-based, JSON patch is 0-based
         [ -n "$ci_idx" ] && ci_idx=$(( ci_idx - 1 ))
 
         if [ -n "$ci_idx" ]; then
@@ -346,28 +346,28 @@ step_vm() {
                \"path\": \"/spec/template/spec/volumes/${ci_idx}/cloudInitNoCloud/networkData\",
                \"value\": \"version: 2\\nethernets:\\n  eth1:\\n    dhcp4: false\\n    addresses:\\n      - ${SECONDARY_IP_PREFIX}.${ip_suffix}/24\\n    gateway4: ${SECONDARY_IP_PREFIX}.1\\n    nameservers:\\n      addresses:\\n        - 8.8.8.8\\n\"}
             ]"
-            print_ok "networkData 추가 완료 → cloudinitdisk (index: ${ci_idx})"
+            print_ok "networkData added → cloudinitdisk (index: ${ci_idx})"
         else
-            print_warn "cloudinitdisk 볼륨을 찾지 못했습니다. networkData 미설정."
+            print_warn "cloudinitdisk volume not found. networkData not configured."
         fi
 
         virtctl start "$VM_NAME" -n "$NAD_NAMESPACE" 2>/dev/null || true
-        print_ok "VM ${VM_NAME} 생성 완료 (eth0: masquerade, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.${ip_suffix}/24)"
+        print_ok "VM ${VM_NAME} created (eth0: masquerade, eth1: ${NAD_NAME}, IP: ${SECONDARY_IP_PREFIX}.${ip_suffix}/24)"
     done
 }
 
 # =============================================================================
-# ConsoleYAMLSample 등록
+# Register ConsoleYAMLSample
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "4/4  ConsoleYAMLSample 등록"
+    print_step "4/4  Register ConsoleYAMLSample"
 
-    # NNCP 샘플 — 방식별
+    # NNCP sample — per method
     local nncp_title nncp_desc nncp_yaml
     case "$NET_TYPE" in
         1)
             nncp_title="POC Linux Bridge NNCP"
-            nncp_desc="워커 노드에 Linux Bridge(${BRIDGE_NAME})를 생성합니다."
+            nncp_desc="Creates a Linux Bridge (${BRIDGE_NAME}) on worker nodes."
             nncp_yaml="$(cat <<YAML
     apiVersion: nmstate.io/v1
     kind: NodeNetworkConfigurationPolicy
@@ -394,7 +394,7 @@ YAML
             ;;
         2)
             nncp_title="POC Linux Bridge VLAN trunk NNCP"
-            nncp_desc="워커 노드에 VLAN trunk 포트로 Linux Bridge(${BRIDGE_NAME})를 생성합니다."
+            nncp_desc="Creates a Linux Bridge (${BRIDGE_NAME}) with VLAN trunk port on worker nodes."
             nncp_yaml="$(cat <<YAML
     apiVersion: nmstate.io/v1
     kind: NodeNetworkConfigurationPolicy
@@ -441,11 +441,11 @@ spec:
   yaml: |
 ${nncp_yaml}
 EOF
-    echo "생성된 파일: consoleyamlsample-nncp.yaml"
+    echo "Generated file: consoleyamlsample-nncp.yaml"
     oc apply -f consoleyamlsample-nncp.yaml
-    print_ok "ConsoleYAMLSample ${NNCP_NAME} 등록 완료"
+    print_ok "ConsoleYAMLSample ${NNCP_NAME} registered"
 
-    # NAD 샘플 — config 블록 방식별 생성
+    # NAD sample — generate config block per method
     local nad_config_block
     case "$NET_TYPE" in
         1) nad_config_block="    {
@@ -476,7 +476,7 @@ metadata:
   name: ${NAD_NAME}
 spec:
   title: "POC NAD — ${NAD_NAME}"
-  description: "NNCP 적용 후 VM 보조 네트워크로 등록합니다. (방식: $(echo "$NET_TYPE" | sed 's/1/Linux Bridge/;s/2/Linux Bridge+VLAN/'))"
+  description: "Register as VM secondary network after applying NNCP. (Method: $(echo "$NET_TYPE" | sed 's/1/Linux Bridge/;s/2/Linux Bridge+VLAN/'))"
   targetResource:
     apiVersion: k8s.cni.cncf.io/v1
     kind: NetworkAttachmentDefinition
@@ -490,13 +490,13 @@ spec:
       config: |-
 ${nad_config_block}
 EOF
-    echo "생성된 파일: consoleyamlsample-nad.yaml"
+    echo "Generated file: consoleyamlsample-nad.yaml"
     oc apply -f consoleyamlsample-nad.yaml
-    print_ok "ConsoleYAMLSample ${NAD_NAME} 등록 완료"
+    print_ok "ConsoleYAMLSample ${NAD_NAME} registered"
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 print_summary() {
     local mode_label
@@ -507,13 +507,13 @@ print_summary() {
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! 네트워크 구성 (${mode_label})${NC}"
+    echo -e "${GREEN}  Done! Network configuration (${mode_label})${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  NNCP 상태 : ${CYAN}oc get nncp${NC}"
-    echo -e "  NNCE 상태 : ${CYAN}oc get nnce${NC}"
-    echo -e "  NAD 확인  : ${CYAN}oc get net-attach-def -n ${NAD_NAMESPACE}${NC}"
-    echo -e "  VM 상태   : ${CYAN}oc get vm,vmi -n ${NAD_NAMESPACE}${NC}"
+    echo -e "  NNCP status : ${CYAN}oc get nncp${NC}"
+    echo -e "  NNCE status : ${CYAN}oc get nnce${NC}"
+    echo -e "  NAD check   : ${CYAN}oc get net-attach-def -n ${NAD_NAMESPACE}${NC}"
+    echo -e "  VM status   : ${CYAN}oc get vm,vmi -n ${NAD_NAMESPACE}${NC}"
     echo ""
     echo -e "  VM IP (eth1):"
     echo -e "    poc-network-vm-1 : ${CYAN}${SECONDARY_IP_PREFIX}.21/24${NC}"
@@ -525,26 +525,26 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 02-network 리소스 삭제"
+    print_step "--cleanup: Delete 02-network resources"
     oc delete vm poc-network-vm-1 poc-network-vm-2 -n poc-network --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-bridge-nncp poc-bridge-nad poc-bridge-vlan-nad --ignore-not-found 2>/dev/null || true
     oc delete project poc-network --ignore-not-found 2>/dev/null || true
     echo ""
     for _nncp in $(oc get nncp -o name 2>/dev/null | grep poc- || true); do
         local _name="${_nncp#*/}"
-        read -r -p "NNCP ${_name} 삭제하시겠습니까? 노드 브리지가 제거됩니다. [y/N]: " _del
+        read -r -p "Delete NNCP ${_name}? This will remove the node bridge. [y/N]: " _del
         [[ "$_del" = "y" || "$_del" = "Y" ]] && oc delete nncp "$_name" --ignore-not-found 2>/dev/null || true
     done
-    print_ok "02-network 리소스 삭제 완료"
+    print_ok "02-network resources deleted"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  02-network: NNCP + NAD + VM 구성${NC}"
+    echo -e "${CYAN}  02-network: NNCP + NAD + VM configuration${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     choose_mode

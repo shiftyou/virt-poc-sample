@@ -2,19 +2,19 @@
 # =============================================================================
 # 06-resource-quota.sh
 #
-# ResourceQuota 실습 환경 구성
-#   1. poc-resource-quota 네임스페이스 생성
-#   2. CPU / Memory / Pod / PVC 등 ResourceQuota 적용
-#   3. VM 2개 배포 (Quota 내 통과) → 3번째 VM 생성 시도 → Quota 초과 거부
+# ResourceQuota practice environment setup
+#   1. Create poc-resource-quota namespace
+#   2. Apply ResourceQuota for CPU / Memory / Pod / PVC etc.
+#   3. Deploy 2 VMs (pass within Quota) → attempt 3rd VM creation → rejected for exceeding Quota
 #
-# 사용법: ./06-resource-quota.sh
+# Usage: ./06-resource-quota.sh
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# env.conf 자동 로드 (단독 실행 시)
+# Auto-load env.conf (when running standalone)
 ENV_FILE="${SCRIPT_DIR}/../env.conf"
 if [ -f "$ENV_FILE" ]; then
     set -a; source "$ENV_FILE"; set +a
@@ -22,7 +22,7 @@ fi
 
 NS="poc-resource-quota"
 
-# VM 리소스: 각 750m / 1500m → 2개=1500m(통과), 3개=2250m(초과)
+# VM resources: 750m / 1500m each → 2 VMs=1500m (pass), 3 VMs=2250m (exceed)
 VM_CPU_REQUEST="750m"
 VM_CPU_LIMIT="1500m"
 VM_MEM_REQUEST="1Gi"
@@ -41,8 +41,8 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
+# Migrate spec.running (deprecated) -> spec.runStrategy
+# Call before oc patch vm to remove admission webhook warnings
 ensure_runstrategy() {
     local vm="$1" ns="$2"
     local running
@@ -58,53 +58,53 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight checks
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
-    # OpenShift Virtualization Operator 확인
+    # Check OpenShift Virtualization Operator
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
-        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        print_warn "OpenShift Virtualization Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/kubevirt-hyperconverged-operator.md"
         exit 77
     fi
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        print_error "poc Template not found. Run 01-template first."
         exit 1
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 
     print_info "  NS : ${NS}"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# Step 1: Create namespace
 # =============================================================================
 step_namespace() {
-    print_step "1/4  네임스페이스 생성 (${NS})"
+    print_step "1/4  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created"
     fi
 }
 
 # =============================================================================
-# 2단계: ResourceQuota 적용
-#   requests.cpu: "2" → VM 2개(각 750m=1500m)는 통과, 3번째(2250m)는 초과
+# Step 2: Apply ResourceQuota
+#   requests.cpu: "2" → 2 VMs (each 750m=1500m) pass, 3rd (2250m) exceeds
 # =============================================================================
 step_quota() {
-    print_step "2/4  ResourceQuota 적용 (${NS})"
+    print_step "2/4  Apply ResourceQuota (${NS})"
 
     cat > resourcequota-poc.yaml <<'EOF'
 apiVersion: v1
@@ -114,15 +114,15 @@ metadata:
   namespace: poc-resource-quota
 spec:
   hard:
-    # Pod 수
+    # Pod count
     pods: "10"
-    # CPU — requests.cpu: "2" → VM 각 750m 기준 2개(1500m) 통과, 3개(2250m) 초과
+    # CPU — requests.cpu: "2" → 2 VMs at 750m each (1500m) pass, 3 VMs (2250m) exceed
     requests.cpu: "2"
     limits.cpu: "4"
     # Memory
     requests.memory: 4Gi
     limits.memory: 8Gi
-    # PersistentVolumeClaim 수 및 용량
+    # PersistentVolumeClaim count and capacity
     persistentvolumeclaims: "10"
     requests.storage: 100Gi
     # Service
@@ -133,18 +133,18 @@ spec:
     configmaps: "20"
     secrets: "20"
 EOF
-    echo "생성된 파일: resourcequota-poc.yaml"
+    echo "Generated file: resourcequota-poc.yaml"
     oc apply -f resourcequota-poc.yaml
 
-    print_ok "ResourceQuota poc-quota 적용 완료"
-    print_info "  requests.cpu 한도: 2 core (VM 2개×750m=1500m 통과, 3개=2250m 초과)"
+    print_ok "ResourceQuota poc-quota applied"
+    print_info "  requests.cpu limit: 2 core (2 VMs×750m=1500m pass, 3 VMs=2250m exceed)"
 }
 
 # =============================================================================
-# 3단계: ConsoleYAMLSample 등록
+# Step 3: Register ConsoleYAMLSample
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "3/4  ConsoleYAMLSample 등록"
+    print_step "3/4  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-resourcequota.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -152,8 +152,8 @@ kind: ConsoleYAMLSample
 metadata:
   name: poc-resource-quota
 spec:
-  title: "POC ResourceQuota 설정"
-  description: "네임스페이스의 CPU·Memory·Pod·PVC 등 리소스 사용량을 제한합니다. 네임스페이스 생성 후 적용하세요. 초과 시 새로운 리소스 생성이 거부됩니다."
+  title: "POC ResourceQuota Configuration"
+  description: "Limits resource usage such as CPU, Memory, Pod, and PVC in a namespace. Apply after creating the namespace. New resource creation is rejected when limits are exceeded."
   targetResource:
     apiVersion: v1
     kind: ResourceQuota
@@ -162,7 +162,7 @@ spec:
     kind: ResourceQuota
     metadata:
       name: poc-quota
-      namespace: poc-resource-quota    # 대상 네임스페이스로 변경
+      namespace: poc-resource-quota    # Change to target namespace
     spec:
       hard:
         pods: "10"
@@ -178,29 +178,29 @@ spec:
         configmaps: "20"
         secrets: "20"
 EOF
-    echo "생성된 파일: consoleyamlsample-resourcequota.yaml"
+    echo "Generated file: consoleyamlsample-resourcequota.yaml"
     oc apply -f consoleyamlsample-resourcequota.yaml
-    print_ok "ConsoleYAMLSample poc-resource-quota 등록 완료"
+    print_ok "ConsoleYAMLSample poc-resource-quota registered"
 }
 
 # =============================================================================
-# 4단계: VM 배포 및 Quota 초과 실증
-#   - poc-quota-vm-1, poc-quota-vm-2: 정상 생성 (requests.cpu 합계 1500m < 2000m)
-#   - poc-quota-vm-3: 생성 시도 → Quota 초과로 거부 (2250m > 2000m)
+# Step 4: Deploy VMs and demonstrate Quota exceeded
+#   - poc-quota-vm-1, poc-quota-vm-2: created successfully (requests.cpu total 1500m < 2000m)
+#   - poc-quota-vm-3: creation attempt → rejected for exceeding Quota (2250m > 2000m)
 # =============================================================================
 step_vms() {
-    print_step "4/4  VM 배포 및 ResourceQuota 초과 실증"
+    print_step "4/4  Deploy VMs and demonstrate ResourceQuota exceeded"
 
-    # VM 1, 2: 정상 생성
+    # VM 1, 2: create successfully
     for VM in poc-quota-vm-1 poc-quota-vm-2; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
-            print_ok "VM $VM 이미 존재 — 스킵"
+            print_ok "VM $VM already exists — skipping"
             continue
         fi
 
         oc process -n openshift poc -p NAME="$VM" | \
         sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM}.yaml"
-        echo "생성된 파일: ${VM}.yaml"
+        echo "Generated file: ${VM}.yaml"
         oc apply -n "$NS" -f "${VM}.yaml"
 
         ensure_runstrategy "$VM" "$NS"
@@ -227,28 +227,27 @@ step_vms() {
         }"
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 생성 완료 (cpu request: ${VM_CPU_REQUEST})"
+        print_ok "VM $VM created (cpu request: ${VM_CPU_REQUEST})"
     done
 
-    # VM 3: Quota 초과 실증
+    # VM 3: demonstrate Quota exceeded
     VM3="poc-quota-vm-3"
     if oc get vm "$VM3" -n "$NS" &>/dev/null; then
-        print_warn "VM $VM3 이미 존재 — Quota 초과 실증 스킵"
+        print_warn "VM $VM3 already exists — skipping Quota exceeded demonstration"
         return
     fi
 
     print_info ""
-    print_info "━━━ Quota 초과 실증 ━━━"
-    print_info "현재 requests.cpu 사용량: $(oc get resourcequota poc-quota -n "$NS" \
+    print_info "━━━ Quota exceeded demonstration ━━━"
+    print_info "Current requests.cpu usage: $(oc get resourcequota poc-quota -n "$NS" \
         -o jsonpath='{.status.used.requests\.cpu}' 2>/dev/null || echo '?') / 2"
-    print_info "VM $VM3 생성 시도 (requests.cpu ${VM_CPU_REQUEST} 추가 → 초과 예상)"
+    print_info "Attempting to create VM $VM3 (adding requests.cpu ${VM_CPU_REQUEST} → expected to exceed)"
 
     oc process -n openshift poc -p NAME="$VM3" | \
         sed 's/runStrategy: Always/runStrategy: Halted/' | sed 's/  running: false/  runStrategy: Halted/' > "${VM3}.yaml"
-    echo "생성된 파일: ${VM3}.yaml"
+    echo "Generated file: ${VM3}.yaml"
 
-    # limits 포함 patch yaml 준비 (apply 후 patch 순서이므로 apply 단계에서 거부됨)
-    # virt-launcher pod 생성 시 quota 초과 → VM은 생성되나 pod 기동 불가
+    # Quota exceeded when virt-launcher pod is created → VM object is created but pod cannot start
     oc apply -n "$NS" -f "${VM3}.yaml"
 
     ensure_runstrategy "$VM3" "$NS"
@@ -276,34 +275,34 @@ step_vms() {
 
     virtctl start "$VM3" -n "$NS" 2>/dev/null || true
 
-    print_warn "VM $VM3 오브젝트는 생성됨 — virt-launcher Pod 기동 시 Quota 초과로 거부됩니다."
-    print_info "  확인: oc get events -n ${NS} --field-selector reason=FailedCreate"
+    print_warn "VM $VM3 object created — virt-launcher Pod will be rejected due to Quota exceeded on startup."
+    print_info "  Check: oc get events -n ${NS} --field-selector reason=FailedCreate"
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! ResourceQuota 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! ResourceQuota practice environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  ResourceQuota 현황:"
+    echo -e "  ResourceQuota status:"
     echo -e "    ${CYAN}oc describe resourcequota poc-quota -n ${NS}${NC}"
     echo ""
-    echo -e "  VM 상태:"
+    echo -e "  VM status:"
     echo -e "    ${CYAN}oc get vm -n ${NS}${NC}"
     echo ""
-    echo -e "  Quota 초과 이벤트 확인:"
+    echo -e "  Check Quota exceeded events:"
     echo -e "    ${CYAN}oc get events -n ${NS} --field-selector reason=FailedCreate${NC}"
     echo ""
-    echo -e "  예상 결과:"
+    echo -e "  Expected results:"
     echo -e "    poc-quota-vm-1  → Running  (cpu request: ${VM_CPU_REQUEST})"
     echo -e "    poc-quota-vm-2  → Running  (cpu request: ${VM_CPU_REQUEST})"
-    echo -e "    poc-quota-vm-3  → Pending  (virt-launcher Pod Quota 초과 거부)"
+    echo -e "    poc-quota-vm-3  → Pending  (virt-launcher Pod rejected due to Quota exceeded)"
     echo ""
-    echo -e "  자세한 내용: 05-resource-quota.md 참조"
+    echo -e "  For details: refer to 05-resource-quota.md"
     echo ""
 }
 
@@ -311,19 +310,19 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 06-resource-quota 리소스 삭제"
+    print_step "--cleanup: Delete 06-resource-quota resources"
     oc delete project poc-resource-quota --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-resource-quota --ignore-not-found 2>/dev/null || true
-    print_ok "06-resource-quota 리소스 삭제 완료"
+    print_ok "06-resource-quota resources deleted"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  ResourceQuota 실습 환경 구성${NC}"
+    echo -e "${CYAN}  ResourceQuota Practice Environment Setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

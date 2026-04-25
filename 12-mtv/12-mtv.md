@@ -1,70 +1,70 @@
-# Migration Toolkit for Virtualization (MTV) 실습
+# Migration Toolkit for Virtualization (MTV) Lab
 
-VMware에서 OpenShift Virtualization으로 VM을 마이그레이션하는 실습입니다.
+This is a lab for migrating VMs from VMware to OpenShift Virtualization.
 
 ```
 VMware vSphere
   └─ VM (Windows/Linux)
-       │  MTV Provider 등록
+       │  MTV Provider registration
        ▼
 Migration Toolkit for Virtualization
-  └─ Migration Plan 생성
-       │  Cold Migration 또는 Warm Migration
+  └─ Migration Plan creation
+       │  Cold Migration or Warm Migration
        ▼
 OpenShift Virtualization
-  └─ VirtualMachine (poc-mtv 네임스페이스)
+  └─ VirtualMachine (poc-mtv namespace)
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- MTV Operator 설치 (`00-operator/mtv-operator.md` 참조)
-- vSphere 접근 정보 (vCenter URL, 사용자/비밀번호)
-- VMware VDDK 이미지 (`env.conf`의 `VDDK_IMAGE`)
-- `11-mtv.sh` 실행 완료
-
----
-
-## ⚠️ VMware 마이그레이션 전 필수 체크리스트
-
-마이그레이션 실패·데이터 손실을 방지하기 위해 **마이그레이션 전** 반드시 확인하세요.
+- MTV Operator installed (`00-operator/mtv-operator.md` for reference)
+- vSphere access information (vCenter URL, username/password)
+- VMware VDDK image (`VDDK_IMAGE` in `env.conf`)
+- `11-mtv.sh` execution completed
 
 ---
 
-### 1. Hot-plug 비활성화 (VMware)
+## ⚠️ Required Checklist Before VMware Migration
 
-마이그레이션 대상 VM의 **CPU Hot-plug / Memory Hot-plug를 반드시 끄세요.**
+Please verify the following **before migration** to prevent migration failures and data loss.
 
-VMware Hot-plug가 활성화된 상태에서 마이그레이션하면
-OpenShift Virtualization에서 VM이 정상 기동되지 않습니다.
+---
 
-**Console에서 비활성화:**
-1. vCenter → VM 우클릭 → **Edit Settings**
-2. **VM Options** 탭 → **Advanced** → **Edit Configuration**
-3. 아래 파라미터 확인 및 변경:
+### 1. Disable Hot-plug (VMware)
+
+**You must disable CPU Hot-plug / Memory Hot-plug** on the VM targeted for migration.
+
+If Hot-plug is enabled during migration,
+the VM will not start properly in OpenShift Virtualization.
+
+**Disable via Console:**
+1. vCenter → Right-click VM → **Edit Settings**
+2. **VM Options** tab → **Advanced** → **Edit Configuration**
+3. Check and change the following parameters:
 
 ```
-cpuid.coresPerSocket = <소켓당 코어 수>
-vcpu.hotadd          = FALSE    ← Hot-plug CPU 비활성화
-mem.hotadd           = FALSE    ← Hot-plug Memory 비활성화
+cpuid.coresPerSocket = <cores per socket>
+vcpu.hotadd          = FALSE    ← Disable Hot-plug CPU
+mem.hotadd           = FALSE    ← Disable Hot-plug Memory
 ```
 
-또는 VM 종료 후 **Edit Settings → CPU/Memory → Enable CPU/Memory Hot Add 체크 해제**
+Or shut down the VM and uncheck **Edit Settings → CPU/Memory → Enable CPU/Memory Hot Add**
 
 ---
 
-### 2. Shared Disk (Multi-writer) 활성화 — Warm Migration 필요 시
+### 2. Enable Shared Disk (Multi-writer) — Required for Warm Migration
 
-Warm Migration을 사용하려면 VMDK 스냅샷을 위해 **Shared Disk(Multi-writer)를 활성화**해야 합니다.
+To use Warm Migration, you must **enable Shared Disk (Multi-writer)** for VMDK snapshots.
 
-> Cold Migration은 해당 없음.
+> Not applicable for Cold Migration.
 
-**vSphere 설정:**
-1. vCenter → VM 우클릭 → **Edit Settings**
-2. 해당 디스크 → **Advanced** → **Sharing** → **Multi-writer** 선택
+**vSphere settings:**
+1. vCenter → Right-click VM → **Edit Settings**
+2. Select disk → **Advanced** → **Sharing** → Select **Multi-writer**
 
-또는 `.vmx` 파일에 직접 추가:
+Or add directly to `.vmx` file:
 
 ```
 diskN.shared = "multi-writer"
@@ -72,54 +72,54 @@ diskN.shared = "multi-writer"
 
 ---
 
-### 3. Windows VM — 빠른 시작(Fast Startup) 비활성화 + 정상 종료
+### 3. Windows VM — Disable Fast Startup + Normal Shutdown
 
-Windows VM을 마이그레이션할 경우 반드시 아래 두 가지를 완료하세요.
+When migrating a Windows VM, you must complete both of the following.
 
-#### 3-1. 빠른 시작 비활성화
+#### 3-1. Disable Fast Startup
 
-빠른 시작이 활성화된 상태로 마이그레이션하면 디스크가 하이버네이션 상태로 복사되어
-OpenShift에서 정상 부팅이 안 됩니다.
+If Fast Startup is enabled during migration, the disk is copied in hibernation state,
+which prevents normal booting in OpenShift.
 
-**Windows 내에서 설정:**
+**Configure within Windows:**
 ```
-제어판 → 전원 옵션 → 전원 단추 동작 설정 → 빠른 시작 사용(권장) 체크 해제
+Control Panel → Power Options → Choose what the power buttons do → Uncheck Turn on fast startup (recommended)
 ```
 
-또는 PowerShell:
+Or PowerShell:
 ```powershell
 powercfg /hibernate off
 ```
 
-#### 3-2. 정상 종료 후 마이그레이션
+#### 3-2. Normal Shutdown Before Migration
 
-빠른 시작 비활성화 후 **반드시 완전 종료(Shutdown)** 후 마이그레이션하세요.
-재시작(Restart)이 아닌 종료(Shutdown)여야 합니다.
+After disabling Fast Startup, **perform a full Shutdown** before migration.
+It must be Shutdown, not Restart.
 
 ```powershell
-# PowerShell에서 완전 종료
+# Full shutdown from PowerShell
 Stop-Computer -Force
 ```
 
 ---
 
-### 4. Warm Migration — vSphere CBT (Changed Block Tracking) 활성화
+### 4. Warm Migration — Enable vSphere CBT (Changed Block Tracking)
 
-Warm Migration은 VM을 운영 중 상태로 점진적으로 마이그레이션합니다.
-이를 위해 vSphere에서 **CBT(Changed Block Tracking)**를 활성화해야 합니다.
+Warm Migration gradually migrates a VM while it is running.
+For this, you must enable **CBT (Changed Block Tracking)** in vSphere.
 
-CBT가 없으면 전체 디스크를 반복 복사하므로 Warm Migration 효율이 없습니다.
+Without CBT, the entire disk is copied repeatedly, making Warm Migration inefficient.
 
-**CBT 활성화 방법:**
+**How to enable CBT:**
 
-VM 종료 후 `.vmx` 파일에 추가하거나 vSphere API로 설정:
+Shut down the VM and add to `.vmx` file, or configure via vSphere API:
 
 ```
 ctkEnabled = "TRUE"
 scsiN:M.ctkEnabled = "TRUE"
 ```
 
-또는 PowerCLI:
+Or PowerCLI:
 ```powershell
 $vm = Get-VM -Name "target-vm"
 $spec = New-Object VMware.Vim.VirtualMachineConfigSpec
@@ -127,32 +127,32 @@ $spec.changeTrackingEnabled = $true
 $vm.ExtensionData.ReconfigVM($spec)
 ```
 
-**확인:**
+**Verify:**
 ```powershell
 (Get-VM "target-vm").ExtensionData.Config.ChangeTrackingEnabled
-# → True 여야 함
+# → Must be True
 ```
 
-> CBT 활성화 후 **스냅샷 생성/삭제를 한 번 수행**해야 CBT가 실제 적용됩니다.
+> After enabling CBT, **create and delete a snapshot once** for CBT to take actual effect.
 
 ---
 
-## MTV 구성
+## MTV Configuration
 
-### Provider 등록
+### Provider Registration
 
 ```bash
 source env.conf
 
-# vSphere Provider Secret 생성
+# Create vSphere Provider Secret
 oc create secret generic vsphere-secret \
   -n openshift-mtv \
-  --from-literal=user=<vCenter_사용자> \
-  --from-literal=password=<vCenter_비밀번호> \
+  --from-literal=user=<vCenter_user> \
+  --from-literal=password=<vCenter_password> \
   --from-literal=cacert="" \
   --from-literal=insecureSkipVerify=true
 
-# vSphere Provider 등록
+# Register vSphere Provider
 oc apply -f - <<EOF
 apiVersion: forklift.konveyor.io/v1beta1
 kind: Provider
@@ -168,7 +168,7 @@ spec:
 EOF
 ```
 
-### VDDK ConfigMap 등록
+### Register VDDK ConfigMap
 
 ```bash
 oc apply -f - <<EOF
@@ -182,7 +182,7 @@ data:
 EOF
 ```
 
-### Migration Plan 생성 (Cold)
+### Create Migration Plan (Cold)
 
 ```bash
 oc apply -f - <<EOF
@@ -214,52 +214,52 @@ EOF
 
 ---
 
-## 실습 확인
+## Lab Verification
 
 ```bash
-# Provider 상태 확인
+# Check Provider status
 oc get provider -n openshift-mtv
 
-# Migration Plan 상태 확인
+# Check Migration Plan status
 oc get plan -n openshift-mtv
 
-# Migration 진행 확인
+# Check Migration progress
 oc get migration -n openshift-mtv
 
-# 마이그레이션된 VM 확인
+# Check migrated VMs
 oc get vm -n poc-mtv
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# MTV Controller 로그
+# MTV Controller logs
 oc logs -n openshift-mtv deployment/forklift-controller --tail=50
 
-# VDDK 이미지 확인
+# Verify VDDK image
 oc get configmap vddk-config -n openshift-mtv -o yaml
 
-# Provider 상태 상세
+# Provider status details
 oc describe provider vsphere-provider -n openshift-mtv
 
-# Migration 실패 이벤트
+# Migration failure events
 oc get events -n openshift-mtv --sort-by='.lastTimestamp' | tail -20
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# Migration Plan 삭제
+# Delete Migration Plan
 oc delete plan poc-cold-migration -n openshift-mtv
 
-# Provider 삭제
+# Delete Provider
 oc delete provider vsphere-provider -n openshift-mtv
 oc delete secret vsphere-secret -n openshift-mtv
 
-# 마이그레이션된 VM 삭제
+# Delete migrated VMs
 oc delete namespace poc-mtv
 ```

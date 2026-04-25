@@ -2,13 +2,13 @@
 # =============================================================================
 # nncp-gen.sh
 #
-# NNCP(NodeNetworkConfigurationPolicy) 생성 스크립트
-# 2가지 네트워크 방식에 맞는 NNCP를 생성하고 클러스터에 적용합니다.
+# NNCP (NodeNetworkConfigurationPolicy) generation script
+# Creates NNCP for 2 network methods and applies it to the cluster.
 #
 #   1. Linux Bridge          — NMState NNCP (linux-bridge)
-#   2. Linux Bridge + VLAN   — NMState NNCP (linux-bridge trunk 포트)
+#   2. Linux Bridge + VLAN   — NMState NNCP (linux-bridge trunk port)
 #
-# 사용법: ./nncp-gen.sh <NET_TYPE>
+# Usage: ./nncp-gen.sh <NET_TYPE>
 #   NET_TYPE: 1=Linux Bridge, 2=Linux Bridge+VLAN
 # =============================================================================
 
@@ -40,11 +40,11 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 # =============================================================================
-# NNCP 적용 완료 대기
+# Wait for NNCP application to complete
 # =============================================================================
 _wait_nncp() {
     local name="$1"
-    print_info "NNCP 적용 완료 — 노드 설정 전파 대기 중..."
+    print_info "NNCP applied — waiting for node configuration propagation..."
     local retries=24 i=0
     while [ "$i" -lt "$retries" ]; do
         local status reason
@@ -56,22 +56,22 @@ _wait_nncp() {
         fi
         reason=$(oc get nncp "$name" \
             -o jsonpath='{.status.conditions[?(@.type=="Available")].reason}' 2>/dev/null || echo "")
-        printf "  [%d/%d] 상태 대기 중... (%s)\r" "$((i+1))" "$retries" "${reason:-Pending}"
+        printf "  [%d/%d] Waiting for status... (%s)\r" "$((i+1))" "$retries" "${reason:-Pending}"
         sleep 5
         i=$((i+1))
     done
     echo ""
     if [ "$i" -eq "$retries" ]; then
-        print_warn "NNCP 적용 시간 초과. 상태를 직접 확인하세요: oc get nncp / oc get nnce"
+        print_warn "NNCP application timed out. Check status manually: oc get nncp / oc get nnce"
         exit 1
     fi
-    print_info "노드별 적용 상태 (NNCE):"
+    print_info "Per-node application status (NNCE):"
     oc get nnce 2>/dev/null | grep "$name" | \
         awk '{printf "    %-40s %s\n", $1, $2}' || true
 }
 
 # =============================================================================
-# NNCP 방식별 생성
+# Generate NNCP per method
 # =============================================================================
 gen_nncp_linux_bridge() {
     print_step "NNCP — Linux Bridge (${BRIDGE_NAME} ← ${BRIDGE_INTERFACE})${MTU:+, MTU ${MTU}}"
@@ -108,12 +108,12 @@ EOF
     } > nncp-${NNCP_NAME}.yaml
 
     echo ""
-    print_info "적용할 NNCP YAML:"
+    print_info "NNCP YAML to apply:"
     echo "────────────────────────────────────────"
     cat nncp-${NNCP_NAME}.yaml
     echo "────────────────────────────────────────"
-    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
-    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    read -r -p "Apply this YAML to the cluster? [y/N]: " confirm
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "Cancelled."; exit 0; }
     oc apply -f nncp-${NNCP_NAME}.yaml
     _wait_nncp "$NNCP_NAME"
 }
@@ -159,24 +159,24 @@ EOF
     } > nncp-${NNCP_NAME}.yaml
 
     echo ""
-    print_info "적용할 NNCP YAML:"
+    print_info "NNCP YAML to apply:"
     echo "────────────────────────────────────────"
     cat nncp-${NNCP_NAME}.yaml
     echo "────────────────────────────────────────"
-    read -r -p "위 YAML을 클러스터에 적용하시겠습니까? [y/N]: " confirm
-    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "취소되었습니다."; exit 0; }
+    read -r -p "Apply this YAML to the cluster? [y/N]: " confirm
+    [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { print_warn "Cancelled."; exit 0; }
     oc apply -f nncp-${NNCP_NAME}.yaml
     _wait_nncp "$NNCP_NAME"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 NET_TYPE="${1:-}"
 
 if [ -z "$NET_TYPE" ]; then
-    echo -e "${RED}[ERR ]${NC} NET_TYPE 인수가 필요합니다."
-    echo "사용법: $0 <NET_TYPE>"
+    echo -e "${RED}[ERR ]${NC} NET_TYPE argument is required."
+    echo "Usage: $0 <NET_TYPE>"
     echo "  1 = Linux Bridge"
     echo "  2 = Linux Bridge + VLAN"
     exit 1
@@ -185,30 +185,30 @@ fi
 case "$NET_TYPE" in
     1|2) ;;
     *)
-        echo -e "${RED}[ERR ]${NC} 유효하지 않은 NET_TYPE: ${NET_TYPE} (1 또는 2)"
+        echo -e "${RED}[ERR ]${NC} Invalid NET_TYPE: ${NET_TYPE} (must be 1 or 2)"
         exit 1
         ;;
 esac
 
-# VLAN ID 확인 (NET_TYPE=2 전용)
+# Check VLAN ID (NET_TYPE=2 only)
 if [ "$NET_TYPE" = "2" ]; then
     if [ -z "${VLAN_ID}" ]; then
         echo ""
-        read -r -p "VLAN ID를 입력하세요: " VLAN_ID
+        read -r -p "Enter VLAN ID: " VLAN_ID
         if [ -z "$VLAN_ID" ]; then
-            echo -e "${RED}[ERR ]${NC} VLAN ID가 필요합니다."
+            echo -e "${RED}[ERR ]${NC} VLAN ID is required."
             exit 1
         fi
     else
         echo ""
-        read -r -p "VLAN ID [현재: ${VLAN_ID}]: " _vlan_input
+        read -r -p "VLAN ID [current: ${VLAN_ID}]: " _vlan_input
         [ -n "$_vlan_input" ] && VLAN_ID="$_vlan_input"
     fi
 fi
 
-# MTU 설정
+# MTU configuration
 echo ""
-read -r -p "MTU를 설정하시겠습니까? (비워두면 기본값 사용)${MTU:+ [현재: ${MTU}]}: " _mtu_input
+read -r -p "Set MTU? (leave blank to use default)${MTU:+ [current: ${MTU}]}: " _mtu_input
 [ -n "$_mtu_input" ] && MTU="$_mtu_input"
 
 case "$NET_TYPE" in

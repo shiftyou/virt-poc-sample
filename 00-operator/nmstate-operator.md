@@ -1,42 +1,42 @@
-# Kubernetes NMState Operator 설치
+# Kubernetes NMState Operator Installation
 
-## 개요
+## Overview
 
-Kubernetes NMState Operator는 노드의 네트워크 구성을 선언적으로 관리하는 Operator입니다.
-`NodeNetworkConfigurationPolicy(NNCP)`를 통해 Linux Bridge, Bond, VLAN 등을 구성하며,
-`NodeNetworkState(NNS)`로 각 노드의 현재 네트워크 상태를 조회할 수 있습니다.
+The Kubernetes NMState Operator is an Operator that declaratively manages network configuration on nodes.
+It configures Linux Bridge, Bond, VLAN, etc. through `NodeNetworkConfigurationPolicy (NNCP)`,
+and allows querying the current network state of each node with `NodeNetworkState (NNS)`.
 
-OpenShift Virtualization의 VM 네트워크(NAD/Multus) 구성에 필수입니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
+It is required for VM network (NAD/Multus) configuration in OpenShift Virtualization.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Kubernetes NMState` 검색
-3. **Kubernetes NMState Operator** 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Kubernetes NMState`
+3. Select **Kubernetes NMState Operator**
+4. Click `Install`
+5. Settings:
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-nmstate`
-6. `Install` 클릭
-7. 설치 완료 후 **NMState 인스턴스 생성**:
+6. Click `Install`
+7. After installation, **Create NMState instance**:
    - Operators > Installed Operators > Kubernetes NMState Operator
-   - **NMState** 탭 > `Create NMState` 클릭
-   - 기본값으로 생성
+   - **NMState** tab > Click `Create NMState`
+   - Create with default values
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# Namespace 및 Operator 설치
+# Install Namespace and Operator
 cat <<'EOF' | oc apply -f -
 apiVersion: v1
 kind: Namespace
@@ -64,7 +64,7 @@ spec:
   sourceNamespace: openshift-marketplace
 EOF
 
-# NMState 인스턴스 생성 (Operator 설치 완료 후)
+# Create NMState instance (after Operator installation is complete)
 cat <<'EOF' | oc apply -f -
 apiVersion: nmstate.io/v1
 kind: NMState
@@ -73,23 +73,23 @@ metadata:
 EOF
 ```
 
-### 설치 확인
+### Verify Installation
 
 ```bash
-# Operator 설치 확인
+# Check Operator installation
 oc get csv -n openshift-nmstate | grep nmstate
 
-# NMState 핸들러 파드 확인
+# Check NMState handler pods
 oc get pods -n openshift-nmstate
 
-# 노드별 네트워크 상태 조회
+# Query network state per node
 oc get nodenetworkstate
 ```
 
-### 노드 네트워크 인터페이스 조회
+### Query Node Network Interfaces
 
 ```bash
-# 특정 노드의 ethernet 인터페이스 목록
+# List ethernet interfaces for a specific node
 NODE=worker-0
 oc get nns $NODE -o jsonpath='{range .status.currentState.interfaces[?(@.type=="ethernet")]}{.name}{"\n"}{end}'
 ```

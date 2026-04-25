@@ -1,30 +1,30 @@
-# VM 관리
+# VM Management
 
-`poc-vm-management` 네임스페이스에서 VM을 생성하고 관리하는 방법을 설명합니다.
+Explains how to create and manage VMs in the `poc-vm-management` namespace.
 
 ```
-poc Template (openshift 네임스페이스)
-        │  oc process → VirtualMachine 생성
+poc Template (openshift namespace)
+        │  oc process → VirtualMachine creation
         ▼
 VirtualMachine (poc-vm-management)
         │
-        ├─ rootdisk (DataVolume ← poc DataSource 클론)
-        ├─ 추가 디스크 (PVC)
+        ├─ rootdisk (DataVolume ← poc DataSource clone)
+        ├─ additional disk (PVC)
         │
         ├─ eth0 (Pod Network — masquerade)
-        └─ eth1 (poc-bridge-nad → Linux Bridge → 물리 네트워크)
+        └─ eth1 (poc-bridge-nad → Linux Bridge → physical network)
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- `01-template` 완료 — `poc` Template 및 DataSource 등록
-- `02-network` 완료 — NNCP / NAD 구성
-- `03-vm-management.sh` 완료 — `poc-vm-management` 네임스페이스 및 NAD 등록
+- `01-template` complete — `poc` Template and DataSource registered
+- `02-network` complete — NNCP / NAD configured
+- `03-vm-management.sh` complete — `poc-vm-management` namespace and NAD registered
 
 ```bash
-# 사전 조건 확인
+# Check prerequisites
 oc get template poc -n openshift
 oc get datasource poc -n openshift-virtualization-os-images
 oc get nncp poc-bridge-nncp
@@ -33,52 +33,52 @@ oc get net-attach-def poc-bridge-nad -n poc-vm-management
 
 ---
 
-## 1. VM 생성 (poc 템플릿 사용)
+## 1. VM Creation (using poc template)
 
-`poc` Template을 처리하여 VirtualMachine 오브젝트를 생성합니다.
+Process the `poc` Template to create a VirtualMachine object.
 
 ```bash
-# 기본 생성 (이름 자동 생성)
+# Basic creation (auto-generated name)
 oc process -n openshift poc | oc apply -n poc-vm-management -f -
 
-# VM 이름 지정
+# Specify VM name
 oc process -n openshift poc \
   -p NAME=my-poc-vm \
   | oc apply -n poc-vm-management -f -
 
-# VM 시작
+# Start VM
 virtctl start my-poc-vm -n poc-vm-management
 ```
 
-### VM 상태 확인
+### VM Status Check
 
 ```bash
-# VM 목록
+# VM list
 oc get vm -n poc-vm-management
 
-# VM 상세 (Phase 확인)
+# VM details (check Phase)
 oc get vmi -n poc-vm-management
 
-# Pod 확인
+# Check Pod
 oc get pods -n poc-vm-management
 
-# 콘솔 접속
+# Console access
 virtctl console my-poc-vm -n poc-vm-management
 
-# VNC 접속
+# VNC access
 virtctl vnc my-poc-vm -n poc-vm-management
 ```
 
 ---
 
-## 2. 스토리지 추가
+## 2. Storage Addition
 
-실행 중인 VM에 데이터 디스크를 핫플러그로 추가합니다.
+Hot-plug a data disk to a running VM.
 
-### PVC 생성 후 핫플러그
+### Hot-plug after PVC creation
 
 ```bash
-# 데이터용 PVC 생성
+# Create PVC for data
 oc apply -f - <<EOF
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -95,17 +95,17 @@ spec:
   storageClassName: ocs-external-storagecluster-ceph-rbd
 EOF
 
-# 실행 중인 VM에 디스크 핫플러그
+# Hot-plug disk to running VM
 virtctl addvolume my-poc-vm \
   --volume-name=my-poc-vm-data \
   --disk-type=disk \
   -n poc-vm-management
 ```
 
-### VM 정지 후 디스크 추가 (영구 연결)
+### Add disk after VM stop (permanent attachment)
 
 ```bash
-# VM 스펙에 디스크 직접 추가
+# Add disk directly to VM spec
 oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
   {
     "op": "add",
@@ -123,10 +123,10 @@ oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
 ]'
 ```
 
-### 확인
+### Verification
 
 ```bash
-# VM 내부에서 디스크 확인
+# Check disk inside VM
 virtctl console my-poc-vm -n poc-vm-management
 # lsblk
 # fdisk -l
@@ -134,17 +134,17 @@ virtctl console my-poc-vm -n poc-vm-management
 
 ---
 
-## 3. 네트워크 추가 (보조 NIC)
+## 3. Network Addition (secondary NIC)
 
-VM에 `poc-bridge-nad`를 보조 네트워크로 연결합니다.
+Connect `poc-bridge-nad` as a secondary network to the VM.
 
-> VM이 실행 중인 경우 정지 후 변경하세요.
+> If the VM is running, stop it first before making changes.
 
 ```bash
-# VM 정지
+# Stop VM
 virtctl stop my-poc-vm -n poc-vm-management
 
-# 보조 NIC 추가
+# Add secondary NIC
 oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
   {
     "op": "add",
@@ -161,57 +161,57 @@ oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
   }
 ]'
 
-# VM 시작
+# Start VM
 virtctl start my-poc-vm -n poc-vm-management
 ```
 
-### 확인
+### Verification
 
 ```bash
-# VMI에서 NIC 확인
+# Check NIC in VMI
 oc get vmi my-poc-vm -n poc-vm-management \
   -o jsonpath='{range .status.interfaces[*]}{.name}: {.ipAddress}{"\n"}{end}'
 ```
 
 ---
 
-## 4. Static IP / Domain / Router 설정
+## 4. Static IP / Domain / Router Configuration
 
-보조 NIC(`eth1`)에 Static IP를 설정합니다.
-cloud-init으로 초기 설정하거나, VM 내부에서 직접 설정합니다.
+Configure a static IP on the secondary NIC (`eth1`).
+Configure via cloud-init during initial setup, or set directly inside the VM.
 
-> `03-vm-management.sh`가 생성하는 ConsoleYAMLSample VM에는 cloud-init networkData가 이미 포함되어 있습니다.
+> The ConsoleYAMLSample VM created by `03-vm-management.sh` already includes cloud-init networkData.
 
-### 방법 A — cloud-init networkData로 초기 설정
+### Method A — Initial configuration via cloud-init networkData
 
-VM 생성 시 기존 `cloudinitdisk` 볼륨에 `networkData`를 추가합니다.
-**VM 부팅 전에 반영해야** 하므로 `runStrategy: Halted` 상태에서 패치하고 이후 시작합니다.
+Add `networkData` to the existing `cloudinitdisk` volume when creating the VM.
+Since it must be applied **before VM boot**, patch it in `runStrategy: Halted` state and then start.
 
 ```bash
-# VM 생성 (Halted 상태)
+# Create VM (Halted state)
 oc process -n openshift poc \
   -p NAME=my-poc-vm \
   | sed 's/  running: false/  runStrategy: Halted/' \
   | oc apply -n poc-vm-management -f -
 
-# cloudinitdisk 볼륨 인덱스 확인 (grep -n 은 1-based → 0-based 변환)
+# Check cloudinitdisk volume index (grep -n is 1-based → convert to 0-based)
 CI_IDX=$(oc get vm my-poc-vm -n poc-vm-management \
   -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' | \
   grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
 CI_IDX=$(( CI_IDX - 1 ))
 
-# 기존 cloudinitdisk 에 networkData 추가 (VM 시작 전)
+# Add networkData to existing cloudinitdisk (before VM start)
 oc patch vm my-poc-vm -n poc-vm-management --type=json -p="[
   {\"op\": \"add\",
    \"path\": \"/spec/template/spec/volumes/${CI_IDX}/cloudInitNoCloud/networkData\",
    \"value\": \"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - 192.168.100.10/24\n    gateway4: 192.168.100.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}
 ]"
 
-# VM 시작
+# Start VM
 virtctl start my-poc-vm -n poc-vm-management
 ```
 
-결과적으로 `cloudinitdisk` 볼륨은 아래와 같이 구성됩니다:
+The resulting `cloudinitdisk` volume is configured as follows:
 
 ```yaml
 - name: cloudinitdisk
@@ -234,47 +234,47 @@ virtctl start my-poc-vm -n poc-vm-management
               - 8.8.8.8
 ```
 
-### 방법 B — VM 내부에서 nmcli 설정
+### Method B — Configure via nmcli inside the VM
 
-VM 콘솔에 접속하여 직접 설정합니다.
+Connect to the VM console and configure directly.
 
 ```bash
 virtctl console my-poc-vm -n poc-vm-management
 ```
 
-VM 내부에서:
+Inside the VM:
 
 ```bash
-# 보조 NIC 이름 확인 (eth1 또는 ens3 등)
+# Check secondary NIC name (eth1 or ens3, etc.)
 ip link show
 
-# Static IP 설정
+# Configure static IP
 nmcli con add type ethernet ifname eth1 con-name eth1-static \
   ip4 192.168.100.10/24 gw4 192.168.100.1
 
-# DNS 설정
+# Configure DNS
 nmcli con mod eth1-static ipv4.dns "8.8.8.8 8.8.4.4"
 nmcli con mod eth1-static ipv4.dns-search "poc.example.com"
 
-# 활성화
+# Activate
 nmcli con up eth1-static
 
-# Hostname 설정
+# Set hostname
 hostnamectl set-hostname my-poc-vm.poc.example.com
 
-# 확인
+# Verify
 ip addr show eth1
 ip route
 cat /etc/resolv.conf
 ```
 
-### Router (게이트웨이) 설정
+### Router (gateway) configuration
 
 ```bash
-# 특정 대역만 보조 NIC으로 라우팅
+# Route specific subnets through secondary NIC
 ip route add 10.0.0.0/8 via 192.168.100.1 dev eth1
 
-# 영구 적용 (nmcli)
+# Persistent configuration (nmcli)
 nmcli con mod eth1-static +ipv4.routes "10.0.0.0/8 192.168.100.1"
 nmcli con up eth1-static
 ```
@@ -283,26 +283,26 @@ nmcli con up eth1-static
 
 ## 5. Live Migration
 
-VM을 중단 없이 다른 노드로 이동합니다.
+Move a VM to another node without interruption.
 
-### 사전 조건 확인
+### Prerequisites check
 
 ```bash
-# 현재 VM이 실행 중인 노드 확인
+# Check current node running the VM
 oc get vmi my-poc-vm -n poc-vm-management \
   -o jsonpath='{.status.nodeName}{"\n"}'
 
-# 스토리지 ReadWriteMany 여부 확인 (Live Migration 필수)
+# Check storage ReadWriteMany (required for Live Migration)
 oc get pvc -n poc-vm-management
 ```
 
-### Live Migration 실행
+### Execute Live Migration
 
 ```bash
-# virtctl로 migration 시작
+# Start migration with virtctl
 virtctl migrate my-poc-vm -n poc-vm-management
 
-# 또는 VirtualMachineInstanceMigration 오브젝트 직접 생성
+# Or create VirtualMachineInstanceMigration object directly
 oc apply -f - <<EOF
 apiVersion: kubevirt.io/v1
 kind: VirtualMachineInstanceMigration
@@ -314,21 +314,21 @@ spec:
 EOF
 ```
 
-### Migration 상태 확인
+### Check Migration Status
 
 ```bash
-# Migration 진행 상태
+# Migration progress
 oc get vmim -n poc-vm-management
 
-# 상세 확인
+# Detailed check
 oc describe vmim my-poc-vm-migration -n poc-vm-management
 
-# Migration 완료 후 노드 변경 확인
+# Verify node change after migration completes
 oc get vmi my-poc-vm -n poc-vm-management \
   -o jsonpath='{.status.nodeName}{"\n"}'
 ```
 
-### Migration 취소
+### Cancel Migration
 
 ```bash
 virtctl migrate-cancel my-poc-vm -n poc-vm-management
@@ -336,41 +336,41 @@ virtctl migrate-cancel my-poc-vm -n poc-vm-management
 
 ---
 
-## 상태 확인 명령어
+## Status Check Commands
 
 ```bash
-# VM / VMI 전체 상태
+# VM / VMI overall status
 oc get vm,vmi -n poc-vm-management
 
-# VM 이벤트
+# VM events
 oc describe vm my-poc-vm -n poc-vm-management
 
-# VM Runner Pod 로그
+# VM Runner Pod logs
 oc logs -n poc-vm-management \
   $(oc get pod -n poc-vm-management -l vm.kubevirt.io/name=my-poc-vm -o name)
 
-# DataVolume 상태 (루트 디스크 복제 진행률)
+# DataVolume status (root disk clone progress)
 oc get dv -n poc-vm-management
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# VM 정지 및 삭제
+# Stop and delete VM
 virtctl stop my-poc-vm -n poc-vm-management
 oc delete vm my-poc-vm -n poc-vm-management
 
-# DataVolume(루트 디스크) 삭제
+# Delete DataVolume (root disk)
 oc delete dv my-poc-vm -n poc-vm-management
 
-# 추가 PVC 삭제
+# Delete additional PVC
 oc delete pvc my-poc-vm-data -n poc-vm-management
 
-# NAD 삭제
+# Delete NAD
 oc delete net-attach-def poc-bridge-nad -n poc-vm-management
 
-# 네임스페이스 삭제
+# Delete namespace
 oc delete namespace poc-vm-management
 ```

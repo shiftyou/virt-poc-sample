@@ -2,13 +2,13 @@
 # =============================================================================
 # 10-node-exporter.sh
 #
-# OpenShift에 node-exporter Service 등록
-#   1. poc 템플릿으로 VM 생성 (monitor=metrics 레이블 포함)
-#   2. node-exporter-service.yaml 적용
-#   3. ServiceMonitor 등록 (Prometheus scrape 설정)
-#   4. Endpoints 확인 안내
+# Register node-exporter Service in OpenShift
+#   1. Create VM using poc template (with monitor=metrics label)
+#   2. Apply node-exporter-service.yaml
+#   3. Register ServiceMonitor (Prometheus scrape configuration)
+#   4. Guidance for checking Endpoints
 #
-# 사용법: ./10-node-exporter.sh
+# Usage: ./10-node-exporter.sh
 # =============================================================================
 
 set -euo pipefail
@@ -37,55 +37,55 @@ print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created"
     fi
 
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
-        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        print_warn "OpenShift Virtualization Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/kubevirt-hyperconverged-operator.md"
         exit 77
     fi
-    print_ok "OpenShift Virtualization Operator 확인"
+    print_ok "OpenShift Virtualization Operator confirmed"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        print_error "poc Template not found. Run 01-template first."
         exit 1
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 
     if ! command -v virtctl &>/dev/null; then
-        print_error "virtctl 을 찾을 수 없습니다."
+        print_error "virtctl not found."
         exit 1
     fi
-    print_ok "virtctl 확인"
+    print_ok "virtctl confirmed"
 
 }
 
 step_vm() {
-    print_step "1/3  VM 생성 (${VM_NAME})"
+    print_step "1/3  Create VM (${VM_NAME})"
 
     if oc get vm "$VM_NAME" -n "$NS" &>/dev/null; then
-        print_ok "VM $VM_NAME 이미 존재 — 스킵"
+        print_ok "VM $VM_NAME already exists — skipping"
     else
         oc process -n openshift poc -p NAME="$VM_NAME" > "${VM_NAME}.yaml"
-        echo "생성된 파일: ${VM_NAME}.yaml"
+        echo "Generated file: ${VM_NAME}.yaml"
         oc apply -n "$NS" -f "${VM_NAME}.yaml"
-        print_ok "VM $VM_NAME 생성 완료"
+        print_ok "VM $VM_NAME created"
     fi
 
-    # virt-launcher Pod에 monitor=metrics 레이블 전파를 위해 spec.template.metadata.labels 설정
+    # Set spec.template.metadata.labels to propagate monitor=metrics label to virt-launcher Pod
     oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
       "spec": {
         "template": {
@@ -96,19 +96,19 @@ step_vm() {
           }
         }
       }
-    }' 2>/dev/null && print_ok "레이블 monitor=metrics 설정 완료" || true
+    }' 2>/dev/null && print_ok "Label monitor=metrics configured" || true
 
     virtctl start "$VM_NAME" -n "$NS" 2>/dev/null || true
-    print_info "VM 시작 요청 완료 (Running 상태까지 시간이 걸릴 수 있습니다)"
+    print_info "VM start requested (may take time to reach Running state)"
     print_info "  ${CYAN}oc get vmi $VM_NAME -n $NS${NC}"
 }
 
 step_apply_service() {
-    print_step "2/4  node-exporter Service 적용"
+    print_step "2/4  Apply node-exporter Service"
 
-    # user-workload-monitoring이 네임스페이스를 수집하려면 레이블 필요
+    # Namespace label required for user-workload-monitoring to collect the namespace
     oc label namespace "$NS" openshift.io/cluster-monitoring=true --overwrite 2>/dev/null || true
-    print_ok "네임스페이스 모니터링 레이블 설정 완료"
+    print_ok "Namespace monitoring label configured"
 
     cat > ./vm-ne-svc.yaml <<EOF
 apiVersion: v1
@@ -127,13 +127,13 @@ spec:
       targetPort: 9100
       protocol: TCP
 EOF
-    echo "생성된 파일: vm-ne-svc.yaml"
+    echo "Generated file: vm-ne-svc.yaml"
     oc apply -f ./vm-ne-svc.yaml
-    print_ok "node-exporter-service 적용 완료"
+    print_ok "node-exporter-service applied"
 }
 
 step_service_monitor() {
-    print_step "3/4  ServiceMonitor 등록"
+    print_step "3/4  Register ServiceMonitor"
 
     cat > servicemonitor-node-exporter.yaml <<EOF
 apiVersion: monitoring.coreos.com/v1
@@ -159,13 +159,13 @@ spec:
         - sourceLabels: [__address__]
           targetLabel: instance
 EOF
-    echo "생성된 파일: servicemonitor-node-exporter.yaml"
+    echo "Generated file: servicemonitor-node-exporter.yaml"
     oc apply -f servicemonitor-node-exporter.yaml
-    print_ok "ServiceMonitor node-exporter-monitor 등록 완료"
+    print_ok "ServiceMonitor node-exporter-monitor registered"
 }
 
 step_consoleyamlsamples() {
-    print_step "5/5  ConsoleYAMLSample 등록"
+    print_step "5/5  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-servicemonitor.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -174,7 +174,7 @@ metadata:
   name: poc-servicemonitor-node-exporter
 spec:
   title: "POC ServiceMonitor node-exporter"
-  description: "VM 내부 node_exporter 메트릭을 Prometheus가 수집할 수 있도록 ServiceMonitor를 등록하는 예시입니다. servicetype=metrics 레이블이 있는 Service를 자동으로 스크레이프합니다."
+  description: "A ServiceMonitor example for registering so that Prometheus can collect node_exporter metrics from inside a VM. Automatically scrapes Services with the servicetype=metrics label."
   targetResource:
     apiVersion: monitoring.coreos.com/v1
     kind: ServiceMonitor
@@ -203,22 +203,22 @@ spec:
               targetLabel: instance
 EOF
     oc apply -f consoleyamlsample-servicemonitor.yaml
-    print_ok "ConsoleYAMLSample poc-servicemonitor-node-exporter 등록 완료"
+    print_ok "ConsoleYAMLSample poc-servicemonitor-node-exporter registered"
 }
 
 step_check_endpoints() {
-    print_step "4/5  Endpoints 확인"
+    print_step "4/5  Check Endpoints"
 
     local ep_count
     ep_count=$(oc get endpoints node-exporter-service -n "$NS" \
         -o jsonpath='{.subsets[*].addresses}' 2>/dev/null | wc -w | tr -d ' ')
 
     if [ "$ep_count" -gt 0 ] 2>/dev/null; then
-        print_ok "Endpoints 등록됨 (${ep_count}개)"
+        print_ok "Endpoints registered (${ep_count})"
         oc get endpoints node-exporter-service -n "$NS"
     else
-        print_warn "Endpoints가 아직 없습니다."
-        print_info "VM Pod에 레이블이 있는지 확인하세요:"
+        print_warn "Endpoints not yet available."
+        print_info "Check if the VM Pod has the label:"
         echo -e "    ${CYAN}oc get pods -n ${NS} --show-labels | grep monitor${NC}"
         echo -e "    ${CYAN}oc label pod <pod-name> -n ${NS} monitor=metrics${NC}"
     fi
@@ -227,37 +227,37 @@ step_check_endpoints() {
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! node-exporter Service가 등록되었습니다.${NC}"
+    echo -e "${GREEN}  Done! node-exporter Service has been registered.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  VM 상태 확인:"
+    echo -e "  Check VM status:"
     echo -e "    ${CYAN}oc get vmi ${VM_NAME} -n ${NS}${NC}"
     echo ""
-    echo -e "  Service 상태 확인:"
+    echo -e "  Check Service status:"
     echo -e "    ${CYAN}oc get svc node-exporter-service -n ${NS}${NC}"
     echo ""
-    echo -e "  Endpoints 확인:"
+    echo -e "  Check Endpoints:"
     echo -e "    ${CYAN}oc get endpoints node-exporter-service -n ${NS}${NC}"
     echo ""
-    echo -e "  ServiceMonitor 확인:"
+    echo -e "  Check ServiceMonitor:"
     echo -e "    ${CYAN}oc get servicemonitor -n ${NS}${NC}"
     echo ""
-    echo -e "  Prometheus 수집 대상 확인 (user-workload):"
+    echo -e "  Check Prometheus scrape targets (user-workload):"
     echo -e "    ${CYAN}oc get pods -n openshift-user-workload-monitoring${NC}"
     echo ""
-    echo -e "  PromQL 예시 (OpenShift Console → Observe → Metrics, 각 쿼리 개별 입력):"
+    echo -e "  PromQL examples (OpenShift Console → Observe → Metrics, enter each query separately):"
     echo -e "    ${CYAN}node_memory_MemAvailable_bytes${NC}"
     echo -e "    ${CYAN}rate(node_cpu_seconds_total[5m])${NC}"
     echo -e "    ${CYAN}node_load1${NC}"
     echo ""
-    echo -e "  메트릭 접근 (port-forward):"
+    echo -e "  Access metrics (port-forward):"
     echo -e "    ${CYAN}oc port-forward svc/node-exporter-service 9100:9100 -n ${NS}${NC}"
     echo -e "    ${CYAN}curl http://localhost:9100/metrics${NC}"
     echo ""
-    echo -e "  VM에 node_exporter 설치:"
+    echo -e "  Install node_exporter on VM:"
     echo -e "    ${CYAN}bash node-exporter-install.sh${NC}"
     echo ""
-    echo -e "  자세한 내용: 12-node-exporter.md 참조"
+    echo -e "  For details: refer to 12-node-exporter.md"
     echo ""
 }
 
@@ -265,16 +265,16 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 10-node-exporter 리소스 삭제"
+    print_step "--cleanup: Delete 10-node-exporter resources"
     oc delete project poc-node-exporter --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-servicemonitor-node-exporter --ignore-not-found 2>/dev/null || true
-    print_ok "10-node-exporter 리소스 삭제 완료"
+    print_ok "10-node-exporter resources deleted"
 }
 
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  Node Exporter Service 등록${NC}"
+    echo -e "${CYAN}  Register Node Exporter Service${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

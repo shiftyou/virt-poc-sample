@@ -1,11 +1,11 @@
-# 04-multitenancy: 멀티 테넌트 VM 환경
+# 04-multitenancy: Multi-Tenant VM Environment
 
-## 개요
+## Overview
 
-두 개의 네임스페이스를 격리된 테넌트로 구성하고, 각 테넌트에 VM 1개를 배포한다.
-사용자별 접근 권한을 RBAC으로 제어하여 멀티 테넌트 환경을 시연한다.
+Configure two namespaces as isolated tenants and deploy one VM per tenant.
+Control per-user access permissions with RBAC to demonstrate a multi-tenant environment.
 
-## 사용자 / 권한 구성
+## User / Permission Configuration
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -14,64 +14,64 @@
 │  │  poc-mt-vm-1     │                │  poc-mt-vm-2     │          │
 │  └──────────────────┘                └──────────────────┘          │
 │                                                                    │
-│  user1  ── admin  (VM 생성 가능)      user3  ── admin              │
-│  user2  ── view   (읽기 전용)         user4  ── view               │
+│  user1  ── admin  (can create VMs)   user3  ── admin              │
+│  user2  ── view   (read-only)        user4  ── view               │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-| 사용자 | 네임스페이스        | 역할  | VM 생성 | 다른 NS 접근 | 가능한 작업 |
-|--------|-------------------|-------|---------|-------------|------------|
-| user1  | poc-multitenancy-1 | admin | **가능** | **불가** | VM 생성/수정/삭제/콘솔 접근 |
-| user2  | poc-multitenancy-1 | view  | **불가** | **불가** | VM/리소스 조회만 가능 |
-| user3  | poc-multitenancy-2 | admin | **가능** | **불가** | VM 생성/수정/삭제/콘솔 접근 |
-| user4  | poc-multitenancy-2 | view  | **불가** | **불가** | VM/리소스 조회만 가능 |
+| User  | Namespace           | Role  | Create VM  | Access other NS | Allowed operations |
+|-------|---------------------|-------|------------|-----------------|-------------------|
+| user1 | poc-multitenancy-1  | admin | **Yes**    | **No**          | Create/edit/delete VM, console access |
+| user2 | poc-multitenancy-1  | view  | **No**     | **No**          | View VMs/resources only |
+| user3 | poc-multitenancy-2  | admin | **Yes**    | **No**          | Create/edit/delete VM, console access |
+| user4 | poc-multitenancy-2  | view  | **No**     | **No**          | View VMs/resources only |
 
-- 기본 비밀번호: `Redhat1!`
+- Default password: `Redhat1!`
 - Identity Provider: HTPasswd (`poc-htpasswd`)
-- VM 템플릿: `poc` (01-template 단계에서 등록)
+- VM template: `poc` (registered in 01-template step)
 
-> 각 사용자는 자신에게 할당된 네임스페이스에만 접근 가능하며, 다른 네임스페이스는 조회조차 불가합니다.
+> Each user can only access the namespace assigned to them; other namespaces are completely inaccessible.
 
-## 사전 준비
+## Prerequisites
 
 ```bash
-# htpasswd 명령 설치 (없는 경우)
+# Install htpasswd command (if not present)
 dnf install -y httpd-tools
 
-# cluster-admin 권한으로 로그인
+# Login with cluster-admin privileges
 oc login -u system:admin
 
-# poc 템플릿 등록 확인 (01-template 단계 완료 필요)
+# Verify poc template is registered (01-template step must be complete)
 oc get template poc -n openshift
 ```
 
-## 실행
+## Execution
 
 ```bash
-# 구성 실행
+# Run configuration
 ./04-multitenancy.sh
 
-# 정리
+# Cleanup
 ./04-multitenancy.sh --cleanup
 ```
 
-## 단계별 구성 내용
+## Step-by-Step Configuration
 
-### 1. 사용자 생성 (HTPasswd)
+### 1. User Creation (HTPasswd)
 
-`htpasswd` 명령으로 4명의 사용자를 생성하고,
-`openshift-config` 네임스페이스의 Secret(`htpasswd-secret`)에 저장한다.
+Create 4 users with the `htpasswd` command and store them
+in a Secret (`htpasswd-secret`) in the `openshift-config` namespace.
 
-OAuth CR에 HTPasswd Identity Provider가 등록되며,
-기존 IDP가 있으면 추가(append) 방식으로 등록한다.
+The HTPasswd Identity Provider is registered in the OAuth CR;
+if an existing IDP is present, it is registered via append.
 
 ```bash
-# 수동 확인
+# Manual verification
 oc get secret htpasswd-secret -n openshift-config
 oc get oauth cluster -o jsonpath='{.spec.identityProviders[*].name}'
 ```
 
-### 2. 네임스페이스 생성
+### 2. Namespace Creation
 
 ```bash
 oc get namespace poc-multitenancy-1 poc-multitenancy-2
@@ -79,143 +79,143 @@ oc get namespace poc-multitenancy-1 poc-multitenancy-2
 
 ### 3. RBAC (RoleBinding)
 
-OpenShift 내장 ClusterRole을 **RoleBinding**(네임스페이스 한정)으로 바인딩한다.
-ClusterRoleBinding이 아니므로 해당 네임스페이스 외부 리소스에는 권한이 없다.
+Bind OpenShift built-in ClusterRoles using **RoleBinding** (namespace-scoped).
+Since this is not a ClusterRoleBinding, there are no permissions on resources outside the namespace.
 
-| ClusterRole | 권한 |
-|-------------|------|
-| `admin`     | 네임스페이스 내 모든 리소스 생성/수정/삭제 (단, 네임스페이스 자체 삭제 불가) |
-| `view`      | 네임스페이스 내 모든 리소스 조회만 가능 |
+| ClusterRole | Permissions |
+|-------------|-------------|
+| `admin`     | Create/edit/delete all resources in namespace (cannot delete the namespace itself) |
+| `view`      | View all resources in namespace only |
 
 ```
-user1  RoleBinding(admin) → poc-multitenancy-1 만
-user2  RoleBinding(view)  → poc-multitenancy-1 만
-user3  RoleBinding(admin) → poc-multitenancy-2 만
-user4  RoleBinding(view)  → poc-multitenancy-2 만
+user1  RoleBinding(admin) → poc-multitenancy-1 only
+user2  RoleBinding(view)  → poc-multitenancy-1 only
+user3  RoleBinding(admin) → poc-multitenancy-2 only
+user4  RoleBinding(view)  → poc-multitenancy-2 only
 ```
 
-DataSource 참조 권한(VM 생성 시 필요):
-- user1, user3 → `openshift-virtualization-os-images` 네임스페이스에 `view` 권한 추가
+DataSource reference permissions (required for VM creation):
+- user1, user3 → Add `view` permission to `openshift-virtualization-os-images` namespace
 
 ```bash
 oc get rolebindings -n poc-multitenancy-1
 oc get rolebindings -n poc-multitenancy-2
 ```
 
-### 4. VM 생성
+### 4. VM Creation
 
-각 네임스페이스에 `poc` 템플릿 기반 VM 1개를 생성한다.
+Create one `poc` template-based VM per namespace.
 
-| VM 이름        | 네임스페이스        | CPU | Memory | Disk  | 템플릿 |
-|---------------|-------------------|-----|--------|-------|--------|
-| poc-mt-vm-1   | poc-multitenancy-1 | 1   | 2Gi    | 30Gi  | poc    |
-| poc-mt-vm-2   | poc-multitenancy-2 | 1   | 2Gi    | 30Gi  | poc    |
+| VM Name       | Namespace           | CPU | Memory | Disk  | Template |
+|---------------|---------------------|-----|--------|-------|----------|
+| poc-mt-vm-1   | poc-multitenancy-1  | 1   | 2Gi    | 30Gi  | poc      |
+| poc-mt-vm-2   | poc-multitenancy-2  | 1   | 2Gi    | 30Gi  | poc      |
 
-cloud-init 기본 계정: `cloud-user / changeme`
+cloud-init default account: `cloud-user / changeme`
 
-## 검증
+## Verification
 
-### CLI 권한 테스트
+### CLI Permission Test
 
 ```bash
 API=$(oc whoami --show-server)
 
-# user1: poc-multitenancy-1 admin — VM 생성 가능
+# user1: poc-multitenancy-1 admin — can create VMs
 oc login -u user1 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-1    # 성공
-oc get vm -n poc-multitenancy-2    # 거부됨 (권한 없음)
+oc get vm -n poc-multitenancy-1    # success
+oc get vm -n poc-multitenancy-2    # denied (no permission)
 
-# user2: poc-multitenancy-1 view — 조회만 가능, VM 생성 불가
+# user2: poc-multitenancy-1 view — view only, cannot create VMs
 oc login -u user2 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-1           # 성공 (조회)
-oc get vm -n poc-multitenancy-2           # 거부됨 (권한 없음)
-oc create -f vm.yaml -n poc-multitenancy-1  # 거부됨 (view only)
+oc get vm -n poc-multitenancy-1           # success (view)
+oc get vm -n poc-multitenancy-2           # denied (no permission)
+oc create -f vm.yaml -n poc-multitenancy-1  # denied (view only)
 
-# user3: poc-multitenancy-2 admin — VM 생성 가능
+# user3: poc-multitenancy-2 admin — can create VMs
 oc login -u user3 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-2    # 성공
-oc get vm -n poc-multitenancy-1    # 거부됨 (권한 없음)
+oc get vm -n poc-multitenancy-2    # success
+oc get vm -n poc-multitenancy-1    # denied (no permission)
 
-# user4: poc-multitenancy-2 view — 조회만 가능, VM 생성 불가
+# user4: poc-multitenancy-2 view — view only, cannot create VMs
 oc login -u user4 -p 'Redhat1!' "$API"
-oc get vm -n poc-multitenancy-2           # 성공 (조회)
-oc get vm -n poc-multitenancy-1           # 거부됨 (권한 없음)
-oc create -f vm.yaml -n poc-multitenancy-2  # 거부됨 (view only)
+oc get vm -n poc-multitenancy-2           # success (view)
+oc get vm -n poc-multitenancy-1           # denied (no permission)
+oc create -f vm.yaml -n poc-multitenancy-2  # denied (view only)
 ```
 
-### Console 접근 테스트
+### Console Access Test
 
-1. `https://<console-url>` 접속
-2. Identity Provider: `poc-htpasswd` 선택
-3. 각 사용자로 로그인
-4. **Virtualization → VirtualMachines** 메뉴 확인
-   - user1 / user3: 생성 버튼 활성화, 자신의 네임스페이스만 표시
-   - user2 / user4: 조회만 가능, 생성/삭제 버튼 없음
+1. Navigate to `https://<console-url>`
+2. Select Identity Provider: `poc-htpasswd`
+3. Login as each user
+4. Check **Virtualization → VirtualMachines** menu
+   - user1 / user3: Create button active, only their namespace shown
+   - user2 / user4: View only, no create/delete buttons
 
-### VM 콘솔 접근
+### VM Console Access
 
 ```bash
-# admin 사용자는 virtctl 콘솔 접근 가능
+# Admin users can access virtctl console
 oc login -u user1 -p 'Redhat1!' "$API"
 virtctl console poc-mt-vm-1 -n poc-multitenancy-1
-# 로그인: cloud-user / changeme
+# Login: cloud-user / changeme
 
 oc login -u user3 -p 'Redhat1!' "$API"
 virtctl console poc-mt-vm-2 -n poc-multitenancy-2
-# 로그인: cloud-user / changeme
+# Login: cloud-user / changeme
 ```
 
-## 트러블슈팅
+## Troubleshooting
 
-### 로그인이 안 되는 경우
+### Cannot login
 
-HTPasswd IDP 등록 후 authentication 오퍼레이터가 재시작되는 데 1~2분이 소요된다.
+After registering the HTPasswd IDP, it takes 1-2 minutes for the authentication operator to restart.
 
 ```bash
-# authentication 오퍼레이터 상태 확인
+# Check authentication operator status
 oc get clusteroperator authentication
 
-# oauth-openshift Pod 재시작 확인
+# Check oauth-openshift Pod restart
 oc get pods -n openshift-authentication
 ```
 
-### view 사용자가 VM을 볼 수 없는 경우
+### view user cannot see VMs
 
-OpenShift Virtualization의 view 권한은 기본 `view` ClusterRole에 집계(aggregate)된다.
-Virtualization 오퍼레이터가 정상 설치된 환경이면 `view` 역할로 VM 조회가 가능하다.
+OpenShift Virtualization's view permissions are aggregated into the default `view` ClusterRole.
+If the Virtualization operator is properly installed, VM viewing with the `view` role is possible.
 
 ```bash
-# view ClusterRole에 kubevirt 규칙이 포함됐는지 확인
+# Check if kubevirt rules are included in view ClusterRole
 oc get clusterrole view -o jsonpath='{.rules[*].resources}' | tr ' ' '\n' | grep -i virt
 ```
 
-### DataSource 없음 오류
+### DataSource not found error
 
-01-template 단계를 먼저 실행하거나 env.conf에서 DataSource를 지정한다.
+Run the 01-template step first or specify the DataSource in env.conf.
 
 ```bash
-# 사용 가능한 DataSource 목록
+# List available DataSources
 oc get datasource -n openshift-virtualization-os-images
 
-# env.conf에 추가
+# Add to env.conf
 DATASOURCE_NAME=rhel9
 DATASOURCE_NS=openshift-virtualization-os-images
 ```
 
-## 정리
+## Cleanup
 
 ```bash
 ./04-multitenancy.sh --cleanup
 ```
 
-정리 항목:
-- VM (poc-mt-vm-1, poc-mt-vm-2)
-- 네임스페이스 (poc-multitenancy-1, poc-multitenancy-2) 및 내부 모든 리소스
-- User 오브젝트 (user1~user4)
-- Identity 오브젝트
+Cleanup items:
+- VMs (poc-mt-vm-1, poc-mt-vm-2)
+- Namespaces (poc-multitenancy-1, poc-multitenancy-2) and all internal resources
+- User objects (user1~user4)
+- Identity objects
 
-> htpasswd secret 및 OAuth IDP 설정은 다른 사용자에게 영향을 줄 수 있으므로 수동 제거:
+> htpasswd secret and OAuth IDP settings may affect other users, so remove manually:
 > ```bash
 > oc delete secret htpasswd-secret -n openshift-config
-> # OAuth IDP 제거: oc edit oauth cluster
+> # Remove OAuth IDP: oc edit oauth cluster
 > ```

@@ -1,73 +1,73 @@
-# Fence Agents Remediation (FAR) 실습
+# Fence Agents Remediation (FAR) Lab
 
-Node Health Check Operator가 비정상 노드를 감지하면
-FAR이 IPMI/BMC를 통해 해당 노드를 강제 재시작(fencing)하여 자동 복구하는 실습입니다.
+This lab demonstrates how the Node Health Check Operator detects an unhealthy node
+and FAR automatically recovers it by forcibly restarting (fencing) the node via IPMI/BMC.
 
 ```
-NHC (감지) → FenceAgentsRemediationTemplate (IPMI fencing)
+NHC (detection) → FenceAgentsRemediationTemplate (IPMI fencing)
 
-1단계: 정상 상태
+Step 1: Normal state
 ┌───────────────────────────┐     ┌──────────────┐
 │  NODE1 (Ready)            │     │  NODE2       │
-│  ● poc-far-vm-1 (Running) │     │  (여유 있음)  │
+│  ● poc-far-vm-1 (Running) │     │  (available) │
 │  ● poc-far-vm-2 (Running) │     │              │
 └───────────────────────────┘     └──────────────┘
 
-2단계: NODE1 장애 시뮬레이션 (kubelet 중단)
+Step 2: NODE1 failure simulation (kubelet stopped)
 ┌───────────────────────────┐     ┌──────────────┐
 │  NODE1 (NotReady)         │     │  NODE2       │
-│  ✗ kubelet 중단           │     │  (여유 있음)  │
+│  ✗ kubelet stopped        │     │  (available) │
 └───────────────────────────┘     └──────────────┘
          │
-         ▼  NHC 감지 (unhealthy 조건 충족)
-         ▼  FenceAgentsRemediation 생성
-         ▼  IPMI/BMC → 물리 노드 전원 재시작
+         ▼  NHC detects (unhealthy condition met)
+         ▼  FenceAgentsRemediation created
+         ▼  IPMI/BMC → Physical node power restart
 
-3단계: 복구 완료
+Step 3: Recovery complete
 ┌───────────────────────────┐     ┌──────────────┐
-│  NODE1 (Ready, 재부팅 후) │     │  NODE2       │
-│  ● poc-far-vm-1 (Running) │     │  (여유 있음)  │
+│  NODE1 (Ready, after reboot) │  │  NODE2       │
+│  ● poc-far-vm-1 (Running) │     │  (available) │
 │  ● poc-far-vm-2 (Running) │     │              │
 └───────────────────────────┘     └──────────────┘
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- `01-template` 완료 — `poc` Template 및 DataSource 등록
-- Fence Agents Remediation Operator 설치 (`00-operator/far-operator.md` 참조)
-- Node Health Check Operator 설치 (`00-operator/nhc-operator.md` 참조)
-- 워커 노드에 IPMI/BMC 접근 가능
-- `env.conf`에 `FENCE_AGENT_IP`, `FENCE_AGENT_USER`, `FENCE_AGENT_PASS` 설정
-- `16-far.sh` 실행 완료
+- `01-template` completed — `poc` Template and DataSource registered
+- Fence Agents Remediation Operator installed (`00-operator/far-operator.md` for reference)
+- Node Health Check Operator installed (`00-operator/nhc-operator.md` for reference)
+- IPMI/BMC accessible on worker nodes
+- `FENCE_AGENT_IP`, `FENCE_AGENT_USER`, `FENCE_AGENT_PASS` configured in `env.conf`
+- `16-far.sh` execution completed
 
 ---
 
-## 구성 개요
+## Configuration Overview
 
-| 리소스 | 네임스페이스 | 역할 |
+| Resource | Namespace | Role |
 |--------|------------|------|
-| Secret `poc-far-credentials` | `openshift-workload-availability` | IPMI `--password` 보안 보관 |
-| FenceAgentsRemediationTemplate | `openshift-workload-availability` | IPMI fencing 방법 정의 |
-| NodeHealthCheck | cluster-scoped | 노드 상태 감지 + FAR 트리거 조건 |
+| Secret `poc-far-credentials` | `openshift-workload-availability` | Secure storage of IPMI `--password` |
+| FenceAgentsRemediationTemplate | `openshift-workload-availability` | Defines IPMI fencing method |
+| NodeHealthCheck | cluster-scoped | Detects node status + FAR trigger condition |
 
 ---
 
-## FAR vs SNR 비교
+## FAR vs SNR Comparison
 
-| 항목 | FAR | SNR |
+| Item | FAR | SNR |
 |------|-----|-----|
-| 복구 방법 | IPMI/BMC 전원 제어 | 노드 자가 재시작 |
-| 외부 장비 필요 | 필요 (BMC) | 불필요 |
-| 복구 신뢰성 | 높음 (하드웨어 수준) | 중간 (OS 수준) |
-| 적용 환경 | 베어메탈 | 베어메탈 / 가상 |
+| Recovery method | IPMI/BMC power control | Node self-restart |
+| External hardware required | Required (BMC) | Not required |
+| Recovery reliability | High (hardware level) | Medium (OS level) |
+| Applicable environment | Bare metal | Bare metal / Virtual |
 
 ---
 
 ## IPMI Credentials Secret
 
-비밀번호는 Secret으로 분리 관리합니다. `--password` 키에 IPMI 비밀번호를 저장합니다.
+The password is managed separately as a Secret. The IPMI password is stored in the `--password` key.
 
 ```yaml
 apiVersion: v1
@@ -117,14 +117,14 @@ spec:
       timeout: 1m0s
 ```
 
-- `nodeparameters[--ip]`: 노드 FQDN → BMC IP 매핑 (노드별 BMC IP 지정)
-- `sharedSecretName`: `--password`가 담긴 Secret 이름
-- `sharedparameters`: 모든 노드에 공통 적용되는 파라미터 (비밀번호 제외)
-- `agent`: IPMI 환경에 따라 `fence_ipmilan`, `fence_idrac`, `fence_ilo` 등 선택
+- `nodeparameters[--ip]`: Node FQDN → BMC IP mapping (specify BMC IP per node)
+- `sharedSecretName`: Name of Secret containing `--password`
+- `sharedparameters`: Parameters applied commonly to all nodes (excluding password)
+- `agent`: Choose from `fence_ipmilan`, `fence_idrac`, `fence_ilo`, etc. depending on IPMI environment
 
 ---
 
-## NodeHealthCheck 설정
+## NodeHealthCheck Settings
 
 ```yaml
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -152,102 +152,102 @@ spec:
 
 ---
 
-## 실습 확인
+## Lab Verification
 
-### 초기 상태 확인
+### Initial State Check
 
 ```bash
-# NHC 상태 확인
+# Check NHC status
 oc get nodehealthcheck poc-far-nhc
 
-# FAR Template 확인
+# Check FAR Template
 oc get fenceagentsremediationtemplate -n openshift-workload-availability
 
-# VM 배치 확인
+# Check VM placement
 oc get vmi -n poc-far -o wide
 
-# IPMI 연결 테스트
+# Test IPMI connection
 ipmitool -I lanplus -H ${FENCE_AGENT_IP} \
   -U ${FENCE_AGENT_USER} -P ${FENCE_AGENT_PASS} chassis power status
 ```
 
-### 노드 장애 시뮬레이션
+### Node Failure Simulation
 
 ```bash
-# TEST_NODE에서 kubelet 중단 (노드에서 직접 실행)
+# Stop kubelet on TEST_NODE (run directly on the node)
 oc debug node/${TEST_NODE} -- chroot /host systemctl stop kubelet
 
-# 노드 상태 확인 (NotReady로 변경 확인)
+# Check node status (verify change to NotReady)
 oc get nodes -w
 ```
 
-### NHC → FAR 발동 확인
+### Verify NHC → FAR Triggered
 
 ```bash
-# NHC 상태 확인 (unhealthy 감지 여부)
+# Check NHC status (whether unhealthy is detected)
 oc get nodehealthcheck poc-far-nhc -o yaml | grep -A 20 status
 
-# FenceAgentsRemediation CR 생성 확인 (NHC가 자동 생성)
+# Verify FenceAgentsRemediation CR creation (auto-created by NHC)
 oc get fenceagentsremediation -A
 
-# FAR 이벤트 확인
+# Check FAR events
 oc get events -n openshift-workload-availability \
   --sort-by='.lastTimestamp' | grep -i remediat
 
-# IPMI fencing 실행 확인
+# Verify IPMI fencing execution
 oc logs -n openshift-workload-availability \
   deployment/fence-agents-remediation-operator-controller-manager --tail=50
 ```
 
-### 복구 후 확인
+### Verify After Recovery
 
 ```bash
-# 노드 복구 확인 (Ready 복귀)
+# Verify node recovery (returns to Ready)
 oc get nodes
 
-# VM 상태 확인 (재시작 후 Running 복귀)
+# Check VM status (returns to Running after restart)
 oc get vmi -n poc-far -o wide
 
-# FenceAgentsRemediation CR 자동 삭제 확인
+# Verify FenceAgentsRemediation CR auto-deleted
 oc get fenceagentsremediation -A
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# FAR Operator 로그
+# FAR Operator logs
 oc logs -n openshift-workload-availability \
   deployment/fence-agents-remediation-operator-controller-manager --tail=50
 
-# NHC Controller 로그
+# NHC Controller logs
 oc logs -n openshift-workload-availability \
   deployment/node-healthcheck-operator-controller-manager --tail=50
 
-# FAR CR 상세 확인
+# FAR CR details
 oc describe fenceagentsremediation -A
 
-# IPMI 직접 테스트
+# Direct IPMI test
 ipmitool -I lanplus -H ${FENCE_AGENT_IP} \
   -U ${FENCE_AGENT_USER} -P ${FENCE_AGENT_PASS} chassis power status
 
-# 노드 reboot 이력 확인
+# Check node reboot history
 oc debug node/${TEST_NODE} -- chroot /host last reboot | head -5
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# NodeHealthCheck 삭제
+# Delete NodeHealthCheck
 oc delete nodehealthcheck poc-far-nhc
 
-# FenceAgentsRemediationTemplate 삭제
+# Delete FenceAgentsRemediationTemplate
 oc delete fenceagentsremediationtemplate poc-far-template \
   -n openshift-workload-availability
 
-# VM 및 네임스페이스 삭제
+# Delete VMs and namespace
 oc delete namespace poc-far
 ```

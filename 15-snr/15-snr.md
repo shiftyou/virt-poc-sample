@@ -1,70 +1,70 @@
-# Self Node Remediation (SNR) 실습
+# Self Node Remediation (SNR) Lab
 
-Node Health Check Operator가 비정상 노드를 감지하면
-Self Node Remediation이 해당 노드를 스스로 재시작하여 자동 복구하는 실습입니다.
+This lab demonstrates how the Node Health Check Operator detects an unhealthy node
+and Self Node Remediation automatically recovers it by restarting the node itself.
 
 ```
-NHC (감지) → SelfNodeRemediationTemplate (복구 실행)
+NHC (detection) → SelfNodeRemediationTemplate (execute recovery)
 
-1단계: 정상 상태
+Step 1: Normal state
 ┌───────────────────────────┐     ┌──────────────┐
 │  NODE1 (Ready)            │     │  NODE2       │
-│  ● poc-snr-vm-1 (Running) │     │  (여유 있음)  │
+│  ● poc-snr-vm-1 (Running) │     │  (available) │
 │  ● poc-snr-vm-2 (Running) │     │              │
 └───────────────────────────┘     └──────────────┘
 
-2단계: NODE1 장애 시뮬레이션 (kubelet 중단)
+Step 2: NODE1 failure simulation (kubelet stopped)
 ┌───────────────────────────┐     ┌──────────────┐
 │  NODE1 (NotReady)         │     │  NODE2       │
-│  ✗ kubelet 중단           │     │  (여유 있음)  │
+│  ✗ kubelet stopped        │     │  (available) │
 └───────────────────────────┘     └──────────────┘
          │
-         ▼  NHC 감지 (unhealthy 조건 충족)
-         ▼  SelfNodeRemediation 생성
-         ▼  NODE1 자가 재시작 (watchdog / reboot)
+         ▼  NHC detects (unhealthy condition met)
+         ▼  SelfNodeRemediation created
+         ▼  NODE1 self-restarts (watchdog / reboot)
 
-3단계: 복구 완료
+Step 3: Recovery complete
 ┌───────────────────────────┐     ┌──────────────┐
-│  NODE1 (Ready, 재시작 후) │     │  NODE2       │
-│  ● poc-snr-vm-1 (Running) │     │  (여유 있음)  │
+│  NODE1 (Ready, after restart) │  │  NODE2       │
+│  ● poc-snr-vm-1 (Running) │     │  (available) │
 │  ● poc-snr-vm-2 (Running) │     │              │
 └───────────────────────────┘     └──────────────┘
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- `01-template` 완료 — `poc` Template 및 DataSource 등록
-- Self Node Remediation Operator 설치 (`00-operator/snr-operator.md` 참조)
-- Node Health Check Operator 설치 (`00-operator/nhc-operator.md` 참조)
-- 워커 노드 2개 이상
-- `14-snr.sh` 실행 완료
+- `01-template` completed — `poc` Template and DataSource registered
+- Self Node Remediation Operator installed (`00-operator/snr-operator.md` for reference)
+- Node Health Check Operator installed (`00-operator/nhc-operator.md` for reference)
+- 2 or more worker nodes
+- `14-snr.sh` execution completed
 
 ---
 
-## 구성 개요
+## Configuration Overview
 
-| 리소스 | 역할 |
+| Resource | Role |
 |--------|------|
-| SelfNodeRemediationTemplate | SNR 복구 방법 정의 |
-| NodeHealthCheck | 노드 상태 감지 + SNR 트리거 조건 |
-| poc-snr-vm-1, vm-2 | 복구 대상 VM (NODE1에 배치) |
+| SelfNodeRemediationTemplate | Defines SNR recovery method |
+| NodeHealthCheck | Detects node status + SNR trigger condition |
+| poc-snr-vm-1, vm-2 | Recovery target VMs (placed on NODE1) |
 
 ---
 
-## SNR 동작 원리
+## SNR Operation Principle
 
 ```
-NHC가 노드를 모니터링
-  └─ 조건 충족 (예: Ready=False 300s 이상)
-       └─ SelfNodeRemediation CR 생성
-            └─ SNR DaemonSet (해당 노드의 Pod)이 감지
-                 └─ 노드 스스로 재시작 (watchdog 또는 reboot)
-                      └─ 재시작 후 Ready 복귀
+NHC monitors nodes
+  └─ Condition met (e.g.: Ready=False for 300s or more)
+       └─ SelfNodeRemediation CR created
+            └─ SNR DaemonSet (Pod on that node) detects it
+                 └─ Node self-restarts (watchdog or reboot)
+                      └─ Returns to Ready after restart
 ```
 
-SNR은 **외부 IPMI 없이** 동작합니다. 노드의 watchdog 디바이스 또는 직접 reboot으로 자가 복구합니다.
+SNR operates **without external IPMI**. It self-recovers using the node's watchdog device or direct reboot.
 
 ---
 
@@ -83,12 +83,12 @@ spec:
 ```
 
 `remediationStrategy`:
-- `ResourceDeletion`: 노드의 Pod/VolumeAttachment를 강제 삭제 후 재시작 (기본값)
-- `OutOfServiceTaint`: `node.kubernetes.io/out-of-service` taint 추가 → 강제 삭제
+- `ResourceDeletion`: Force-deletes Pods/VolumeAttachments on the node then restarts (default)
+- `OutOfServiceTaint`: Adds `node.kubernetes.io/out-of-service` taint → force delete
 
 ---
 
-## NodeHealthCheck 설정
+## NodeHealthCheck Settings
 
 ```yaml
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -116,94 +116,94 @@ spec:
 
 ---
 
-## 실습 확인
+## Lab Verification
 
-### 초기 상태 확인
+### Initial State Check
 
 ```bash
-# NHC 상태 확인
+# Check NHC status
 oc get nodehealthcheck poc-snr-nhc
 
-# SNR Template 확인
+# Check SNR Template
 oc get selfnoderemediationtemplate -n openshift-workload-availability
 
-# VM 배치 확인
+# Check VM placement
 oc get vmi -n poc-snr -o wide
 ```
 
-### 노드 장애 시뮬레이션
+### Node Failure Simulation
 
 ```bash
-# TEST_NODE에서 kubelet 중단 (노드에서 직접 실행)
+# Stop kubelet on TEST_NODE (run directly on the node)
 oc debug node/${TEST_NODE} -- chroot /host systemctl stop kubelet
 
-# 노드 상태 확인 (NotReady로 변경 확인)
+# Check node status (verify change to NotReady)
 oc get nodes -w
 ```
 
-### NHC → SNR 발동 확인
+### Verify NHC → SNR Triggered
 
 ```bash
-# NHC 상태 확인 (unhealthy 감지 여부)
+# Check NHC status (whether unhealthy is detected)
 oc get nodehealthcheck poc-snr-nhc -o yaml | grep -A 20 status
 
-# SelfNodeRemediation CR 생성 확인 (NHC가 자동 생성)
+# Verify SelfNodeRemediation CR creation (auto-created by NHC)
 oc get selfnoderemediation -A
 
-# SNR 이벤트 확인
+# Check SNR events
 oc get events -n openshift-workload-availability \
   --sort-by='.lastTimestamp' | grep -i remediat
 
-# NHC 이벤트 확인
+# Check NHC events
 oc describe nodehealthcheck poc-snr-nhc | grep -A 20 "Events:"
 ```
 
-### 복구 후 확인
+### Verify After Recovery
 
 ```bash
-# 노드 복구 확인 (Ready 복귀)
+# Verify node recovery (returns to Ready)
 oc get nodes
 
-# VM 상태 확인 (재시작 후 Running 복귀)
+# Check VM status (returns to Running after restart)
 oc get vmi -n poc-snr -o wide
 
-# SelfNodeRemediation CR 자동 삭제 확인
+# Verify SelfNodeRemediation CR auto-deleted
 oc get selfnoderemediation -A
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# NHC Controller 로그
+# NHC Controller logs
 oc logs -n openshift-workload-availability \
   deployment/node-healthcheck-operator-controller-manager --tail=50
 
-# SNR DaemonSet Pod 로그 (해당 노드)
+# SNR DaemonSet Pod logs (for the affected node)
 oc logs -n openshift-workload-availability \
   -l app.kubernetes.io/name=self-node-remediation \
   --tail=50
 
-# SNR 상세 확인
+# SNR details
 oc describe selfnoderemediation -A
 
-# 노드 재시작 이력 확인
+# Check node restart history
 oc debug node/${TEST_NODE} -- chroot /host last reboot | head -5
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# NodeHealthCheck 삭제
+# Delete NodeHealthCheck
 oc delete nodehealthcheck poc-snr-nhc
 
-# SelfNodeRemediationTemplate 삭제
+# Delete SelfNodeRemediationTemplate
 oc delete selfnoderemediationtemplate poc-snr-template \
   -n openshift-workload-availability
 
-# VM 및 네임스페이스 삭제
+# Delete VMs and namespace
 oc delete namespace poc-snr
 ```

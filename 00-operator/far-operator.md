@@ -1,39 +1,39 @@
-# Fence Agents Remediation (FAR) Operator 설치
+# Fence Agents Remediation (FAR) Operator Installation
 
-## 개요
+## Overview
 
-Fence Agents Remediation(FAR)은 노드 장애 시 IPMI/BMC를 통해 물리 노드를 재시작(fencing)하여
-장애 상황을 자동으로 복구하는 Operator입니다.
+Fence Agents Remediation (FAR) is an Operator that automatically recovers from failure situations
+by restarting (fencing) physical nodes via IPMI/BMC when a node failure occurs.
 
-Node Health Check Operator와 함께 사용하여 자동 노드 복구를 구성합니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
-- 워커 노드에 IPMI/BMC 접근 가능
-- setup.sh에서 Fence Agent 정보 입력 필요 (FENCE_AGENT_IP, FENCE_AGENT_USER, FENCE_AGENT_PASS)
+It is used together with the Node Health Check Operator to configure automatic node recovery.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
+- IPMI/BMC access available on worker nodes
+- Fence Agent information must be entered in setup.sh (FENCE_AGENT_IP, FENCE_AGENT_USER, FENCE_AGENT_PASS)
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Fence Agents Remediation` 검색
-3. **Fence Agents Remediation Operator** 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Fence Agents Remediation`
+3. Select **Fence Agents Remediation Operator**
+4. Click `Install`
+5. Settings:
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-workload-availability`
-6. `Install` 클릭
+6. Click `Install`
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# 1. Namespace 생성
+# 1. Create Namespace
 oc apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
@@ -43,7 +43,7 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
-# 2. OperatorGroup 생성
+# 2. Create OperatorGroup
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -55,7 +55,7 @@ spec:
     - openshift-workload-availability
 EOF
 
-# 3. Subscription 생성
+# 3. Create Subscription
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -72,21 +72,21 @@ EOF
 
 ---
 
-## 설치 확인
+## Verify Installation
 
 ```bash
-# CSV 상태 확인
+# Check CSV status
 oc get csv -n openshift-workload-availability | grep fence
 
-# Pod 상태 확인
+# Check Pod status
 oc get pods -n openshift-workload-availability | grep fence
 ```
 
 ---
 
-## FAR 구성
+## FAR Configuration
 
-설치 후 `01-environment/far/` 디렉토리의 가이드를 참조합니다.
+After installation, refer to the guide in the `01-environment/far/` directory.
 
 ```bash
 cd 01-environment/far
@@ -95,15 +95,15 @@ cd 01-environment/far
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# FAR Operator 로그 확인
+# Check FAR Operator logs
 oc logs -n openshift-workload-availability deployment/fence-agents-remediation-operator-controller-manager
 
-# FenceAgentsRemediation 상태 확인
+# Check FenceAgentsRemediation status
 oc get fenceagentsremediation -A
 
-# IPMI 연결 테스트 (노드에서)
+# IPMI connectivity test (from node)
 ipmitool -I lanplus -H <BMC_IP> -U <USER> -P <PASS> chassis power status
 ```

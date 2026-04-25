@@ -2,13 +2,13 @@
 # =============================================================================
 # 16-far.sh
 #
-# Fence Agents Remediation (FAR) 실습 환경 구성
-#   1. poc-far 네임스페이스 생성
-#   2. IPMI credentials Secret 생성 (openshift-workload-availability)
-#   3. FenceAgentsRemediationTemplate 생성 (IPMI 설정)
-#   4. NodeHealthCheck CR 생성 (FAR 연동)
+# Fence Agents Remediation (FAR) lab environment setup
+#   1. Create poc-far namespace
+#   2. Create IPMI credentials Secret (openshift-workload-availability)
+#   3. Create FenceAgentsRemediationTemplate (IPMI settings)
+#   4. Create NodeHealthCheck CR (FAR integration)
 #
-# 사용법: ./16-far.sh
+# Usage: ./16-far.sh
 # =============================================================================
 
 set -euo pipefail
@@ -37,11 +37,11 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# YAML 미리보기 후 적용
+# Preview YAML then apply
 confirm_and_apply() {
     local file="$1"
     echo ""
-    print_info "적용할 YAML:"
+    print_info "YAML to apply:"
     echo "────────────────────────────────────────"
     cat "$file"
     echo "────────────────────────────────────────"
@@ -49,70 +49,70 @@ confirm_and_apply() {
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight check
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight check"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged in to OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if [ "${FAR_INSTALLED:-false}" != "true" ]; then
-        print_warn "Fence Agents Remediation Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/far-operator.md"
+        print_warn "Fence Agents Remediation Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/far-operator.md"
         exit 77
     fi
-    print_ok "Fence Agents Remediation Operator 확인"
+    print_ok "Fence Agents Remediation Operator confirmed"
 
     if [ "${NHC_INSTALLED:-false}" != "true" ]; then
-        print_warn "Node Health Check Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/nhc-operator.md"
+        print_warn "Node Health Check Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/nhc-operator.md"
         exit 77
     fi
-    print_ok "Node Health Check Operator 확인"
+    print_ok "Node Health Check Operator confirmed"
 
     if ! oc get node "$NODE1" &>/dev/null; then
-        print_error "노드 $NODE1 를 찾을 수 없습니다. env.conf 의 TEST_NODE 를 확인하세요."
+        print_error "Node $NODE1 not found. Please check TEST_NODE in env.conf."
         exit 1
     fi
-    print_ok "대상 노드: $NODE1"
+    print_ok "Target node: $NODE1"
 
     if [ -z "${FENCE_AGENT_IP:-}" ] || [ "${FENCE_AGENT_IP}" = "192.168.1.100" ]; then
-        print_warn "FENCE_AGENT_IP 가 기본값입니다. env.conf 의 FENCE_AGENT_IP 를 실제 BMC IP로 변경하세요."
+        print_warn "FENCE_AGENT_IP is the default value. Please update FENCE_AGENT_IP in env.conf with the actual BMC IP."
     else
         print_ok "FENCE_AGENT_IP: ${FENCE_AGENT_IP}"
     fi
 
     print_info "  NS    : ${NS}"
     print_info "  NODE1 : ${NODE1}"
-    print_info "  BMC IP: ${FENCE_AGENT_IP:-미설정}"
+    print_info "  BMC IP: ${FENCE_AGENT_IP:-not set}"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# Step 1: Create namespace
 # =============================================================================
 step_namespace() {
-    print_step "1/3  네임스페이스 생성 (${NS})"
+    print_step "1/3  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created successfully"
     fi
 }
 
 # =============================================================================
-# 2단계: IPMI credentials Secret 생성
+# Step 2: Create IPMI credentials Secret
 # =============================================================================
 step_secret() {
-    print_step "2/4  IPMI Credentials Secret 생성 (ns: ${REMEDIATION_NS})"
+    print_step "2/4  Create IPMI Credentials Secret (ns: ${REMEDIATION_NS})"
 
     if oc get secret poc-far-credentials -n "${REMEDIATION_NS}" &>/dev/null; then
-        print_ok "Secret poc-far-credentials 이미 존재 — 스킵"
+        print_ok "Secret poc-far-credentials already exists — skipping"
         return
     fi
 
@@ -126,16 +126,16 @@ stringData:
   --password: "${FENCE_AGENT_PASS:-password}"
 EOF
     confirm_and_apply far-credentials-secret.yaml
-    print_ok "Secret poc-far-credentials 생성 완료 → ns: ${REMEDIATION_NS}"
+    print_ok "Secret poc-far-credentials created successfully → ns: ${REMEDIATION_NS}"
 }
 
 # =============================================================================
-# 3단계: FenceAgentsRemediationTemplate 생성
+# Step 3: Create FenceAgentsRemediationTemplate
 # =============================================================================
 step_far_template() {
-    print_step "3/4  FenceAgentsRemediationTemplate 생성"
+    print_step "3/4  Create FenceAgentsRemediationTemplate"
 
-    # 클러스터에서 워커 노드 FQDN 목록 수집
+    # Collect worker node FQDN list from cluster
     local worker_nodes
     worker_nodes=$(oc get nodes -l node-role.kubernetes.io/worker \
         -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || \
@@ -146,7 +146,7 @@ step_far_template() {
         worker_nodes=$(echo "$worker_nodes" | tr ' ' '\n')
     fi
 
-    # YAML 헤더 작성
+    # Write YAML header
     cat > far-template.yaml <<EOF
 apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
 kind: FenceAgentsRemediationTemplate
@@ -163,14 +163,14 @@ spec:
         --ip:
 EOF
 
-    # 노드별 BMC IP 항목 추가 (env.conf FENCE_AGENT_IP 를 공통 BMC IP로 사용)
+    # Add per-node BMC IP entries (using env.conf FENCE_AGENT_IP as the common BMC IP)
     while IFS= read -r node; do
         [ -z "$node" ] && continue
         echo "          ${node}: ${FENCE_AGENT_IP:-192.168.1.100}" >> far-template.yaml
-        print_info "  노드 → BMC IP: ${node} → ${FENCE_AGENT_IP:-192.168.1.100}"
+        print_info "  Node → BMC IP: ${node} → ${FENCE_AGENT_IP:-192.168.1.100}"
     done <<< "$worker_nodes"
 
-    # YAML 나머지 작성
+    # Write remaining YAML
     cat >> far-template.yaml <<EOF
       remediationStrategy: ResourceDeletion
       retrycount: 5
@@ -184,17 +184,17 @@ EOF
 EOF
 
     confirm_and_apply far-template.yaml
-    print_ok "FenceAgentsRemediationTemplate poc-far-template 생성 완료"
+    print_ok "FenceAgentsRemediationTemplate poc-far-template created successfully"
     print_info "  agent           : fence_ipmilan"
-    print_info "  sharedSecretName: poc-far-credentials (--password 포함)"
+    print_info "  sharedSecretName: poc-far-credentials (contains --password)"
     print_info "  BMC IP          : ${FENCE_AGENT_IP:-192.168.1.100}"
 }
 
 # =============================================================================
-# 3단계: NodeHealthCheck 생성
+# Step 3: Create NodeHealthCheck
 # =============================================================================
 step_nhc() {
-    print_step "4/5  NodeHealthCheck 생성 (FAR 연동)"
+    print_step "4/5  Create NodeHealthCheck (FAR integration)"
 
     cat > nhc-far.yaml <<EOF
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -221,15 +221,15 @@ spec:
       duration: 300s
 EOF
     confirm_and_apply nhc-far.yaml
-    print_ok "NodeHealthCheck poc-far-nhc 생성 완료"
-    print_info "  조건: Ready=False 또는 Unknown 300초 이상 → FAR 발동 (IPMI reboot)"
+    print_ok "NodeHealthCheck poc-far-nhc created successfully"
+    print_info "  Condition: Ready=False or Unknown for 300s or more → FAR triggered (IPMI reboot)"
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "5/5  ConsoleYAMLSample 등록"
+    print_step "5/5  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-nhc-far.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -237,8 +237,8 @@ kind: ConsoleYAMLSample
 metadata:
   name: poc-nodehealthcheck-far
 spec:
-  title: "POC NodeHealthCheck (FAR 연동)"
-  description: "Fence Agents Remediation과 연동하여 비정상 워커 노드를 IPMI로 자동 재부팅하는 NodeHealthCheck CR 예시입니다. Ready=False 또는 Unknown 상태가 300초 이상 지속되면 FAR이 발동됩니다."
+  title: "POC NodeHealthCheck (FAR integration)"
+  description: "Example NodeHealthCheck CR for auto-rebooting unhealthy worker nodes via IPMI using Fence Agents Remediation. FAR is triggered when Ready=False or Unknown state persists for 300 seconds."
   targetResource:
     apiVersion: remediation.medik8s.io/v1alpha1
     kind: NodeHealthCheck
@@ -267,7 +267,7 @@ spec:
           duration: 300s
 EOF
     oc apply -f consoleyamlsample-nhc-far.yaml
-    print_ok "ConsoleYAMLSample poc-nodehealthcheck-far 등록 완료"
+    print_ok "ConsoleYAMLSample poc-nodehealthcheck-far registered successfully"
 
     cat > consoleyamlsample-far-template.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -276,7 +276,7 @@ metadata:
   name: poc-fenceagentsremediationtemplate
 spec:
   title: "POC FenceAgentsRemediationTemplate (IPMI)"
-  description: "fence_ipmilan을 사용하여 노드를 IPMI로 재부팅하는 FenceAgentsRemediationTemplate 예시입니다. 노드별 BMC IP와 공유 자격증명 Secret을 설정합니다."
+  description: "Example FenceAgentsRemediationTemplate for rebooting nodes via IPMI using fence_ipmilan. Configure per-node BMC IPs and shared credentials Secret."
   targetResource:
     apiVersion: fence-agents-remediation.medik8s.io/v1alpha1
     kind: FenceAgentsRemediationTemplate
@@ -307,29 +307,29 @@ spec:
           timeout: 1m0s
 EOF
     oc apply -f consoleyamlsample-far-template.yaml
-    print_ok "ConsoleYAMLSample poc-fenceagentsremediationtemplate 등록 완료"
+    print_ok "ConsoleYAMLSample poc-fenceagentsremediationtemplate registered successfully"
 }
 
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! FAR 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! FAR lab environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  NHC 상태 확인:"
+    echo -e "  Check NHC status:"
     echo -e "    ${CYAN}oc get nodehealthcheck poc-far-nhc${NC}"
     echo ""
-    echo -e "  IPMI 연결 테스트:"
+    echo -e "  Test IPMI connection:"
     echo -e "    ${CYAN}ipmitool -I lanplus -H ${FENCE_AGENT_IP:-<BMC_IP>} -U ${FENCE_AGENT_USER:-admin} -P <PASS> chassis power status${NC}"
     echo ""
-    echo -e "  장애 시뮬레이션:"
+    echo -e "  Failure simulation:"
     echo -e "    ${CYAN}oc debug node/${NODE1} -- chroot /host systemctl stop kubelet${NC}"
     echo ""
-    echo -e "  FAR 발동 확인 (300초 후):"
+    echo -e "  Verify FAR triggered (after 300 seconds):"
     echo -e "    ${CYAN}oc get fenceagentsremediation -A${NC}"
     echo -e "    ${CYAN}oc get nodes -w${NC}"
     echo ""
-    echo -e "  자세한 내용: 16-far.md 참조"
+    echo -e "  For details: 16-far.md"
     echo ""
 }
 
@@ -337,23 +337,23 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 16-far 리소스 삭제"
+    print_step "--cleanup: Delete 16-far resources"
     local _rem_ns="openshift-workload-availability"
     oc delete project poc-far --ignore-not-found 2>/dev/null || true
     oc delete nodehealthcheck poc-far-nhc --ignore-not-found 2>/dev/null || true
     oc delete fenceagentsremediationtemplate poc-far-template -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
     oc delete secret poc-far-credentials -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-nodehealthcheck-far poc-fenceagentsremediationtemplate --ignore-not-found 2>/dev/null || true
-    print_ok "16-far 리소스 삭제 완료"
+    print_ok "16-far resources deleted successfully"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  FAR 실습 환경 구성${NC}"
+    echo -e "${CYAN}  FAR lab environment setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

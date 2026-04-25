@@ -2,15 +2,15 @@
 # =============================================================================
 # 04-multitenancy.sh
 #
-# 멀티 테넌트 VM 환경 구성
-#   - 네임스페이스 2개 생성 (poc-multitenancy-1, poc-multitenancy-2)
-#   - user1: poc-multitenancy-1 admin  → VM 생성 가능
-#   - user2: poc-multitenancy-1 view   → VM 생성 불가 (읽기 전용)
-#   - user3: poc-multitenancy-2 admin  → VM 생성 가능
-#   - user4: poc-multitenancy-2 view   → VM 생성 불가 (읽기 전용)
-#   - 각 네임스페이스에 VM 1개 생성 (poc 템플릿 사용)
+# Multi-tenant VM environment configuration
+#   - Create 2 namespaces (poc-multitenancy-1, poc-multitenancy-2)
+#   - user1: poc-multitenancy-1 admin  → can create VMs
+#   - user2: poc-multitenancy-1 view   → cannot create VMs (read-only)
+#   - user3: poc-multitenancy-2 admin  → can create VMs
+#   - user4: poc-multitenancy-2 view   → cannot create VMs (read-only)
+#   - Create 1 VM per namespace (using poc template)
 #
-# 사용법: ./04-multitenancy.sh [--cleanup]
+# Usage: ./04-multitenancy.sh [--cleanup]
 # =============================================================================
 
 set -euo pipefail
@@ -37,15 +37,15 @@ print_error() { echo -e "  ${RED}✘ $1${NC}"; }
 print_cmd()   { echo -e "  ${CYAN}$ $1${NC}"; }
 
 # =============================================================================
-# 설정
+# Configuration
 # =============================================================================
 NS1="poc-multitenancy-1"
 NS2="poc-multitenancy-2"
 
-USER1="user1"   # NS1 admin (VM 생성 가능)
-USER2="user2"   # NS1 view  (읽기 전용, VM 생성 불가)
-USER3="user3"   # NS2 admin (VM 생성 가능)
-USER4="user4"   # NS2 view  (읽기 전용, VM 생성 불가)
+USER1="user1"   # NS1 admin (can create VMs)
+USER2="user2"   # NS1 view  (read-only, cannot create VMs)
+USER3="user3"   # NS2 admin (can create VMs)
+USER4="user4"   # NS2 view  (read-only, cannot create VMs)
 
 DEFAULT_PASS="Redhat1!"
 
@@ -59,139 +59,139 @@ STORAGE_CLASS="${STORAGE_CLASS:-}"
 
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight checks"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if [ "${VIRT_INSTALLED:-false}" != "true" ]; then
-        print_warn "OpenShift Virtualization Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/kubevirt-hyperconverged-operator.md"
+        print_warn "OpenShift Virtualization Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/kubevirt-hyperconverged-operator.md"
         exit 77
     fi
-    print_ok "OpenShift Virtualization Operator 확인"
+    print_ok "OpenShift Virtualization Operator confirmed"
 
     if ! command -v htpasswd &>/dev/null; then
-        print_error "htpasswd 명령이 없습니다."
-        print_info "설치: dnf install -y httpd-tools"
+        print_error "htpasswd command not found."
+        print_info "Install: dnf install -y httpd-tools"
         exit 1
     fi
-    print_ok "htpasswd 명령 확인"
+    print_ok "htpasswd command confirmed"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_warn "poc Template 없음 — VM은 생성되지 않습니다. (01-template 먼저 실행 필요)"
+        print_warn "poc Template not found — VMs will not be created. (Run 01-template first)"
     else
-        print_ok "poc Template 확인"
+        print_ok "poc Template confirmed"
     fi
 }
 
 # =============================================================================
 step_users() {
-    print_step "사용자 생성 (HTPasswd Identity Provider)"
+    print_step "Create users (HTPasswd Identity Provider)"
 
-    # 기존 htpasswd secret 내용 가져오기
+    # Get existing htpasswd secret content
     if oc get secret "$HTPASSWD_SECRET" -n openshift-config &>/dev/null; then
-        print_info "기존 htpasswd secret 발견 → 사용자 추가"
+        print_info "Existing htpasswd secret found → adding users"
         oc get secret "$HTPASSWD_SECRET" \
             -n openshift-config \
             -o jsonpath='{.data.htpasswd}' | base64 -d > "$HTPASSWD_TMP"
     else
-        print_info "새 htpasswd 파일 생성"
+        print_info "Creating new htpasswd file"
         touch "$HTPASSWD_TMP"
     fi
 
-    # 4명 사용자 생성/업데이트
+    # Create/update 4 users
     for user in "$USER1" "$USER2" "$USER3" "$USER4"; do
         htpasswd -bB "$HTPASSWD_TMP" "$user" "$DEFAULT_PASS" 2>/dev/null
-        print_ok "사용자: ${CYAN}${user}${NC}  (비밀번호: ${DEFAULT_PASS})"
+        print_ok "User: ${CYAN}${user}${NC}  (password: ${DEFAULT_PASS})"
     done
 
-    # htpasswd secret 생성 or 업데이트
+    # Create or update htpasswd secret
     if oc get secret "$HTPASSWD_SECRET" -n openshift-config &>/dev/null; then
         oc set data secret "$HTPASSWD_SECRET" \
             --from-file=htpasswd="$HTPASSWD_TMP" \
             -n openshift-config
-        print_ok "htpasswd secret 업데이트 완료"
+        print_ok "htpasswd secret updated"
     else
         oc create secret generic "$HTPASSWD_SECRET" \
             --from-file=htpasswd="$HTPASSWD_TMP" \
             -n openshift-config
-        print_ok "htpasswd secret 생성 완료"
+        print_ok "htpasswd secret created"
     fi
     rm -f "$HTPASSWD_TMP"
 
-    # OAuth CR에 HTPasswd IDP 등록 (없으면 추가)
+    # Register HTPasswd IDP in OAuth CR (add if not present)
     if oc get oauth cluster \
         -o jsonpath='{.spec.identityProviders[*].name}' 2>/dev/null | \
         tr ' ' '\n' | grep -qx "$HTPASSWD_IDP_NAME"; then
-        print_ok "OAuth IDP '${HTPASSWD_IDP_NAME}' 이미 등록됨"
+        print_ok "OAuth IDP '${HTPASSWD_IDP_NAME}' already registered"
     else
         local idp_json
         idp_json="{\"name\":\"${HTPASSWD_IDP_NAME}\",\"mappingMethod\":\"claim\",\"type\":\"HTPasswd\",\"htpasswd\":{\"fileData\":{\"name\":\"${HTPASSWD_SECRET}\"}}}"
 
-        # 기존 배열에 추가 시도, 실패하면 배열 신규 생성
+        # Try to append to existing array, fallback to creating new array
         if ! oc patch oauth cluster --type=json \
             -p="[{\"op\":\"add\",\"path\":\"/spec/identityProviders/-\",\"value\":${idp_json}}]" \
             2>/dev/null; then
             oc patch oauth cluster --type=merge \
                 -p="{\"spec\":{\"identityProviders\":[${idp_json}]}}"
         fi
-        print_ok "OAuth IDP '${HTPASSWD_IDP_NAME}' 등록 완료"
-        print_warn "authentication 오퍼레이터 재시작까지 1~2분 소요됩니다."
+        print_ok "OAuth IDP '${HTPASSWD_IDP_NAME}' registered"
+        print_warn "Authentication operator restart will take 1-2 minutes."
     fi
 }
 
 # =============================================================================
 step_namespaces() {
-    print_step "네임스페이스 생성"
+    print_step "Create namespaces"
 
     for ns in "$NS1" "$NS2"; do
         if oc get namespace "$ns" &>/dev/null; then
-            print_warn "네임스페이스 이미 존재: $ns"
+            print_warn "Namespace already exists: $ns"
         else
             oc create namespace "$ns"
-            print_ok "네임스페이스 생성: ${CYAN}${ns}${NC}"
+            print_ok "Namespace created: ${CYAN}${ns}${NC}"
         fi
     done
 }
 
 # =============================================================================
 step_rbac() {
-    print_step "RBAC 설정"
+    print_step "Configure RBAC"
 
-    # RoleBinding(네임스페이스 한정) — ClusterRoleBinding(클러스터 전체)이 아님
-    # admin/view ClusterRole을 특정 NS에만 바인딩 → 해당 NS 내 리소스만 접근 가능
-    # 다른 네임스페이스에는 아무 권한도 없음
+    # RoleBinding (namespace-scoped) — not ClusterRoleBinding (cluster-wide)
+    # Bind admin/view ClusterRole to specific NS only → access only to resources in that NS
+    # No permissions in other namespaces
     echo ""
-    printf "  %-10s  %-30s  %-12s  %s\n" "사용자" "네임스페이스" "역할" "VM 생성"
+    printf "  %-10s  %-30s  %-12s  %s\n" "User" "Namespace" "Role" "Create VM"
     echo "  ──────────────────────────────────────────────────────────────"
 
     oc adm policy add-role-to-user admin "$USER1" -n "$NS1" 2>/dev/null
-    printf "  %-10s  %-30s  %-12s  %s\n" "$USER1" "$NS1" "admin" "가능"
-    print_ok "${USER1} → ${NS1} [admin]  — VM 생성 가능"
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER1" "$NS1" "admin" "Yes"
+    print_ok "${USER1} → ${NS1} [admin]  — can create VMs"
 
     oc adm policy add-role-to-user view "$USER2" -n "$NS1" 2>/dev/null
-    printf "  %-10s  %-30s  %-12s  %s\n" "$USER2" "$NS1" "view" "불가"
-    print_ok "${USER2} → ${NS1} [view]   — 읽기 전용, VM 생성 불가"
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER2" "$NS1" "view" "No"
+    print_ok "${USER2} → ${NS1} [view]   — read-only, cannot create VMs"
 
     oc adm policy add-role-to-user admin "$USER3" -n "$NS2" 2>/dev/null
-    printf "  %-10s  %-30s  %-12s  %s\n" "$USER3" "$NS2" "admin" "가능"
-    print_ok "${USER3} → ${NS2} [admin]  — VM 생성 가능"
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER3" "$NS2" "admin" "Yes"
+    print_ok "${USER3} → ${NS2} [admin]  — can create VMs"
 
     oc adm policy add-role-to-user view "$USER4" -n "$NS2" 2>/dev/null
-    printf "  %-10s  %-30s  %-12s  %s\n" "$USER4" "$NS2" "view" "불가"
-    print_ok "${USER4} → ${NS2} [view]   — 읽기 전용, VM 생성 불가"
+    printf "  %-10s  %-30s  %-12s  %s\n" "$USER4" "$NS2" "view" "No"
+    print_ok "${USER4} → ${NS2} [view]   — read-only, cannot create VMs"
 
-    # DataSource 참조 권한 — VM 생성 시 openshift-virtualization-os-images의
-    # DataSource를 sourceRef로 사용하므로 admin 사용자(VM 생성자)에게만 view 권한 부여
+    # DataSource reference permissions — grant view permission only to admin users (VM creators)
+    # since they use DataSource in openshift-virtualization-os-images as sourceRef when creating VMs
     oc adm policy add-role-to-user view "$USER1" -n "$DATASOURCE_NS" 2>/dev/null
-    print_ok "${USER1} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
+    print_ok "${USER1} → ${DATASOURCE_NS} [view] (for DataSource reference)"
 
     oc adm policy add-role-to-user view "$USER3" -n "$DATASOURCE_NS" 2>/dev/null
-    print_ok "${USER3} → ${DATASOURCE_NS} [view] (DataSource 참조용)"
+    print_ok "${USER3} → ${DATASOURCE_NS} [view] (for DataSource reference)"
 }
 
 # =============================================================================
@@ -200,12 +200,12 @@ create_vm() {
     local vm_name="$2"
 
     if oc get vm "$vm_name" -n "$ns" &>/dev/null; then
-        print_warn "VM 이미 존재: ${vm_name} (${ns})"
+        print_warn "VM already exists: ${vm_name} (${ns})"
         return 0
     fi
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_warn "poc Template 없음 — ${vm_name} 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        print_warn "poc Template not found — skipping ${vm_name} creation. (Run 01-template first)"
         return 0
     fi
 
@@ -213,37 +213,37 @@ create_vm() {
     oc process -n openshift poc -p NAME="$vm_name" | \
         sed 's/runStrategy: Halted/runStrategy: Always/' | \
         sed 's/  running: false/  runStrategy: Always/' > "${vm_yaml}"
-    echo "생성된 파일: ${vm_yaml}"
+    echo "Generated file: ${vm_yaml}"
     oc apply -n "$ns" -f "${vm_yaml}"
     virtctl start "$vm_name" -n "$ns" 2>/dev/null || true
-    print_ok "VM 생성 및 시작: ${CYAN}${vm_name}${NC} (namespace: ${ns})"
+    print_ok "VM created and started: ${CYAN}${vm_name}${NC} (namespace: ${ns})"
 }
 
 step_vms() {
-    print_step "VM 생성 (네임스페이스당 1개)"
+    print_step "Create VMs (1 per namespace)"
 
-    # DataSource 존재 확인
+    # Check DataSource existence
     if ! oc get datasource "$DATASOURCE_NAME" -n "$DATASOURCE_NS" &>/dev/null; then
-        print_warn "DataSource '${DATASOURCE_NAME}' (${DATASOURCE_NS}) 없음"
-        print_info "01-template 단계를 먼저 실행하거나 DATASOURCE_NAME 변수를 변경하세요."
-        print_info "VM 생성을 건너뜁니다."
+        print_warn "DataSource '${DATASOURCE_NAME}' (${DATASOURCE_NS}) not found"
+        print_info "Run 01-template step first or change DATASOURCE_NAME variable."
+        print_info "Skipping VM creation."
         return 0
     fi
 
-    # StorageClass 자동 감지
+    # Auto-detect StorageClass
     if [ -z "${STORAGE_CLASS:-}" ]; then
         STORAGE_CLASS=$(oc get sc \
             -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].metadata.name}' \
             2>/dev/null | awk '{print $1}' || true)
-        [ -n "$STORAGE_CLASS" ] && print_info "StorageClass 자동 감지: ${STORAGE_CLASS}"
+        [ -n "$STORAGE_CLASS" ] && print_info "StorageClass auto-detected: ${STORAGE_CLASS}"
     fi
 
     create_vm "$NS1" "poc-mt-vm-1"
     create_vm "$NS2" "poc-mt-vm-2"
 
-    # 기동 대기
+    # Wait for startup
     echo ""
-    print_info "VM 기동 대기 중 (최대 5분)..."
+    print_info "Waiting for VMs to start (up to 5 minutes)..."
     local retries=30
     local i=0
     while [ "$i" -lt "$retries" ]; do
@@ -259,7 +259,7 @@ step_vms() {
             print_ok "poc-mt-vm-2 (${NS2}) → Running"
             break
         fi
-        printf "  대기 중... mt1=%s  mt2=%s  (%d/%d)\r" \
+        printf "  Waiting... mt1=%s  mt2=%s  (%d/%d)\r" \
             "$s1" "$s2" "$((i+1))" "$retries"
         sleep 10
         i=$((i+1))
@@ -269,10 +269,10 @@ step_vms() {
 
 # =============================================================================
 step_verify() {
-    print_step "검증"
+    print_step "Verification"
 
     echo ""
-    print_info "━━ 네임스페이스 ━━"
+    print_info "━━ Namespaces ━━"
     oc get namespace "$NS1" "$NS2" --no-headers \
         -o custom-columns='NAME:.metadata.name,STATUS:.status.phase'
 
@@ -296,30 +296,30 @@ step_verify() {
 
 # =============================================================================
 cleanup() {
-    print_step "정리 (cleanup)"
+    print_step "Cleanup"
 
-    print_info "VM 삭제..."
+    print_info "Deleting VMs..."
     oc delete vm vm-poc-mt1 -n "$NS1" --ignore-not-found
     oc delete vm vm-poc-mt2 -n "$NS2" --ignore-not-found
 
-    print_info "네임스페이스 삭제 (RoleBinding 포함)..."
+    print_info "Deleting namespaces (including RoleBindings)..."
     oc delete namespace "$NS1" --ignore-not-found
     oc delete namespace "$NS2" --ignore-not-found
 
-    print_info "DataSource NS RoleBinding 삭제..."
+    print_info "Deleting DataSource NS RoleBindings..."
     for user in "$USER1" "$USER3"; do
         oc adm policy remove-role-from-user view "$user" \
             -n "$DATASOURCE_NS" 2>/dev/null || true
     done
 
-    print_info "User / Identity 삭제..."
+    print_info "Deleting User / Identity objects..."
     for user in "$USER1" "$USER2" "$USER3" "$USER4"; do
         oc delete user "$user" --ignore-not-found 2>/dev/null || true
         oc delete identity "${HTPASSWD_IDP_NAME}:${user}" --ignore-not-found 2>/dev/null || true
     done
 
-    print_ok "정리 완료"
-    print_warn "htpasswd secret 및 OAuth IDP 설정은 수동으로 제거하세요."
+    print_ok "Cleanup complete"
+    print_warn "Remove htpasswd secret and OAuth IDP settings manually."
     print_cmd "oc delete secret ${HTPASSWD_SECRET} -n openshift-config"
 }
 
@@ -332,43 +332,43 @@ print_summary() {
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! Multi-Tenant 환경 구성이 끝났습니다.${NC}"
+    echo -e "${GREEN}  Done! Multi-Tenant environment configuration complete.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  ${CYAN}━━ 사용자 / 권한 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "사용자" "네임스페이스" "역할" "VM생성" "비밀번호"
+    echo -e "  ${CYAN}━━ Users / Permissions ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "User" "Namespace" "Role" "Create VM" "Password"
     echo "  ──────────────────────────────────────────────────────────────────────"
-    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER1" "$NS1" "admin" "가능" "$DEFAULT_PASS"
-    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER2" "$NS1" "view"  "불가" "$DEFAULT_PASS"
-    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER3" "$NS2" "admin" "가능" "$DEFAULT_PASS"
-    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER4" "$NS2" "view"  "불가" "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER1" "$NS1" "admin" "Yes" "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER2" "$NS1" "view"  "No"  "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER3" "$NS2" "admin" "Yes" "$DEFAULT_PASS"
+    printf "  %-8s  %-28s  %-8s  %-10s  %s\n" "$USER4" "$NS2" "view"  "No"  "$DEFAULT_PASS"
     echo ""
-    echo -e "  ${CYAN}━━ Console 로그인 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${CYAN}━━ Console Login ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "  URL: ${BLUE}https://${console_url}${NC}"
     echo -e "  IDP: ${CYAN}${HTPASSWD_IDP_NAME}${NC}"
     echo ""
-    echo -e "  ${CYAN}━━ CLI 전환 테스트 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "  # user1 — ${NS1} admin (VM 생성 가능)"
+    echo -e "  ${CYAN}━━ CLI Switch Test ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  # user1 — ${NS1} admin (can create VMs)"
     echo -e "  ${CYAN}oc login -u ${USER1} -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # 성공"
-    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # 거부됨 (권한 없음)"
+    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # success"
+    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # denied (no permission)"
     echo ""
-    echo -e "  # user2 — ${NS1} view (VM 생성 불가)"
+    echo -e "  # user2 — ${NS1} view (cannot create VMs)"
     echo -e "  ${CYAN}oc login -u ${USER2} -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # 성공 (읽기)"
-    echo -e "  ${CYAN}oc create -f vm.yaml -n ${NS1}${NC} # 거부됨 (view only)"
+    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # success (read)"
+    echo -e "  ${CYAN}oc create -f vm.yaml -n ${NS1}${NC} # denied (view only)"
     echo ""
-    echo -e "  # user3 — ${NS2} admin (VM 생성 가능)"
+    echo -e "  # user3 — ${NS2} admin (can create VMs)"
     echo -e "  ${CYAN}oc login -u ${USER3} -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # 성공"
-    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # 거부됨 (권한 없음)"
+    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # success"
+    echo -e "  ${CYAN}oc get vm -n ${NS1}${NC}           # denied (no permission)"
     echo ""
-    echo -e "  # user4 — ${NS2} view (VM 생성 불가)"
+    echo -e "  # user4 — ${NS2} view (cannot create VMs)"
     echo -e "  ${CYAN}oc login -u ${USER4} -p '${DEFAULT_PASS}' ${api_url}${NC}"
-    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # 성공 (읽기)"
-    echo -e "  ${CYAN}oc create -f vm.yaml -n ${NS2}${NC} # 거부됨 (view only)"
+    echo -e "  ${CYAN}oc get vm -n ${NS2}${NC}           # success (read)"
+    echo -e "  ${CYAN}oc create -f vm.yaml -n ${NS2}${NC} # denied (view only)"
     echo ""
-    echo -e "  자세한 내용: 04-multitenancy.md 참조"
+    echo -e "  For details: refer to 04-multitenancy.md"
     echo ""
 }
 
@@ -377,7 +377,7 @@ main() {
     if [ "${1:-}" = "--cleanup" ]; then
         echo ""
         echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${YELLOW}  04-multitenancy: 정리 모드${NC}"
+        echo -e "${YELLOW}  04-multitenancy: Cleanup mode${NC}"
         echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         preflight
         cleanup
@@ -386,7 +386,7 @@ main() {
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  04-multitenancy: 멀티 테넌트 VM 환경 구성${NC}"
+    echo -e "${GREEN}  04-multitenancy: Multi-Tenant VM Environment Configuration${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

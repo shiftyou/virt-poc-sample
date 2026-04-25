@@ -1,37 +1,37 @@
-# OADP (OpenShift API for Data Protection) Operator 설치
+# OADP (OpenShift API for Data Protection) Operator Installation
 
-## 개요
+## Overview
 
-OADP는 OpenShift에서 애플리케이션 및 VM의 백업/복원을 제공하는 Operator입니다.
-Velero 기반으로 동작하며, S3 호환 스토리지(MinIO 또는 ODF MCG)를 백업 저장소로 사용합니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
-- S3 호환 스토리지 (MinIO 또는 ODF MCG)
+OADP is an Operator that provides backup/restore for applications and VMs in OpenShift.
+It operates based on Velero and uses S3-compatible storage (MinIO or ODF MCG) as the backup storage.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
+- S3-compatible storage (MinIO or ODF MCG)
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `OADP` 또는 `OpenShift API for Data Protection` 검색
-3. **OADP Operator** 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `OADP` or `OpenShift API for Data Protection`
+3. Select **OADP Operator**
+4. Click `Install`
+5. Settings:
    - Update channel: `stable-1.4`
    - Installation mode: `A specific namespace on the cluster`
-   - Installed Namespace: `openshift-adp` (기본값)
-6. `Install` 클릭 후 완료 대기
+   - Installed Namespace: `openshift-adp` (default)
+6. Click `Install` and wait for completion
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# 1. Namespace 생성
+# 1. Create Namespace
 oc apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
@@ -41,7 +41,7 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
-# 2. OperatorGroup 생성
+# 2. Create OperatorGroup
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -53,7 +53,7 @@ spec:
     - openshift-adp
 EOF
 
-# 3. Subscription 생성
+# 3. Create Subscription
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -70,24 +70,24 @@ EOF
 
 ---
 
-## 설치 확인
+## Verify Installation
 
 ```bash
-# Operator 설치 상태 확인
+# Check Operator installation status
 oc get csv -n openshift-adp
 
-# OADP Pod 상태 확인
+# Check OADP Pod status
 oc get pods -n openshift-adp
 
-# Velero 확인
+# Check Velero
 oc get deployment velero -n openshift-adp
 ```
 
 ---
 
-## DataProtectionApplication(DPA) 구성
+## DataProtectionApplication (DPA) Configuration
 
-설치 후 `12-oadp/12-oadp.sh` 를 실행하면 DPA, BackupStorageLocation 이 자동으로 구성됩니다.
+After installation, running `12-oadp/12-oadp.sh` will automatically configure DPA and BackupStorageLocation.
 
 ```bash
 cd 12-oadp
@@ -96,15 +96,15 @@ cd 12-oadp
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# OADP Operator 로그 확인
+# Check OADP Operator logs
 oc logs -n openshift-adp deployment/openshift-adp-controller-manager
 
-# Velero 로그 확인
+# Check Velero logs
 oc logs -n openshift-adp deployment/velero
 
-# BackupStorageLocation 상태 확인
+# Check BackupStorageLocation status
 oc get backupstoragelocation -n openshift-adp
 ```

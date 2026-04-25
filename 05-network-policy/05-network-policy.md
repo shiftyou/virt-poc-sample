@@ -1,46 +1,46 @@
-# NetworkPolicy / MultiNetworkPolicy 실습
+# NetworkPolicy / MultiNetworkPolicy Practice
 
-두 개의 네임스페이스에 VM을 배포하고 네트워크 정책으로 트래픽을 제어합니다.
-`04-network-policy.sh` 실행 시 두 가지 방식 중 하나를 선택합니다.
+Deploy VMs in two namespaces and control traffic with network policies.
+When running `04-network-policy.sh`, select one of two methods.
 
 ---
 
-## 방식 비교
+## Method Comparison
 
-| 항목 | NetworkPolicy | MultiNetworkPolicy |
+| Item | NetworkPolicy | MultiNetworkPolicy |
 |------|--------------|-------------------|
 | API | `networking.k8s.io/v1` | `k8s.cni.cncf.io/v1beta1` |
-| 적용 대상 | pod network (eth0, masquerade) | secondary NIC (eth1) |
-| 네트워크 | Linux Bridge (02-network 방식 1/3) | OVN Localnet (02-network 방식 2/4) |
-| 네임스페이스 | `poc-network-policy-1/2` | `poc-multi-network-policy-1/2` |
+| Target | pod network (eth0, masquerade) | secondary NIC (eth1) |
+| Network | Linux Bridge (02-network method 1/3) | OVN Localnet (02-network method 2/4) |
+| Namespace | `poc-network-policy-1/2` | `poc-multi-network-policy-1/2` |
 | NAD | `poc-bridge-nad` | `poc-localnet-nad` |
-| 사전 요건 | NNCP Linux Bridge | NNCP OVN Localnet + `useMultiNetworkPolicy: true` |
+| Prerequisites | NNCP Linux Bridge | NNCP OVN Localnet + `useMultiNetworkPolicy: true` |
 
-> **핵심 차이**: NetworkPolicy는 pod network(eth0)에만 적용됩니다.
-> Linux Bridge secondary NIC(eth1)을 통한 트래픽은 NetworkPolicy 대상 외입니다.
-> MultiNetworkPolicy는 secondary NIC(eth1)을 직접 제어합니다.
+> **Key difference**: NetworkPolicy applies only to pod network (eth0).
+> Traffic through Linux Bridge secondary NIC (eth1) is outside the scope of NetworkPolicy.
+> MultiNetworkPolicy directly controls secondary NIC (eth1).
 
 ---
 
-## 방식 1. NetworkPolicy (Linux Bridge)
+## Method 1. NetworkPolicy (Linux Bridge)
 
 ```
 poc-network-policy-1                      poc-network-policy-2
 ┌────────────────────┐            ┌────────────────────┐
 │  poc-vm-1          │            │  poc-vm-2          │
-│  eth0 ──────────── │──✗ 기본────│ ──────── eth0      │
+│  eth0 ──────────── │──✗ deny────│ ──────── eth0      │
 │  (NetworkPolicy    │            │    NetworkPolicy)   │
 │  eth1: br1 bypass) │            │  (eth1: br1 bypass) │
 └────────────────────┘            └────────────────────┘
-         │   allow-from-ns1-vm-ip 적용 후 (eth0 기준)   ▲
+         │   after allow-from-ns1-vm-ip applied (eth0)   ▲
          └─────────────────────────────────────────────┘
 ```
 
-### 사전 조건
+### Prerequisites
 
-- 02-network 방식 1(Linux Bridge) 또는 3(Linux Bridge + VLAN) 완료
+- 02-network method 1 (Linux Bridge) or 3 (Linux Bridge + VLAN) complete
 
-### 적용되는 정책
+### Applied policies
 
 ```yaml
 # Default Deny All
@@ -76,7 +76,7 @@ spec:
         - podSelector: {}
 ```
 
-### 정책 확인
+### Check policies
 
 ```bash
 oc get networkpolicy -n poc-network-policy-1
@@ -85,44 +85,44 @@ oc get networkpolicy -n poc-network-policy-2
 
 ---
 
-## 방식 2. MultiNetworkPolicy (OVN Localnet)
+## Method 2. MultiNetworkPolicy (OVN Localnet)
 
 ```
 poc-multi-network-policy-1                poc-multi-network-policy-2
 ┌────────────────────┐            ┌────────────────────┐
 │  poc-vm-1          │            │  poc-vm-2          │
 │  eth0 (pod net)    │            │  eth0 (pod net)    │
-│  eth1 ─────────── │──✗ 기본────│ ─────────── eth1   │
+│  eth1 ─────────── │──✗ deny────│ ─────────── eth1   │
 │  (MultiNetPolicy   │            │   MultiNetPolicy)  │
 │   OVN Localnet)    │            │   OVN Localnet)    │
 └────────────────────┘            └────────────────────┘
-         │   allow-from-ns1-vm-ip 적용 후 (eth1 기준)    ▲
+         │   after allow-from-ns1-vm-ip applied (eth1)    ▲
          └─────────────────────────────────────────────┘
 ```
 
-### 사전 조건
+### Prerequisites
 
-- 02-network 방식 2(OVN Localnet) 또는 4(OVN Localnet + VLAN) 완료
-- `useMultiNetworkPolicy: true` 활성화 (스크립트가 자동 처리)
+- 02-network method 2 (OVN Localnet) or 4 (OVN Localnet + VLAN) complete
+- `useMultiNetworkPolicy: true` enabled (script handles automatically)
 
-### MultiNetworkPolicy 활성화
+### Enable MultiNetworkPolicy
 
 ```bash
-# 스크립트가 자동 실행하지만, 수동으로 활성화하려면:
+# Script runs this automatically, but to enable manually:
 oc patch network.operator.openshift.io cluster --type=merge \
   -p '{"spec":{"useMultiNetworkPolicy":true}}'
 
-# 활성화 확인
+# Verify enabled
 oc get network.operator.openshift.io cluster \
   -o jsonpath='{.spec.useMultiNetworkPolicy}'
 ```
 
-### 적용되는 정책
+### Applied policies
 
-MultiNetworkPolicy는 `k8s.v1.cni.cncf.io/policy-for` annotation으로 어떤 NAD(secondary NIC)에 적용할지 지정합니다.
+MultiNetworkPolicy uses the `k8s.v1.cni.cncf.io/policy-for` annotation to specify which NAD (secondary NIC) to apply to.
 
 ```yaml
-# Default Deny All (eth1 기준)
+# Default Deny All (eth1 basis)
 apiVersion: k8s.cni.cncf.io/v1beta1
 kind: MultiNetworkPolicy
 metadata:
@@ -138,7 +138,7 @@ spec:
 ```
 
 ```yaml
-# Allow Same Namespace (eth1 기준)
+# Allow Same Namespace (eth1 basis)
 apiVersion: k8s.cni.cncf.io/v1beta1
 kind: MultiNetworkPolicy
 metadata:
@@ -159,7 +159,7 @@ spec:
         - podSelector: {}
 ```
 
-### 정책 확인
+### Check policies
 
 ```bash
 oc get multinetworkpolicy -n poc-multi-network-policy-1
@@ -168,19 +168,19 @@ oc get multinetworkpolicy -n poc-multi-network-policy-2
 
 ---
 
-## VM IP 할당 (cloud-init networkData)
+## VM IP Assignment (cloud-init networkData)
 
-`04-network-policy.sh`가 VM 생성 시 cloud-init으로 eth1 정적 IP를 자동 설정합니다.
+`04-network-policy.sh` automatically configures a static IP on eth1 via cloud-init during VM creation.
 
-| VM | 네임스페이스 | eth1 IP |
-|----|-------------|---------|
+| VM | Namespace | eth1 IP |
+|----|-----------|---------|
 | poc-vm-1 (NS1) | poc-network-policy-1 / poc-multi-network-policy-1 | `SECONDARY_IP_PREFIX`.11/24 |
 | poc-vm-2 (NS2) | poc-network-policy-2 / poc-multi-network-policy-2 | `SECONDARY_IP_PREFIX`.12/24 |
 
-> `SECONDARY_IP_PREFIX` 기본값: `192.168.100` (env.conf에서 변경 가능)
+> `SECONDARY_IP_PREFIX` default: `192.168.100` (can be changed in env.conf)
 
 ```yaml
-# cloud-init networkData 형식 (version 2)
+# cloud-init networkData format (version 2)
 version: 2
 ethernets:
   eth1:
@@ -193,118 +193,118 @@ ethernets:
         - 8.8.8.8
 ```
 
-## VM 상태 및 IP 확인
+## VM Status and IP Verification
 
 ```bash
-# 방식 1 (NetworkPolicy) — pod network IP 사용
+# Method 1 (NetworkPolicy) — uses pod network IP
 NS1="poc-network-policy-1"
 NS2="poc-network-policy-2"
 
-# 방식 2 (MultiNetworkPolicy) — secondary NIC IP 사용
+# Method 2 (MultiNetworkPolicy) — uses secondary NIC IP
 NS1="poc-multi-network-policy-1"
 NS2="poc-multi-network-policy-2"
 
-# VM 실행 상태
+# VM running status
 oc get vmi -n $NS1
 oc get vmi -n $NS2
 
-# 방식 1: pod network IP (eth0)
+# Method 1: pod network IP (eth0)
 oc get vmi -n $NS1 \
   -o jsonpath='{.items[0].status.interfaces[0].ipAddress}'
 
-# 방식 2: secondary NIC IP (eth1, OVN Localnet)
+# Method 2: secondary NIC IP (eth1, OVN Localnet)
 oc get vmi -n $NS1 \
   -o jsonpath='{.items[0].status.interfaces[?(@.name=="secondary")].ipAddress}'
 ```
 
 ---
 
-## NS1 → NS2 특정 IP 허용
+## Allow Specific IP from NS1 to NS2
 
-### 방식 1 — netpol-allow-from-ns1-ip.yaml 수정 후 적용
+### Method 1 — Modify netpol-allow-from-ns1-ip.yaml and apply
 
 ```bash
-# NS1 VM IP 확인 (eth0)
+# Check NS1 VM IP (eth0)
 NS1_VM_IP=$(oc get vmi -n poc-network-policy-1 \
   -o jsonpath='{.items[0].status.interfaces[0].ipAddress}')
 echo "NS1 VM IP: ${NS1_VM_IP}"
 
-# netpol-allow-from-ns1-ip.yaml 에서 192.168.0.1/32 → 실제 IP/32 로 교체 후 적용
+# Replace 192.168.0.1/32 → actual IP/32 in netpol-allow-from-ns1-ip.yaml and apply
 sed -i "s|192.168.0.1/32|${NS1_VM_IP}/32|" netpol-allow-from-ns1-ip.yaml
 oc apply -f netpol-allow-from-ns1-ip.yaml
 ```
 
-### 방식 2 — multi-netpol-allow-from-ns1-ip.yaml 수정 후 적용
+### Method 2 — Modify multi-netpol-allow-from-ns1-ip.yaml and apply
 
 ```bash
-# NS1 VM secondary NIC IP 확인 (eth1)
+# Check NS1 VM secondary NIC IP (eth1)
 NS1_VM_IP=$(oc get vmi -n poc-multi-network-policy-1 \
   -o jsonpath='{.items[0].status.interfaces[?(@.name=="secondary")].ipAddress}')
 echo "NS1 VM secondary IP: ${NS1_VM_IP}"
 
-# multi-netpol-allow-from-ns1-ip.yaml 에서 IP 교체 후 적용
+# Replace IP in multi-netpol-allow-from-ns1-ip.yaml and apply
 sed -i "s|192.168.0.1/32|${NS1_VM_IP}/32|" multi-netpol-allow-from-ns1-ip.yaml
 oc apply -f multi-netpol-allow-from-ns1-ip.yaml
 ```
 
 ---
 
-## 통신 테스트
+## Communication Test
 
 ```bash
-# NS1 VM 콘솔 접속 (방식에 따라 네임스페이스 변경)
+# Access NS1 VM console (change namespace based on method)
 virtctl console poc-vm-1 -n poc-network-policy-1
-# 또는
+# or
 virtctl console poc-vm-1 -n poc-multi-network-policy-1
 
-# VM 내부에서 NS2 VM으로 ping 테스트
-# allow-from-ns1-vm-ip 적용 전 → 실패
-# allow-from-ns1-vm-ip 적용 후 → 성공
+# Ping test from inside VM to NS2 VM
+# Before applying allow-from-ns1-vm-ip → fail
+# After applying allow-from-ns1-vm-ip → success
 ping -c 3 <NS2_VM_IP>
 curl -v http://<NS2_VM_IP>
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
-### MultiNetworkPolicy가 동작하지 않는 경우
+### MultiNetworkPolicy not working
 
 ```bash
-# useMultiNetworkPolicy 활성화 확인
+# Check useMultiNetworkPolicy is enabled
 oc get network.operator.openshift.io cluster \
   -o jsonpath='{.spec.useMultiNetworkPolicy}'
 
-# 네트워크 오퍼레이터 상태 확인
+# Check network operator status
 oc get network.operator.openshift.io cluster \
   -o jsonpath='{.status.conditions[?(@.type=="Progressing")].status}'
 
-# MultiNetworkPolicy 컨트롤러 Pod 확인
+# Check MultiNetworkPolicy controller Pod
 oc get pods -n openshift-multus | grep multi-networkpolicy
 
-# 정책 annotation 확인 (NAD 이름 불일치 확인)
+# Check policy annotation (verify NAD name mismatch)
 oc get multinetworkpolicy -n poc-multi-network-policy-1 -o yaml \
   | grep "policy-for"
 ```
 
-### NetworkPolicy가 secondary NIC에 적용되지 않는 경우
+### NetworkPolicy not applying to secondary NIC
 
-NetworkPolicy는 pod network(eth0)에만 적용됩니다.
-Linux Bridge secondary NIC(eth1)을 통한 트래픽을 제어하려면 MultiNetworkPolicy(방식 2)를 사용하세요.
+NetworkPolicy applies only to pod network (eth0).
+To control traffic through Linux Bridge secondary NIC (eth1), use MultiNetworkPolicy (Method 2).
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# 방식 1
+# Method 1
 oc delete networkpolicy --all -n poc-network-policy-1
 oc delete networkpolicy --all -n poc-network-policy-2
 oc delete vm --all -n poc-network-policy-1
 oc delete vm --all -n poc-network-policy-2
 oc delete namespace poc-network-policy-1 poc-network-policy-2
 
-# 방식 2
+# Method 2
 oc delete multinetworkpolicy --all -n poc-multi-network-policy-1
 oc delete multinetworkpolicy --all -n poc-multi-network-policy-2
 oc delete vm --all -n poc-multi-network-policy-1

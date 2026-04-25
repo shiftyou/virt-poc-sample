@@ -1,35 +1,35 @@
-# 모니터링 실습 (OpenShift Console / COO / Grafana / Dell / Hitachi)
+# Monitoring Practice (OpenShift Console / COO / Grafana / Dell / Hitachi)
 
-OpenShift Virtualization 환경의 통합 모니터링 구성입니다.
+Integrated monitoring configuration for an OpenShift Virtualization environment.
 
 ---
 
 ## OpenShift Monitoring vs Cluster Observability Operator (COO)
 
-OpenShift에는 두 가지 독립적인 Prometheus 기반 모니터링 스택이 존재합니다.
+OpenShift has two independent Prometheus-based monitoring stacks.
 
-| 항목 | OpenShift Monitoring | COO (MonitoringStack) |
+| Item | OpenShift Monitoring | COO (MonitoringStack) |
 |------|----------------------|----------------------|
-| **운영 주체** | OpenShift 플랫폼 내장 | 별도 Operator 설치 필요 |
-| **범위** | 클러스터 전체 (+ user-workload) | 네임스페이스 단위 |
+| **Operator** | Built into OpenShift platform | Requires separate Operator installation |
+| **Scope** | Entire cluster (+ user-workload) | Per namespace |
 | **API** | `monitoring.coreos.com/v1` | `monitoring.rhobs/v1` |
-| **설정 방법** | ConfigMap (`cluster-monitoring-config`) | `MonitoringStack` CR |
-| **콘솔 통합** | Console → Observe → Metrics 직접 표시 | 미지원 (port-forward 또는 Grafana) |
-| **데이터 격리** | user-workload는 네임스페이스별 분리 가능 | MonitoringStack 단위로 완전 격리 |
-| **보존 기간** | 클러스터 설정 공유 | MonitoringStack별 독립 설정 |
-| **멀티테넌시** | RBAC으로 조회 권한만 분리 | Prometheus 인스턴스 자체를 분리 |
-| **주요 사용처** | 플랫폼·앱 공통 모니터링 | 팀/프로젝트별 독립 모니터링 |
+| **Configuration** | ConfigMap (`cluster-monitoring-config`) | `MonitoringStack` CR |
+| **Console integration** | Console → Observe → Metrics (direct display) | Not supported (port-forward or Grafana) |
+| **Data isolation** | user-workload can be separated per namespace | Fully isolated per MonitoringStack |
+| **Retention period** | Shared cluster configuration | Independent configuration per MonitoringStack |
+| **Multi-tenancy** | Separate query permissions via RBAC | Separate Prometheus instances entirely |
+| **Primary use case** | Common platform and app monitoring | Independent monitoring per team/project |
 
-### 어떤 것을 선택할까?
+### Which one to choose?
 
-- **OpenShift Monitoring (user-workload)** — 추가 인프라 없이 OpenShift Console에서 바로 확인.
-  단일 클러스터, 중앙 집중식 모니터링에 적합.
+- **OpenShift Monitoring (user-workload)** — Check directly in OpenShift Console without additional infrastructure.
+  Suitable for single cluster, centralized monitoring.
 
-- **COO MonitoringStack** — 네임스페이스 단위로 Prometheus를 독립 배포.
-  팀별 메트릭 격리, 보존 정책 분리, 클러스터 Prometheus 부하 분산이 필요할 때 적합.
+- **COO MonitoringStack** — Deploy Prometheus independently per namespace.
+  Suitable when per-team metric isolation, separate retention policies, or cluster Prometheus load distribution is needed.
 
-- **두 스택 병행 사용** (본 POC 구성) — `monitoring.coreos.com/v1` ServiceMonitor로 OpenShift Console
-  가시성을 확보하면서, `monitoring.rhobs/v1` ServiceMonitor로 COO Prometheus에도 동시에 수집.
+- **Use both stacks together** (this POC configuration) — Secure visibility in OpenShift Console with `monitoring.coreos.com/v1` ServiceMonitor,
+  while simultaneously collecting into COO Prometheus with `monitoring.rhobs/v1` ServiceMonitor.
 
 ```
 [VM node_exporter]
@@ -49,41 +49,41 @@ OpenShift에는 두 가지 독립적인 Prometheus 기반 모니터링 스택이
 
 ## 1. OpenShift Console (Observe → Metrics)
 
-OpenShift 내장 Prometheus(user-workload)를 통해 별도 툴 없이 콘솔에서 바로 VM 메트릭을 조회합니다.
+Query VM metrics directly in the console without additional tools using OpenShift's built-in Prometheus (user-workload).
 
-### 사전 조건
+### Prerequisites
 
-- 네임스페이스에 user-workload 모니터링 레이블 설정:
+- Set user-workload monitoring label on namespace:
 
 ```bash
 oc label namespace poc-monitoring openshift.io/cluster-monitoring=true --overwrite
 ```
 
-- `monitoring.coreos.com/v1` ServiceMonitor 등록 (10-monitoring.sh 실행 시 자동 생성)
+- Register `monitoring.coreos.com/v1` ServiceMonitor (automatically created when 10-monitoring.sh is executed)
 
-### 메트릭 조회
+### Query Metrics
 
 1. OpenShift Console → **Observe → Metrics**
-2. 상단 `Project` 드롭다운에서 `poc-monitoring` 선택
-3. PromQL 입력:
+2. Select `poc-monitoring` from the `Project` dropdown at the top
+3. Enter PromQL:
 
 ```promql
-# VM node_exporter 메모리 여유량
+# VM node_exporter available memory
 node_memory_MemAvailable_bytes{job="poc-monitoring-vm"}
 
-# VM CPU 사용률
+# VM CPU utilization
 rate(node_cpu_seconds_total{job="poc-monitoring-vm",mode!="idle"}[5m])
 
-# VM 디스크 읽기 속도
+# VM disk read speed
 rate(node_disk_read_bytes_total{job="poc-monitoring-vm"}[5m])
 ```
 
-### 알림 규칙 확인
+### Check Alert Rules
 
-OpenShift Console → **Observe → Alerting** → `poc-monitoring` 프로젝트에서
-PrometheusRule로 정의한 알림(`VMNotRunning`, `VMHighMemoryUsage`) 상태를 확인합니다.
+In OpenShift Console → **Observe → Alerting** → `poc-monitoring` project,
+check the status of alerts (`VMNotRunning`, `VMHighMemoryUsage`) defined by PrometheusRule.
 
-### ServiceMonitor 상태 확인
+### Check ServiceMonitor Status
 
 ```bash
 oc get servicemonitor.monitoring.coreos.com -n poc-monitoring
@@ -94,39 +94,39 @@ oc get endpoints poc-monitoring-node-exporter -n poc-monitoring
 
 ## 2. Cluster Observability Operator (COO)
 
-COO는 네임스페이스 범위의 Prometheus/Alertmanager 스택을 `MonitoringStack` CR로 배포합니다.
-클러스터 전역 Prometheus 없이 독립적인 모니터링 범위를 구성하고, VM의 node_exporter 메트릭을
-수집하는 전체 흐름을 실습합니다.
+COO deploys a namespace-scoped Prometheus/Alertmanager stack via the `MonitoringStack` CR.
+Practice the full workflow of configuring an independent monitoring scope without a cluster-wide Prometheus,
+and collecting VM node_exporter metrics.
 
 ```
 poc-monitoring-vm (VM)
-  └─ node_exporter :9100 (VM 내부)
+  └─ node_exporter :9100 (inside VM)
        └─ virt-launcher Pod (masquerade NAT)
             └─ Service: poc-monitoring-node-exporter
                  ├─ ServiceMonitor (monitoring.rhobs/v1)    → COO Prometheus
                  └─ ServiceMonitor (monitoring.coreos.com/v1) → OpenShift Console
 ```
 
-### 사전 조건
+### Prerequisites
 
-- Cluster Observability Operator 설치 (OperatorHub → "Cluster Observability Operator")
-- OpenShift Virtualization 설치 (`env.conf`의 `VIRT_INSTALLED=true`)
-- poc Template 등록 (`01-template/01-template.sh` 실행)
-- `env.conf`의 `COO_INSTALLED=true` 설정
+- Cluster Observability Operator installed (OperatorHub → "Cluster Observability Operator")
+- OpenShift Virtualization installed (`VIRT_INSTALLED=true` in `env.conf`)
+- poc Template registered (run `01-template/01-template.sh`)
+- `COO_INSTALLED=true` set in `env.conf`
 
 ---
 
-### 2-1. poc 템플릿으로 VM 생성
+### 2-1. Create VM from poc template
 
 ```bash
 VM_NAME="poc-monitoring-vm"
 NS="poc-monitoring"
 
-# poc 템플릿으로 VM 생성
+# Create VM from poc template
 oc process -n openshift poc -p NAME="$VM_NAME" > ${VM_NAME}.yaml
 oc apply -n "$NS" -f ${VM_NAME}.yaml
 
-# virt-launcher Pod에 monitor=metrics 레이블 전파
+# Propagate monitor=metrics label to virt-launcher Pod
 oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
   "spec": {
     "template": {
@@ -139,28 +139,28 @@ oc patch vm "$VM_NAME" -n "$NS" --type=merge -p '{
   }
 }'
 
-# VM 시작
+# Start VM
 virtctl start "$VM_NAME" -n "$NS"
 
-# 상태 확인
+# Check status
 oc get vmi "$VM_NAME" -n "$NS"
 ```
 
-VM이 Running 상태가 되면 VM 내부에 node_exporter를 설치합니다.
+When the VM is in Running state, install node_exporter inside the VM.
 
 ```bash
-# VM 콘솔 접근
+# Access VM console
 virtctl console "$VM_NAME" -n "$NS"
 
-# VM 내부에서 node_exporter 설치 (09-node-exporter/node-exporter-install.sh 참조)
+# Install node_exporter inside VM (refer to 09-node-exporter/node-exporter-install.sh)
 ```
 
 ---
 
-### 2-2. node-exporter Service 생성
+### 2-2. Create node-exporter Service
 
-virt-launcher Pod(`monitor=metrics`)를 셀렉터로 지정하여 VM 내부 node_exporter(9100)에 접근합니다.
-masquerade 네트워크에서 Pod 포트가 VM 포트로 NAT 됩니다.
+Specify the virt-launcher Pod (`monitor=metrics`) as the selector to access node_exporter (9100) inside the VM.
+In masquerade networking, Pod port is NAT'd to VM port.
 
 ```bash
 oc apply -f - <<'EOF'
@@ -184,7 +184,7 @@ spec:
 EOF
 ```
 
-Endpoints 확인:
+Check Endpoints:
 
 ```bash
 oc get endpoints poc-monitoring-node-exporter -n poc-monitoring
@@ -192,10 +192,9 @@ oc get endpoints poc-monitoring-node-exporter -n poc-monitoring
 
 ---
 
-### 2-3. MonitoringStack 배포
+### 2-3. Deploy MonitoringStack
 
-`resourceSelector`의 레이블(`monitoring.rhobs/stack: poc-monitoring-stack`)이 붙은
-ServiceMonitor / PrometheusRule / PodMonitor를 자동으로 수집합니다.
+Automatically collects ServiceMonitor / PrometheusRule / PodMonitor that have the `resourceSelector` label (`monitoring.rhobs/stack: poc-monitoring-stack`).
 
 ```bash
 oc apply -f - <<'EOF'
@@ -224,7 +223,7 @@ spec:
 EOF
 ```
 
-배포 확인:
+Verify deployment:
 
 ```bash
 oc get monitoringstack -n poc-monitoring
@@ -234,11 +233,11 @@ oc get pods -n poc-monitoring -l app.kubernetes.io/name=alertmanager
 
 ---
 
-### 2-4. ServiceMonitor 생성
+### 2-4. Create ServiceMonitor
 
-#### COO용 ServiceMonitor (`monitoring.rhobs/v1`)
+#### ServiceMonitor for COO (`monitoring.rhobs/v1`)
 
-`monitoring.rhobs/stack` 레이블로 MonitoringStack의 Prometheus와 연결됩니다.
+Connected to MonitoringStack's Prometheus via the `monitoring.rhobs/stack` label.
 
 ```bash
 oc apply -f - <<'EOF'
@@ -265,13 +264,13 @@ spec:
 EOF
 ```
 
-#### OpenShift Console용 ServiceMonitor (`monitoring.coreos.com/v1`)
+#### ServiceMonitor for OpenShift Console (`monitoring.coreos.com/v1`)
 
-OpenShift Console의 **Observe → Metrics** 탭에서 메트릭을 조회하려면
-`monitoring.coreos.com/v1` ServiceMonitor와 네임스페이스 레이블이 필요합니다.
+To query metrics in OpenShift Console's **Observe → Metrics** tab,
+a `monitoring.coreos.com/v1` ServiceMonitor and namespace label are required.
 
 ```bash
-# 네임스페이스에 user-workload 모니터링 레이블 추가
+# Add user-workload monitoring label to namespace
 oc label namespace poc-monitoring openshift.io/cluster-monitoring=true --overwrite
 
 oc apply -f - <<'EOF'
@@ -298,19 +297,19 @@ spec:
 EOF
 ```
 
-ServiceMonitor 목록 확인:
+Check ServiceMonitor list:
 
 ```bash
-# COO용
+# For COO
 oc get servicemonitor.monitoring.rhobs -n poc-monitoring
 
-# OpenShift Console용
+# For OpenShift Console
 oc get servicemonitor.monitoring.coreos.com -n poc-monitoring
 ```
 
 ---
 
-### 2-5. PrometheusRule (VM 알림 규칙)
+### 2-5. PrometheusRule (VM alert rules)
 
 ```bash
 oc apply -f - <<'EOF'
@@ -332,8 +331,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "VM이 Running 상태가 아닙니다"
-            description: "VM {{ $labels.name }} 상태: {{ $labels.phase }}"
+            summary: "VM is not in Running state"
+            description: "VM {{ $labels.name }} state: {{ $labels.phase }}"
         - alert: VMHighMemoryUsage
           expr: >
             (kubevirt_vmi_memory_resident_bytes /
@@ -342,28 +341,28 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "VM 메모리 사용률 90% 초과"
-            description: "VM {{ $labels.name }} 의 메모리 사용률이 높습니다."
+            summary: "VM memory usage exceeds 90%"
+            description: "VM {{ $labels.name }} has high memory usage."
 EOF
 ```
 
 ---
 
-### 2-6. COO 메트릭 보기
+### 2-6. View COO metrics
 
-COO MonitoringStack의 Prometheus는 클러스터 내부 서비스로 OpenShift Console에 직접 통합되지 않습니다.
-대신 **두 가지 경로**로 메트릭을 조회합니다.
+COO MonitoringStack's Prometheus is not directly integrated with OpenShift Console as a cluster internal service.
+Instead, query metrics via **two routes**.
 
-> **핵심 원리**
-> - OpenShift Console은 `monitoring.coreos.com/v1` ServiceMonitor → **user-workload Prometheus** 경로만 표시
-> - COO Prometheus(`monitoring.rhobs/v1`)는 Console 밖에서 Grafana 또는 port-forward로 접근
-> - 본 POC는 동일 Service에 두 종류 ServiceMonitor를 모두 붙여 **양쪽 동시 수집**
+> **Key principle**
+> - OpenShift Console only shows the `monitoring.coreos.com/v1` ServiceMonitor → **user-workload Prometheus** route
+> - COO Prometheus (`monitoring.rhobs/v1`) is accessed outside Console via Grafana or port-forward
+> - This POC attaches both types of ServiceMonitor to the same Service for **simultaneous collection from both**
 
 ```
 [poc-monitoring-node-exporter Service]
          │
          ├─ monitoring.coreos.com/v1 ServiceMonitor
-         │        └─ user-workload Prometheus (OpenShift 내장)
+         │        └─ user-workload Prometheus (OpenShift built-in)
          │                 └─ Console → Observe → Metrics ✔ (Project: poc-monitoring)
          │
          └─ monitoring.rhobs/v1 ServiceMonitor
@@ -374,70 +373,70 @@ COO MonitoringStack의 Prometheus는 클러스터 내부 서비스로 OpenShift 
 
 ---
 
-#### 방법 1 — OpenShift Console (Observe → Metrics)
+#### Method 1 — OpenShift Console (Observe → Metrics)
 
-COO Prometheus가 아닌 **user-workload Prometheus**를 통해 동일 메트릭을 콘솔에서 조회합니다.
-`monitoring.coreos.com/v1` ServiceMonitor(`poc-vm-node-exporter-console`)가 이미 등록되어 있으면
-아래 절차만 따르면 됩니다.
+Query the same metrics in the console through **user-workload Prometheus** rather than COO Prometheus.
+If the `monitoring.coreos.com/v1` ServiceMonitor (`poc-vm-node-exporter-console`) is already registered,
+just follow the steps below.
 
-**조회 절차:**
+**Query steps:**
 
-1. OpenShift Console 접속
-2. 상단 **Project** 드롭다운 → `poc-monitoring` 선택
-3. 좌측 메뉴 → **Observe → Metrics**
-4. PromQL 입력창에 쿼리 입력 후 **Run queries**:
+1. Access OpenShift Console
+2. **Project** dropdown at top → select `poc-monitoring`
+3. Left menu → **Observe → Metrics**
+4. Enter query in PromQL input and click **Run queries**:
 
 ```promql
-# VM 메모리 여유량
+# VM available memory
 node_memory_MemAvailable_bytes{job="poc-monitoring-vm"}
 
-# VM CPU 사용률
+# VM CPU utilization
 rate(node_cpu_seconds_total{job="poc-monitoring-vm",mode!="idle"}[5m])
 
-# VM 디스크 읽기 속도
+# VM disk read speed
 rate(node_disk_read_bytes_total{job="poc-monitoring-vm"}[5m])
 ```
 
-**알림 규칙 확인:**
+**Check alert rules:**
 
-- **Observe → Alerting** → `poc-monitoring` 프로젝트
-- `VMNotRunning`, `VMHighMemoryUsage` 알림 상태 확인
+- **Observe → Alerting** → `poc-monitoring` project
+- Check `VMNotRunning`, `VMHighMemoryUsage` alert status
 
-**사전 조건 확인:**
+**Verify prerequisites:**
 
 ```bash
-# 네임스페이스 레이블 확인
+# Check namespace label
 oc get namespace poc-monitoring --show-labels | grep cluster-monitoring
 
-# ServiceMonitor 등록 확인
+# Verify ServiceMonitor registration
 oc get servicemonitor.monitoring.coreos.com poc-vm-node-exporter-console -n poc-monitoring
 
-# Endpoints 활성화 확인 (VM node_exporter가 실행 중이어야 함)
+# Verify Endpoints active (node_exporter must be running in VM)
 oc get endpoints poc-monitoring-node-exporter -n poc-monitoring
 ```
 
-> **메트릭이 안 보일 때**
-> - Endpoints가 비어 있으면 VM 내 node_exporter가 미실행 → `09-node-exporter/node-exporter-install.sh` 실행
-> - user-workload-monitoring이 비활성화된 경우:
+> **When metrics are not visible**
+> - If Endpoints are empty, node_exporter is not running in the VM → run `09-node-exporter/node-exporter-install.sh`
+> - If user-workload-monitoring is disabled:
 >   ```bash
 >   oc get configmap cluster-monitoring-config -n openshift-monitoring -o yaml | grep enableUserWorkload
->   # enableUserWorkload: true 가 없으면 활성화 필요
+>   # If enableUserWorkload: true is absent, it needs to be enabled
 >   ```
 
 ---
 
-#### 방법 2 — Grafana (COO Prometheus DataSource)
+#### Method 2 — Grafana (COO Prometheus DataSource)
 
-COO Prometheus에 직접 연결된 DataSource를 통해 Grafana에서 조회합니다.
-`10-monitoring.sh` 실행 시 `coo-prometheus-datasource`가 자동 등록됩니다.
+Query in Grafana through a DataSource directly connected to COO Prometheus.
+`coo-prometheus-datasource` is automatically registered when `10-monitoring.sh` is executed.
 
-**DataSource 등록 확인:**
+**Verify DataSource registration:**
 
 ```bash
 oc get grafanadatasource coo-prometheus-datasource -n poc-monitoring
 ```
 
-**등록이 필요한 경우 수동 생성:**
+**Manual creation if registration is needed:**
 
 ```bash
 oc apply -f - <<'EOF'
@@ -461,49 +460,49 @@ spec:
 EOF
 ```
 
-**Grafana 접속 및 조회 절차:**
+**Access Grafana and query steps:**
 
 ```bash
-# Grafana Route 확인
+# Check Grafana Route
 oc get route -n poc-monitoring -l app=grafana -o jsonpath='{.items[0].spec.host}'
 ```
 
-1. `https://<grafana-route>` 접속 → `admin` / `grafana123`(또는 env.conf 값)
-2. 좌측 메뉴 → **Explore**
-3. 상단 DataSource 드롭다운 → **COO-Prometheus** 선택
-4. **Metrics browser** 또는 PromQL 직접 입력:
+1. Access `https://<grafana-route>` → `admin` / `grafana123` (or env.conf value)
+2. Left menu → **Explore**
+3. DataSource dropdown at top → select **COO-Prometheus**
+4. Enter PromQL in **Metrics browser** or directly:
 
 ```promql
-# node_exporter 메트릭 (COO Prometheus 수집분)
+# node_exporter metrics (COO Prometheus collected)
 node_memory_MemAvailable_bytes{job="poc-monitoring-vm"}
 rate(node_cpu_seconds_total{job="poc-monitoring-vm",mode!="idle"}[5m])
 ```
 
-> **DataSource 연결 실패 시**
-> COO Prometheus Pod가 아직 기동 중일 수 있습니다.
+> **When DataSource connection fails**
+> COO Prometheus Pod may still be starting up.
 > ```bash
 > oc get pods -n poc-monitoring -l app.kubernetes.io/name=prometheus
-> # STATUS가 Running이어야 Grafana에서 정상 조회 가능
+> # STATUS must be Running for Grafana to query successfully
 > ```
 
-**참고 — Port-forward로 COO Prometheus 직접 접근:**
+**Note — Direct access to COO Prometheus via Port-forward:**
 
 ```bash
 oc port-forward svc/prometheus-operated 9090:9090 -n poc-monitoring
-# 브라우저: http://localhost:9090
-# Targets 탭 → poc-vm-node-exporter ServiceMonitor 수집 대상 확인
-# Alerts 탭 → VMNotRunning, VMHighMemoryUsage 알림 상태 확인
+# Browser: http://localhost:9090
+# Targets tab → check poc-vm-node-exporter ServiceMonitor scrape targets
+# Alerts tab → check VMNotRunning, VMHighMemoryUsage alert status
 ```
 
 ---
 
-### 2-7. 전체 상태 확인
+### 2-7. Check overall status
 
 ```bash
 # MonitoringStack
 oc get monitoringstack -n poc-monitoring
 
-# 배포된 Pod 전체
+# All deployed Pods
 oc get pods -n poc-monitoring
 
 # ServiceMonitor (COO)
@@ -515,30 +514,30 @@ oc get servicemonitor.monitoring.coreos.com -n poc-monitoring
 # PrometheusRule
 oc get prometheusrule -n poc-monitoring
 
-# VM 상태
+# VM status
 oc get vmi poc-monitoring-vm -n poc-monitoring
 ```
 
 ---
 
-## 3. Grafana 대시보드
+## 3. Grafana Dashboard
 
-Grafana Operator를 통해 Grafana 인스턴스를 배포하고 OpenShift Monitoring(Prometheus)에 연동합니다.
+Deploy a Grafana instance via Grafana Operator and integrate it with OpenShift Monitoring (Prometheus).
 
-### 사전 조건
+### Prerequisites
 
-- Grafana 커뮤니티 Operator 설치 (아래 설치 가이드 참조)
-- `env.conf`의 `GRAFANA_ADMIN_PASS` 설정
+- Grafana Community Operator installed (see installation guide below)
+- `GRAFANA_ADMIN_PASS` configured in `env.conf`
 
-### Grafana 커뮤니티 Operator 설치
+### Install Grafana Community Operator
 
-OperatorHub(community-operators)에서 Grafana Operator를 `poc-monitoring` 네임스페이스 범위로 설치합니다.
+Install the Grafana Operator from OperatorHub (community-operators) scoped to the `poc-monitoring` namespace.
 
 ```bash
-# 네임스페이스 생성 (없으면)
+# Create namespace (if it does not exist)
 oc new-project poc-monitoring
 
-# Grafana Operator 설치 (namespace-scoped)
+# Install Grafana Operator (namespace-scoped)
 oc apply -f - <<'EOF'
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -561,15 +560,15 @@ spec:
   sourceNamespace: openshift-marketplace
 EOF
 
-# 설치 완료 확인 (Succeeded 상태 대기)
+# Verify installation complete (wait for Succeeded status)
 oc get csv -n poc-monitoring | grep grafana
 # grafana-operator.v5.x.x   Grafana Operator   5.x.x   Succeeded
 
-# setup.sh 재실행하여 GRAFANA_INSTALLED=true 업데이트
+# Re-run setup.sh to update GRAFANA_INSTALLED=true
 ./setup.sh
 ```
 
-### Grafana 인스턴스 배포
+### Deploy Grafana instance
 
 ```bash
 source env.conf
@@ -596,18 +595,18 @@ spec:
 EOF
 ```
 
-### OpenShift Prometheus DataSource 연동
+### Integrate OpenShift Prometheus DataSource
 
 ```bash
-# Grafana가 Prometheus를 읽을 수 있도록 ClusterRoleBinding 생성
+# Create ClusterRoleBinding so Grafana can read Prometheus
 oc create clusterrolebinding grafana-cluster-monitoring-view \
   --clusterrole=cluster-monitoring-view \
   --serviceaccount=poc-monitoring:poc-grafana-sa 2>/dev/null || true
 
-# Prometheus 토큰 획득
+# Obtain Prometheus token
 TOKEN=$(oc create token poc-grafana-sa -n poc-monitoring --duration=8760h)
 
-# GrafanaDatasource 생성
+# Create GrafanaDatasource
 oc apply -f - <<EOF
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -633,7 +632,7 @@ spec:
 EOF
 ```
 
-### OpenShift Virtualization 대시보드 배포
+### Deploy OpenShift Virtualization Dashboard
 
 ```bash
 oc apply -f - <<'EOF'
@@ -685,9 +684,9 @@ spec:
 EOF
 ```
 
-### Grafana 접속
+### Access Grafana
 
-`11-monitoring.sh` 실행 시 Route가 자동 생성됩니다. 수동으로 생성이 필요한 경우:
+A Route is automatically created when `11-monitoring.sh` is executed. For manual creation:
 
 ```bash
 oc apply -f - <<'EOF'
@@ -709,15 +708,15 @@ EOF
 ```
 
 ```bash
-# 접속 URL 출력
+# Print access URL
 echo "https://$(oc get route poc-grafana-route -n poc-monitoring \
   -o jsonpath='{.spec.host}')"
 ```
 
-**로그인 계정 확인:**
+**Check login credentials:**
 
 ```bash
-# env.conf 의 GRAFANA_ADMIN_PASS 값 (기본값: grafana123)
+# GRAFANA_ADMIN_PASS value from env.conf (default: grafana123)
 oc get secret grafana-admin-credentials -n poc-monitoring \
   -o jsonpath='{.data.GF_SECURITY_ADMIN_USER}' | base64 -d && echo
 oc get secret grafana-admin-credentials -n poc-monitoring \
@@ -726,43 +725,43 @@ oc get secret grafana-admin-credentials -n poc-monitoring \
 
 ---
 
-### VM 상태 모니터링
+### VM Status Monitoring
 
-Grafana에서 KubeVirt 메트릭으로 VM 상태를 모니터링합니다.
-Prometheus DataSource가 연동된 상태에서 **Explore** 또는 대시보드에서 아래 PromQL을 사용합니다.
+Monitor VM status with KubeVirt metrics in Grafana.
+With Prometheus DataSource integrated, use the following PromQL in **Explore** or dashboards.
 
-**주요 메트릭:**
+**Key metrics:**
 
 ```promql
-# VM 실행 상태 (Running VM 수)
+# VM running state (number of Running VMs)
 sum(kubevirt_vmi_phase_count{phase="Running"})
 
-# VM별 CPU 사용률
+# CPU utilization per VM
 rate(kubevirt_vmi_vcpu_seconds_total[5m])
 
-# VM 메모리 사용량
+# VM memory usage
 kubevirt_vmi_memory_used_bytes
 
-# VM 메모리 여유량
+# VM available memory
 kubevirt_vmi_memory_available_bytes
 
-# VM 네트워크 수신
+# VM network receive
 rate(kubevirt_vmi_network_receive_bytes_total[5m])
 
-# VM 네트워크 송신
+# VM network transmit
 rate(kubevirt_vmi_network_transmit_bytes_total[5m])
 
-# VM 디스크 읽기
+# VM disk read
 rate(kubevirt_vmi_storage_read_traffic_bytes_total[5m])
 
-# VM 디스크 쓰기
+# VM disk write
 rate(kubevirt_vmi_storage_write_traffic_bytes_total[5m])
 
-# Live Migration 상태
+# Live Migration status
 kubevirt_vmi_migration_phase_transition_time_from_creation_seconds
 ```
 
-**Grafana.com 공식 KubeVirt 대시보드 임포트:**
+**Import official KubeVirt dashboard from Grafana.com:**
 
 ```bash
 oc apply -f - <<'EOF'
@@ -776,39 +775,39 @@ spec:
     matchLabels:
       dashboards: poc-grafana
   grafanaCom:
-    id: 11625    # KubeVirt 공식 대시보드
+    id: 11625    # Official KubeVirt dashboard
 EOF
 ```
 
-또는 Grafana UI에서 직접 임포트:
+Or import directly from Grafana UI:
 1. **Dashboards → Import**
-2. **Grafana.com Dashboard ID**: `11625` 입력 후 **Load**
-3. DataSource: **Prometheus** 선택 → **Import**
+2. Enter **Grafana.com Dashboard ID**: `11625` then **Load**
+3. Select DataSource: **Prometheus** → **Import**
 
-**OpenShift Console에서 VM 상태 확인 (Grafana 없이):**
+**Check VM status in OpenShift Console (without Grafana):**
 
 ```bash
-# Console > Virtualization > VirtualMachines > 개별 VM > Metrics 탭
-# 또는 CLI
+# Console > Virtualization > VirtualMachines > individual VM > Metrics tab
+# Or CLI
 oc get vmi -A
-oc get vmim -A   # Live Migration 상태
+oc get vmim -A   # Live Migration status
 ```
 
 ---
 
-## 4. Dell 스토리지 모니터링
+## 4. Dell Storage Monitoring
 
-Dell PowerStore / PowerFlex 스토리지를 OpenShift Monitoring과 연동합니다.
+Integrate Dell PowerStore / PowerFlex storage with OpenShift Monitoring.
 
-### Dell CSI PowerStore — 메트릭 수집
+### Dell CSI PowerStore — Metrics collection
 
-Dell CSI Driver는 Prometheus 메트릭 엔드포인트를 제공합니다.
+Dell CSI Driver provides a Prometheus metrics endpoint.
 
 ```bash
-# Dell CSI PowerStore metrics 서비스 확인
+# Check Dell CSI PowerStore metrics service
 oc get service -n powerstore -l app=powerstore-metrics
 
-# ServiceMonitor 등록 (CSI Driver가 배포된 네임스페이스)
+# Register ServiceMonitor (namespace where CSI Driver is deployed)
 oc apply -f - <<'EOF'
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -829,10 +828,10 @@ spec:
 EOF
 ```
 
-### Dell PowerFlex (VxFlex OS) 모니터링
+### Dell PowerFlex (VxFlex OS) Monitoring
 
 ```bash
-# PowerFlex SDC 메트릭 수집
+# Collect PowerFlex SDC metrics
 oc apply -f - <<'EOF'
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -853,36 +852,36 @@ spec:
 EOF
 ```
 
-### Dell 스토리지 Grafana 대시보드
+### Dell Storage Grafana Dashboard
 
-Dell GitHub에서 공식 대시보드를 가져옵니다:
+Import official dashboards from Dell GitHub:
 
 ```bash
-# Dell CSI 공식 대시보드 (JSON 임포트)
+# Dell CSI official dashboard (JSON import)
 # https://github.com/dell/karavi-observability/tree/main/grafana/dashboards
 
-# Grafana UI에서 임포트:
+# Import from Grafana UI:
 # Dashboards → Import → Upload JSON file
-# 또는 Dashboard ID 입력 (Grafana.com 검색: dell csi)
+# Or enter Dashboard ID (search Grafana.com: dell csi)
 ```
 
-주요 모니터링 항목:
-- 스토리지 용량 및 사용률
-- I/O 처리량 및 지연시간
-- 볼륨별 IOPS
+Key monitoring items:
+- Storage capacity and utilization
+- I/O throughput and latency
+- IOPS per volume
 
 ---
 
-## 5. Hitachi 스토리지 모니터링
+## 5. Hitachi Storage Monitoring
 
-Hitachi VSP 시리즈를 OpenShift Monitoring과 연동합니다.
+Integrate Hitachi VSP series with OpenShift Monitoring.
 
-### Hitachi Ops Center API 연동
+### Hitachi Ops Center API Integration
 
-Hitachi VSP는 REST API를 제공합니다. Prometheus exporter로 메트릭을 수집합니다.
+Hitachi VSP provides a REST API. Collect metrics using a Prometheus exporter.
 
 ```bash
-# Hitachi Storage Exporter 배포
+# Deploy Hitachi Storage Exporter
 oc apply -f - <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -901,7 +900,7 @@ spec:
     spec:
       containers:
         - name: exporter
-          image: quay.io/poc/hitachi-exporter:latest   # 실제 이미지로 변경
+          image: quay.io/poc/hitachi-exporter:latest   # Replace with actual image
           env:
             - name: HITACHI_HOST
               value: "<Hitachi_Ops_Center_IP>"
@@ -917,7 +916,7 @@ spec:
               containerPort: 9101
 EOF
 
-# ServiceMonitor 등록
+# Register ServiceMonitor
 oc apply -f - <<'EOF'
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -935,18 +934,18 @@ spec:
 EOF
 ```
 
-### Hitachi 모니터링 주요 항목
+### Hitachi Monitoring Key Items
 
-| 항목 | API 경로 |
+| Item | API path |
 |------|---------|
-| 스토리지 풀 사용률 | `/v1/objects/storagePools` |
-| 볼륨(LU) IOPS | `/v1/objects/ldevs/{ldevId}/metrics` |
-| 포트 처리량 | `/v1/objects/ports/{portId}/metrics` |
-| 컨트롤러 상태 | `/v1/objects/controllers` |
-| DP 풀 용량 | `/v1/objects/pools` |
+| Storage pool utilization | `/v1/objects/storagePools` |
+| Volume (LU) IOPS | `/v1/objects/ldevs/{ldevId}/metrics` |
+| Port throughput | `/v1/objects/ports/{portId}/metrics` |
+| Controller status | `/v1/objects/controllers` |
+| DP pool capacity | `/v1/objects/pools` |
 
 ```bash
-# Hitachi REST API 직접 테스트
+# Test Hitachi REST API directly
 curl -u admin:<password> \
   https://<Hitachi_IP>/ConfigurationManager/v1/objects/storagesystems \
   -k | python3 -m json.tool
@@ -954,25 +953,25 @@ curl -u admin:<password> \
 
 ---
 
-## 상태 확인
+## Status Check
 
 ```bash
-# Grafana Pod 상태
+# Grafana Pod status
 oc get pods -n poc-monitoring -l app=grafana
 
-# Grafana Route 확인
+# Check Grafana Route
 oc get route -n poc-monitoring
 
-# ServiceMonitor 목록
+# ServiceMonitor list
 oc get servicemonitor -n poc-monitoring
 
-# Prometheus Target 확인 (수집 대상)
+# Check Prometheus Targets (scrape targets)
 # OpenShift Console → Observe → Targets
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
 oc delete namespace poc-monitoring

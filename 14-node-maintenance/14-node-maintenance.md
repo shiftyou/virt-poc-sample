@@ -1,18 +1,18 @@
-# Node Maintenance 실습
+# Node Maintenance Lab
 
-Node Maintenance Operator를 사용하여 워커 노드를 안전하게 유지보수 모드로 전환하고,
-VM이 Live Migration으로 다른 노드로 자동 이동하는 과정을 실습합니다.
+This lab uses the Node Maintenance Operator to safely put a worker node into maintenance mode
+and demonstrates the process of VMs automatically migrating to another node via Live Migration.
 
 ```
-1단계: 유지보수 대상 노드에 VM 실행 중
+Step 1: VM is running on the maintenance target node
 ┌──────────────────────────────────┐     ┌──────────────┐
-│  NODE1 (유지보수 대상)            │     │  NODE2       │
+│  NODE1 (maintenance target)       │     │  NODE2       │
 │                                  │     │              │
-│  ● poc-maintenance-vm-1 (Running) │     │  (여유 있음) │
+│  ● poc-maintenance-vm-1 (Running) │     │  (available) │
 │  ● poc-maintenance-vm-2 (Running) │     │              │
 └──────────────────────────────────┘     └──────────────┘
 
-2단계: NodeMaintenance 생성 → cordon + drain 발동
+Step 2: NodeMaintenance created → cordon + drain triggered
 ┌──────────────────────────────────┐     ┌──────────────────────────────────┐
 │  NODE1 (SchedulingDisabled)      │     │  NODE2                           │
 │                                  │     │                                  │
@@ -20,36 +20,36 @@ VM이 Live Migration으로 다른 노드로 자동 이동하는 과정을 실습
 │  ● poc-maintenance-vm-2          │ ──▶ │  ● poc-maintenance-vm-2 (Migration) │
 └──────────────────────────────────┘     └──────────────────────────────────┘
 
-3단계: 유지보수 완료 → NodeMaintenance 삭제 → uncordon
+Step 3: Maintenance complete → NodeMaintenance deleted → uncordon
 ┌──────────────────────────────────┐     ┌──────────────────────────────────┐
 │  NODE1 (Ready)                   │     │  NODE2                           │
 │                                  │     │                                  │
-│  (비어 있음)                      │     │  ● poc-maintenance-vm-1 (Running) │
+│  (empty)                         │     │  ● poc-maintenance-vm-1 (Running) │
 │                                  │     │  ● poc-maintenance-vm-2 (Running) │
 └──────────────────────────────────┘     └──────────────────────────────────┘
 ```
 
 ---
 
-## 사전 조건
+## Prerequisites
 
-- `01-template` 완료 — `poc` Template 및 DataSource 등록
-- Node Maintenance Operator 설치 (`00-operator/node-maintenance-operator.md` 참조)
-- 워커 노드 2개 이상
-- `13-node-maintenance.sh` 실행 완료
+- `01-template` completed — `poc` Template and DataSource registered
+- Node Maintenance Operator installed (`00-operator/node-maintenance-operator.md` for reference)
+- 2 or more worker nodes
+- `13-node-maintenance.sh` execution completed
 
 ---
 
-## 구성 개요
+## Configuration Overview
 
-| VM | evictionStrategy | 설명 |
+| VM | evictionStrategy | Description |
 |----|-----------------|------|
-| poc-maintenance-vm-1 | LiveMigrate | 유지보수 시 자동 Migration 대상 |
-| poc-maintenance-vm-2 | LiveMigrate | 유지보수 시 자동 Migration 대상 |
+| poc-maintenance-vm-1 | LiveMigrate | Automatic Migration target during maintenance |
+| poc-maintenance-vm-2 | LiveMigrate | Automatic Migration target during maintenance |
 
 ---
 
-## NodeMaintenance 동작 원리
+## NodeMaintenance Operation Principle
 
 ```yaml
 apiVersion: nodemaintenance.medik8s.io/v1beta1
@@ -58,32 +58,32 @@ metadata:
   name: maintenance-<node-name>
 spec:
   nodeName: <node-name>
-  reason: "하드웨어 점검"
+  reason: "Hardware inspection"
 ```
 
-NodeMaintenance 오브젝트를 생성하면:
+When a NodeMaintenance object is created:
 
-1. **Cordon** — 노드를 `SchedulingDisabled` 상태로 변경 (신규 Pod 스케줄 차단)
-2. **Drain** — 노드의 Pod를 순서대로 축출
-3. **VM Live Migration** — `evictionStrategy: LiveMigrate`인 VM은 다른 노드로 자동 Migration
+1. **Cordon** — Changes node to `SchedulingDisabled` state (blocks new Pod scheduling)
+2. **Drain** — Evicts Pods from the node in order
+3. **VM Live Migration** — VMs with `evictionStrategy: LiveMigrate` automatically migrate to another node
 
 ---
 
-## 실습 순서
+## Lab Procedure
 
-### 1. VM 배치 확인
+### 1. Verify VM Placement
 
 ```bash
-# 유지보수 대상 노드 확인
+# Check the maintenance target node
 TEST_NODE=$(oc get node -l node-role.kubernetes.io/worker \
   -o jsonpath='{.items[0].metadata.name}')
-echo "대상 노드: ${TEST_NODE}"
+echo "Target node: ${TEST_NODE}"
 
-# VM 배치 확인
+# Check VM placement
 oc get vmi -n poc-maintenance -o wide
 ```
 
-### 2. NodeMaintenance 시작
+### 2. Start NodeMaintenance
 
 ```bash
 TEST_NODE=$(oc get node -l node-role.kubernetes.io/worker \
@@ -96,96 +96,96 @@ metadata:
   name: maintenance-${TEST_NODE}
 spec:
   nodeName: ${TEST_NODE}
-  reason: "POC 유지보수 실습"
+  reason: "POC maintenance lab"
 EOF
 ```
 
-### 3. 유지보수 진행 확인
+### 3. Verify Maintenance Progress
 
 ```bash
-# NodeMaintenance 상태 확인
+# Check NodeMaintenance status
 oc get nodemaintenance
 oc describe nodemaintenance maintenance-${TEST_NODE}
 
-# 노드 상태 확인 (SchedulingDisabled)
+# Check node status (SchedulingDisabled)
 oc get node ${TEST_NODE}
 
-# VM Migration 진행 실시간 모니터링
+# Real-time monitoring of VM Migration progress
 oc get vmi -n poc-maintenance -o wide --watch
 ```
 
-### 4. Migration 완료 확인
+### 4. Verify Migration Complete
 
 ```bash
-# VM이 다른 노드로 이동했는지 확인
+# Verify VMs have moved to another node
 oc get vmi -n poc-maintenance \
   -o custom-columns=NAME:.metadata.name,NODE:.status.nodeName,PHASE:.status.phase
 
-# Migration 이력 확인
+# Check Migration history
 oc get vmim -n poc-maintenance
 ```
 
-### 5. 유지보수 종료 (uncordon)
+### 5. End Maintenance (uncordon)
 
 ```bash
-# NodeMaintenance 삭제 → 노드 복구
+# Delete NodeMaintenance → recover node
 oc delete nodemaintenance maintenance-${TEST_NODE}
 
-# 노드 Ready 상태 확인
+# Verify node Ready status
 oc get node ${TEST_NODE}
 ```
 
 ---
 
-## 상태 확인 명령어
+## Status Check Commands
 
 ```bash
-# NodeMaintenance 전체 목록
+# Full list of NodeMaintenance
 oc get nodemaintenance
 
-# 노드 상태 (Cordon 여부)
+# Node status (Cordon status)
 oc get nodes
 
-# VM Migration 기록
+# VM Migration records
 oc get vmim -n poc-maintenance
 
-# Migration 상세
+# Migration details
 oc describe vmim -n poc-maintenance
 
-# 이벤트 확인
+# Check events
 oc get events -n poc-maintenance \
   --sort-by='.lastTimestamp' | tail -20
 ```
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# VM이 Migration되지 않을 때 — evictionStrategy 확인
+# When VM is not migrating — check evictionStrategy
 oc get vm -n poc-maintenance \
   -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.template.spec.evictionStrategy}{"\n"}{end}'
-# → 모두 LiveMigrate 이어야 함
+# → All must be LiveMigrate
 
-# Drain이 멈출 때 — PodDisruptionBudget 확인
+# When drain stalls — check PodDisruptionBudget
 oc get pdb -A
 
-# Node Maintenance Operator 로그
+# Node Maintenance Operator logs
 oc logs -n openshift-operators \
   deployment/node-maintenance-operator -f
 
-# 강제 uncordon (긴급 복구)
+# Force uncordon (emergency recovery)
 oc adm uncordon ${TEST_NODE}
 ```
 
 ---
 
-## 롤백
+## Rollback
 
 ```bash
-# NodeMaintenance 삭제 (유지보수 종료)
+# Delete NodeMaintenance (end maintenance)
 oc delete nodemaintenance --all
 
-# VM 및 네임스페이스 삭제
+# Delete VMs and namespace
 oc delete namespace poc-maintenance
 ```

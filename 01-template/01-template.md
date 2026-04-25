@@ -1,93 +1,93 @@
-# POC용 커스텀 VM 이미지 생성 가이드
+# Custom VM Image Creation Guide for POC
 
-OpenShift Virtualization POC 테스트에 사용할 RHEL9 기반 커스텀 VM 이미지를 준비합니다.
-RHEL9 VM을 생성하여 구독을 등록하고 httpd를 설치한 뒤, PVC를 qcow2로 추출하여
-`openshift-virtualization-os-images` 네임스페이스에 황금 이미지로 등록합니다.
+Prepare a RHEL9-based custom VM image for use in OpenShift Virtualization POC testing.
+Create a RHEL9 VM, register a subscription, install httpd, then export the PVC as qcow2
+and register it as a golden image in the `openshift-virtualization-os-images` namespace.
 
 ```
-RHEL9 기본 이미지 (OCP 제공)
-        │  VM 생성 (rhel9-vm)
+RHEL9 base image (provided by OCP)
+        │  VM creation (rhel9-vm)
         ▼
-subscription-manager 등록 + httpd 설치
-        │  VM 종료
+subscription-manager registration + httpd installation
+        │  VM shutdown
         ▼
 PVC → qcow2 (virtctl vmexport)
         │  virtctl image-upload
         ▼
 PVC: rhel9-poc-golden  (openshift-virtualization-os-images)
-        │  DataSource 등록
+        │  DataSource registration
         ▼
-DataSource: rhel9-poc-golden  → 클러스터 전체에서 VM 생성 가능
+DataSource: rhel9-poc-golden  → VM creation available cluster-wide
 ```
 
 ---
 
-## 1단계: RHEL9 VM 생성
+## Step 1: Create RHEL9 VM
 
-OpenShift Virtualization UI 또는 CLI로 RHEL9 VM을 생성합니다.
+Create a RHEL9 VM using the OpenShift Virtualization UI or CLI.
 
-### CLI로 생성
+### Create via CLI
 
 ```bash
-# poc-vm-build 네임스페이스 생성
+# Create poc-vm-build namespace
 oc new-project poc-vm-build
 
-# RHEL9 기본 템플릿으로 VM 생성 (기존 RHEL9 템플릿 사용)
+# Create a VM using the RHEL9 base template (using existing RHEL9 template)
 oc process -n openshift rhel9-server-small \
   -p NAME=rhel9-vm \
   -p NAMESPACE=poc-vm-build | oc apply -f -
 ```
 
-### VM 시작 및 접속
+### Start VM and Connect
 
 ```bash
-# VM 시작
+# Start VM
 virtctl start rhel9-vm -n poc-vm-build
 
-# VM이 Running 상태가 될 때까지 대기
+# Wait until VM is in Running state
 oc wait vm/rhel9-vm -n poc-vm-build \
   --for=jsonpath='{.status.printableStatus}'=Running --timeout=300s
 
-# VNC 콘솔 접속
+# VNC console access
 virtctl vnc rhel9-vm -n poc-vm-build
 
-# 또는 SSH (cloud-init으로 SSH 키 주입한 경우)
+# Or SSH (if SSH key was injected via cloud-init)
 virtctl ssh cloud-user@rhel9-vm -n poc-vm-build
 ```
 
 ---
 
-## 2단계: RHEL 구독 등록
+## Step 2: Register RHEL Subscription
 
-VM 콘솔 또는 SSH로 접속 후 Red Hat 구독을 등록합니다.
+Connect via VM console or SSH and register the Red Hat subscription.
 
 ```bash
-# 구독 등록 (Red Hat 계정 사용)
+# Register subscription (using Red Hat account)
 subscription-manager register \
-  --username <사용자이름> \
-  --password <패스워드> \
+  --username <username> \
+  --password <password> \
   --auto-attach
 
-# 등록 확인
+# Verify registration
 subscription-manager status
 subscription-manager list --installed
 ```
 
 ---
 
-## 3단계: httpd 설치 및 POC 웹 서버 구성
+## Step 3: Install httpd and Configure POC Web Server
 
-아래 스크립트를 VM 내에서 실행합니다.
+Run the following script inside the VM.
 
 ```bash
 #!/bin/bash
 
-# 1. 필수 패키지 설치 (httpd, firewalld, tar, wget)
-echo ">>> [1/5] 기본 패키지 설치 중..."
+# 1. Install required packages (httpd, firewalld, tar, wget)
+echo ">>> [1/5] Installing base packages..."
 dnf install -y httpd firewalld tar wget bash-completion
 
-# 2. BMT 웹 서버 설정 (index.html)
-echo ">>> [4/5] BMT 안내 페이지 생성 중..."
+# 2. BMT web server configuration (index.html)
+echo ">>> [4/5] Creating BMT information page..."
 cat <<EOF > /var/www/html/index.html
 <!DOCTYPE html>
 <html>
@@ -112,92 +112,92 @@ cat <<EOF > /var/www/html/index.html
 </html>
 EOF
 
-# 3. 서비스 활성화 및 방화벽 개방
-echo ">>> [5/5] 서비스 활성화 및 방화벽 설정..."
+# 3. Enable services and open firewall
+echo ">>> [5/5] Enabling services and configuring firewall..."
 systemctl enable --now httpd firewalld
 firewall-cmd --permanent --add-service=http
 firewall-cmd --reload
 
 echo "------------------------------------------------"
-echo "✅ 모든 설정이 완료되었습니다!"
-echo "1. Web 접속: http://$(hostname -I | awk '{print $1}')"
-echo "2. oc 버전: $(oc version --client)"
-echo "3. virtctl 버전: $(virtctl version --client | grep Client)"
+echo "✅ All configuration is complete!"
+echo "1. Web access: http://$(hostname -I | awk '{print $1}')"
+echo "2. oc version: $(oc version --client)"
+echo "3. virtctl version: $(virtctl version --client | grep Client)"
 echo "------------------------------------------------"
 ```
 
-설치 확인:
+Verify installation:
 
 ```bash
-# httpd 서비스 상태
+# httpd service status
 systemctl status httpd
 
-# 웹 서버 응답 확인
+# Verify web server response
 curl http://localhost
 ```
 
 ---
 
-## 4단계: VM 종료
+## Step 4: Shut Down VM
 
-이미지 추출 전 VM을 완전히 종료합니다.
+Shut down the VM completely before extracting the image.
 
 ```bash
-# VM 안에서 종료
+# Shutdown from inside the VM
 sudo shutdown -h now
 ```
 
-또는 외부에서:
+Or from outside:
 
 ```bash
 virtctl stop rhel9-vm -n poc-vm-build
 
-# 완전히 종료될 때까지 대기
+# Wait until fully stopped
 oc wait vm/rhel9-vm -n poc-vm-build \
   --for=jsonpath='{.status.printableStatus}'=Stopped --timeout=120s
 ```
 
 ---
 
-## 5단계: PVC를 qcow2로 추출
+## Step 5: Export PVC as qcow2
 
-VM의 루트 디스크 PVC를 로컬 qcow2 파일로 내보냅니다.
+Export the VM's root disk PVC to a local qcow2 file.
 
 ```bash
-# PVC 이름 확인
+# Check PVC name
 oc get pvc -n poc-vm-build
 
-# VMExport 생성
+# Create VMExport
 virtctl vmexport create rhel9-poc-export \
-  --pvc=<rhel9-vm의 rootdisk PVC 이름> \
+  --pvc=<rootdisk PVC name of rhel9-vm> \
   -n poc-vm-build
 
-# Ready 상태 확인
+# Check Ready status
 oc get vmexport rhel9-poc-export -n poc-vm-build
 
-# qcow2 다운로드
+# Download qcow2
 virtctl vmexport download rhel9-poc-export \
   --output=./vm-images/rhel9-poc-export.qcow2 \
   -n poc-vm-build
 
-# VMExport 정리
+# Clean up VMExport
 virtctl vmexport delete rhel9-poc-export -n poc-vm-build
 ```
 
-> **상세 가이드**: [pvc-to-qcow2.md](pvc-to-qcow2.md) Part 1 참조
+> **Detailed guide**: Refer to [pvc-to-qcow2.md](pvc-to-qcow2.md) Part 1
 
 ---
 
-## 6단계: 황금 이미지로 등록
+## Step 6: Register as Golden Image
 
-추출한 qcow2를 `openshift-virtualization-os-images` 네임스페이스에 업로드하고 DataSource 및 Template을 등록합니다.
+Upload the extracted qcow2 to the `openshift-virtualization-os-images` namespace and register a DataSource and Template.
 
 ```bash
-# env.conf 로드 (스토리지클래스 등 변수 사용)
+# Load env.conf (to use variables like StorageClass)
 source env.conf
 ```
 
-### 6-1. DataVolume 업로드
+### 6-1. DataVolume Upload
 
 ```bash
 virtctl image-upload dv poc-golden \
@@ -211,16 +211,16 @@ virtctl image-upload dv poc-golden \
   --force-bind
 ```
 
-> `ReadWriteMany`가 지원되지 않는 스토리지클래스라면 `--access-mode=ReadWriteOnce` 로 변경
+> If the StorageClass does not support `ReadWriteMany`, change to `--access-mode=ReadWriteOnce`
 
-업로드 완료 확인:
+Verify upload completion:
 
 ```bash
 oc get dv poc-golden -n openshift-virtualization-os-images
 oc get pvc poc-golden -n openshift-virtualization-os-images
 ```
 
-### 6-2. DataSource 등록
+### 6-2. Register DataSource
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -236,14 +236,14 @@ spec:
       namespace: openshift-virtualization-os-images
 EOF
 
-# 등록 확인
+# Verify registration
 oc get datasource poc -n openshift-virtualization-os-images
 ```
 
-### 6-3. VM Template 등록
+### 6-3. Register VM Template
 
-> **중요:** Template을 모든 네임스페이스에서 사용하려면 반드시 **`openshift` 프로젝트**에 생성해야 합니다.
-> 다른 네임스페이스에 생성하면 해당 네임스페이스에서만 사용 가능합니다.
+> **Important:** To use the Template from all namespaces, it must be created in the **`openshift` project**.
+> If created in another namespace, it can only be used from that namespace.
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -392,41 +392,41 @@ parameters:
     from: '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}'
 EOF
 
-# 등록 확인
+# Verify registration
 oc get template poc -n openshift
 ```
 
-### 6-4. Template에서 VM 생성 확인
+### 6-4. Verify VM Creation from Template
 
 ```bash
-# Template 파라미터 확인
+# Check Template parameters
 oc process --parameters -n openshift poc
 
-# VM 생성 테스트
+# Test VM creation
 oc process -n openshift poc | oc apply -n poc-test -f -
 ```
 
 ---
 
-## Console에서 기존 VM 이미지로 새 Template 만들기
+## Creating a New Template from an Existing VM Image in the Console
 
-Console UI에서 기존 VM을 기반으로 커스텀 Template을 만드는 가장 쉬운 방법은 **기존 Template을 클론한 뒤 수정**하는 것입니다.
+The easiest way to create a custom Template from an existing VM in the Console UI is to **clone an existing Template and modify it**.
 
-1. **Virtualization → Templates** 이동
-2. 기반으로 할 Template(예: `rhel9-server-small`) 우측 메뉴 **Clone** 클릭
-3. 클론 이름 입력 후 네임스페이스를 **`openshift`** 로 설정 → **Clone** 실행
-4. 클론된 Template 편집:
-   - **Boot source** → DataSource를 `poc` (`openshift-virtualization-os-images`)로 변경
-   - CPU/Memory 기본값 조정
-   - Display name, 설명 수정
-5. **Save** 저장
+1. Navigate to **Virtualization → Templates**
+2. Click **Clone** from the right menu of the Template to base it on (e.g., `rhel9-server-small`)
+3. Enter a clone name and set the namespace to **`openshift`** → Click **Clone**
+4. Edit the cloned Template:
+   - **Boot source** → Change DataSource to `poc` (`openshift-virtualization-os-images`)
+   - Adjust CPU/Memory defaults
+   - Edit Display name and description
+5. **Save**
 
-> Console에서 클론한 Template은 즉시 모든 프로젝트의 **Virtualization → Catalog**에 표시됩니다.
+> Templates cloned in the Console immediately appear in **Virtualization → Catalog** for all projects.
 
 ---
 
-## 참고
+## Reference
 
-- `virtctl` 설치: OpenShift Console > `?` 메뉴 > **Command line tools** 에서 다운로드
-- 전체 자동화 스크립트: [`01-template.sh`](01-template.sh) — 업로드·DataSource·Template을 한 번에 실행
-- StorageClass 확인: `oc get storageclass`
+- `virtctl` installation: Download from OpenShift Console > `?` menu > **Command line tools**
+- Full automation script: [`01-template.sh`](01-template.sh) — runs upload, DataSource, and Template in one step
+- Check StorageClass: `oc get storageclass`

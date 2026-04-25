@@ -2,18 +2,18 @@
 # =============================================================================
 # make.sh
 #
-# 번호 순 디렉토리(01-, 02-, ...)의 .sh를 순서대로 실행합니다.
-# setup.sh 를 먼저 실행하여 env.conf 를 생성하세요.
-#   예) 01-template/01-template.sh
-#       02-network/02-network.sh
-#       03-vm-management/03-vm-management.sh
+# Runs the .sh files in numbered directories (01-, 02-, ...) in order.
+# Run setup.sh first to generate env.conf.
+#   e.g.) 01-template/01-template.sh
+#         02-network/02-network.sh
+#         03-vm-management/03-vm-management.sh
 #
-# 사용법:
-#   ./make.sh            사용법 출력
-#   ./make.sh start      전체 실행
-#   ./make.sh 7          07 단계만 실행
-#   ./make.sh from 7     07 단계부터 끝까지 실행
-#   ./make.sh clean      poc- 네임스페이스 전체 삭제
+# Usage:
+#   ./make.sh            Print usage
+#   ./make.sh start      Run all steps
+#   ./make.sh 7          Run only step 07
+#   ./make.sh from 7     Run from step 07 to the end
+#   ./make.sh clean      Delete all poc- namespaces
 # =============================================================================
 
 set -euo pipefail
@@ -33,12 +33,12 @@ print_ok()    { echo -e "${GREEN}[make]${NC} $1"; }
 print_error() { echo -e "${RED}[make]${NC} $1"; }
 print_warn()  { echo -e "${YELLOW}[make]${NC} $1"; }
 
-# 인수 파싱
+# Parse arguments
 ARG1="${1:-}"
 ARG2="${2:-}"
 
 # =============================================================================
-# 인수 없음 → 사용법 출력
+# No arguments → print usage
 # =============================================================================
 if [ -z "$ARG1" ]; then
     echo ""
@@ -46,22 +46,22 @@ if [ -z "$ARG1" ]; then
     echo -e "${CYAN}  virt-poc-sample make.sh${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  사용법:"
-    echo -e "    ${CYAN}./make.sh start${NC}        전체 실행"
-    echo -e "    ${CYAN}./make.sh 7${NC}            07 단계만 실행"
-    echo -e "    ${CYAN}./make.sh from 7${NC}       07 단계부터 끝까지 실행"
-    echo -e "    ${CYAN}./make.sh clean${NC}        poc- 네임스페이스 전체 삭제"
-    echo -e "    ${CYAN}./make.sh cleanup${NC}      전체 --cleanup 실행"
+    echo -e "  Usage:"
+    echo -e "    ${CYAN}./make.sh start${NC}        Run all steps"
+    echo -e "    ${CYAN}./make.sh 7${NC}            Run only step 07"
+    echo -e "    ${CYAN}./make.sh from 7${NC}       Run from step 07 to the end"
+    echo -e "    ${CYAN}./make.sh clean${NC}        Delete all poc- namespaces"
+    echo -e "    ${CYAN}./make.sh cleanup${NC}      Run --cleanup for all steps"
     echo ""
     exit 0
 fi
 
 # =============================================================================
-# clean 서브커맨드
+# clean subcommand
 # =============================================================================
 if [ "$ARG1" = "clean" ]; then
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
 
@@ -69,36 +69,36 @@ if [ "$ARG1" = "clean" ]; then
         -o custom-columns=NAME:.metadata.name 2>/dev/null | grep '^poc-' || true)
 
     if [ -z "$NAMESPACES" ]; then
-        print_info "삭제할 poc- 네임스페이스가 없습니다."
+        print_info "No poc- namespaces to delete."
         exit 0
     fi
 
     echo ""
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}  make.sh clean — 아래 네임스페이스를 삭제합니다${NC}"
+    echo -e "${YELLOW}  make.sh clean — Deleting the following namespaces${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo "$NAMESPACES" | while read -r ns; do
         echo -e "    ${YELLOW}●${NC} ${ns}"
     done
     echo ""
-    echo -n -e "${YELLOW}  정말 삭제하시겠습니까? (y/N): ${NC}"
+    echo -n -e "${YELLOW}  Are you sure you want to delete? (y/N): ${NC}"
     read -r confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_info "취소했습니다."
+        print_info "Cancelled."
         exit 0
     fi
 
     echo ""
     echo "$NAMESPACES" | while read -r ns; do
-        print_info "삭제 중: ${ns}"
+        print_info "Deleting: ${ns}"
         oc delete namespace "$ns" --wait=false 2>/dev/null && \
-            print_ok "${ns} 삭제 요청 완료" || \
-            print_warn "${ns} 삭제 실패 (이미 없거나 권한 부족)"
+            print_ok "${ns} deletion requested" || \
+            print_warn "${ns} deletion failed (already gone or insufficient permissions)"
     done
 
     echo ""
-    print_info "네임스페이스 삭제 완료를 기다리는 중..."
+    print_info "Waiting for namespace deletion to complete..."
     echo ""
     while true; do
         REMAINING=$(oc get namespace --no-headers \
@@ -106,7 +106,7 @@ if [ "$ARG1" = "clean" ]; then
         if [ -z "$REMAINING" ]; then
             break
         fi
-        echo -e "  ${YELLOW}남은 네임스페이스:${NC}"
+        echo -e "  ${YELLOW}Remaining namespaces:${NC}"
         echo "$REMAINING" | while read -r ns; do
             echo -e "    ${YELLOW}●${NC} ${ns}"
         done
@@ -114,18 +114,18 @@ if [ "$ARG1" = "clean" ]; then
         echo ""
     done
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  모든 poc- 네임스페이스 삭제 완료!${NC}"
+    echo -e "${GREEN}  All poc- namespaces deleted!${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     exit 0
 fi
 
 # =============================================================================
-# cleanup 서브커맨드
+# cleanup subcommand
 # =============================================================================
 if [ "$ARG1" = "cleanup" ]; then
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged into OpenShift."
         exit 1
     fi
 
@@ -137,14 +137,14 @@ if [ "$ARG1" = "cleanup" ]; then
 
     echo ""
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}  make.sh cleanup — 모든 단계의 --cleanup 을 실행합니다${NC}"
-    echo -e "${YELLOW}  각 스크립트가 생성한 리소스를 역순으로 삭제합니다.${NC}"
+    echo -e "${YELLOW}  make.sh cleanup — Running --cleanup for all steps${NC}"
+    echo -e "${YELLOW}  Deletes resources created by each script in reverse order.${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -n -e "${YELLOW}  정말 실행하시겠습니까? (y/N): ${NC}"
+    echo -n -e "${YELLOW}  Are you sure you want to run this? (y/N): ${NC}"
     read -r confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_info "취소했습니다."
+        print_info "Cancelled."
         exit 0
     fi
 
@@ -164,15 +164,15 @@ if [ "$ARG1" = "cleanup" ]; then
 
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  전체 --cleanup 완료!${NC}"
+    echo -e "${GREEN}  Full --cleanup complete!${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     exit 0
 fi
 
-# env.conf 확인 및 로드
+# Check and load env.conf
 if [ ! -f "$ENV_FILE" ]; then
-    print_error "env.conf 가 없습니다. 먼저 setup.sh 를 실행하세요."
+    print_error "env.conf not found. Please run setup.sh first."
     exit 1
 fi
 
@@ -182,7 +182,7 @@ set +a
 
 POC_SETUP_DIR="${SCRIPT_DIR}/poc-setup"
 
-# 실행 모드 결정
+# Determine execution mode
 MODE="all"
 START_NUM=""
 
@@ -193,23 +193,23 @@ elif [[ "$ARG1" =~ ^[0-9]+$ ]]; then
     MODE="only"
     START_NUM=$(printf "%02d" "$ARG1")
 elif [ "$ARG1" != "start" ]; then
-    print_error "알 수 없는 인수: $ARG1"
-    echo -e "  ${CYAN}./make.sh${NC} 를 실행하면 사용법을 확인할 수 있습니다."
+    print_error "Unknown argument: $ARG1"
+    echo -e "  Run ${CYAN}./make.sh${NC} to see usage."
     exit 1
 fi
 
-# 번호 디렉토리를 정렬해서 수집
+# Collect numbered directories in sorted order
 ALL_STEPS=()
 while IFS= read -r dir; do
     ALL_STEPS+=("$(basename "$dir")")
 done < <(find "$SCRIPT_DIR" -maxdepth 1 -type d -name '[0-9][0-9]-*' | grep -v '/00-' | sort)
 
 if [ ${#ALL_STEPS[@]} -eq 0 ]; then
-    print_error "실행할 단계가 없습니다. 01-, 02-... 디렉토리 없음"
+    print_error "No steps to run. No 01-, 02-... directories found."
     exit 1
 fi
 
-# 모드에 따라 실행할 단계 필터링
+# Filter steps to run based on mode
 STEPS=()
 for dir in "${ALL_STEPS[@]}"; do
     NUM="${dir:0:2}"
@@ -223,20 +223,20 @@ for dir in "${ALL_STEPS[@]}"; do
 done
 
 if [ ${#STEPS[@]} -eq 0 ]; then
-    print_error "실행할 단계가 없습니다. (번호 ${START_NUM} 에 해당하는 디렉토리가 없음)"
+    print_error "No steps to run. (No directory matching step ${START_NUM})"
     exit 1
 fi
 
-# poc-setup 디렉토리 정리
+# Clean poc-setup directory
 if [ "$MODE" = "all" ]; then
     if [ -d "$POC_SETUP_DIR" ]; then
-        print_info "poc-setup 전체 삭제 후 시작..."
+        print_info "Deleting poc-setup and starting fresh..."
         rm -rf "$POC_SETUP_DIR"
     fi
 elif [ "$MODE" = "only" ]; then
     for dir in "${STEPS[@]}"; do
         if [ -d "${POC_SETUP_DIR}/${dir}" ]; then
-            print_info "poc-setup/${dir} 삭제 후 시작..."
+            print_info "Deleting poc-setup/${dir} and starting fresh..."
             rm -rf "${POC_SETUP_DIR:?}/${dir}"
         fi
     done
@@ -244,38 +244,38 @@ fi
 
 TOTAL=${#STEPS[@]}
 
-# 각 스텝 상태 배열 (인덱스 대응): pending / ok / skip / fail
+# Step status array (index-aligned): pending / ok / skip / fail
 STEP_RESULTS=()
 for i in $(seq 0 $((TOTAL - 1))); do
     STEP_RESULTS+=("pending")
 done
 
-# 스텝 설명
+# Step description
 step_desc() {
     case "$1" in
-        01-template)         echo "DataVolume 업로드 → DataSource → Template 등록" ;;
-        02-network)          echo "NNCP Linux Bridge (${BRIDGE_NAME:-br-poc}) + NAD + VM 생성" ;;
-        03-vm-management)    echo "네임스페이스 + NAD 준비" ;;
-        04-multitenancy)     echo "멀티 테넌트 — 네임스페이스·사용자·RBAC·VM" ;;
+        01-template)         echo "DataVolume upload → DataSource → Template registration" ;;
+        02-network)          echo "NNCP Linux Bridge (${BRIDGE_NAME:-br-poc}) + NAD + VM creation" ;;
+        03-vm-management)    echo "Namespace + NAD preparation" ;;
+        04-multitenancy)     echo "Multi-tenancy — Namespaces, Users, RBAC, VMs" ;;
         05-network-policy)   echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
-        06-resource-quota)   echo "ResourceQuota — CPU·Memory·Pod·PVC 제한" ;;
-        07-descheduler)      echo "Descheduler — VM 자동 재배치 (Operator 필요)" ;;
-        08-liveness-probe)   echo "VM Liveness Probe — HTTP·TCP·Exec" ;;
-        09-alert)            echo "VM Alert — PrometheusRule 알림" ;;
-        10-node-exporter)    echo "Node Exporter — 커스텀 메트릭 수집" ;;
-        11-monitoring)       echo "Grafana 모니터링 (Operator 필요)" ;;
-        12-mtv)              echo "MTV — VMware → OpenShift 마이그레이션 (Operator 필요)" ;;
-        13-oadp)             echo "OADP — VM 백업/복원 (Operator 필요)" ;;
-        14-node-maintenance) echo "Node Maintenance — 노드 유지보수 VM Migration (Operator 필요)" ;;
-        15-snr)              echo "SNR — 노드 자가 재시작 복구 (Operator 필요)" ;;
-        16-far)              echo "FAR — IPMI/BMC 전원 재시작 복구 (Operator 필요)" ;;
-        17-add-node)         echo "워커 노드 제거 후 재조인" ;;
-        18-hyperconverged)   echo "HyperConverged — CPU Overcommit 설정" ;;
+        06-resource-quota)   echo "ResourceQuota — CPU, Memory, Pod, PVC limits" ;;
+        07-descheduler)      echo "Descheduler — VM automatic rescheduling (Operator required)" ;;
+        08-liveness-probe)   echo "VM Liveness Probe — HTTP, TCP, Exec" ;;
+        09-alert)            echo "VM Alert — PrometheusRule notification" ;;
+        10-node-exporter)    echo "Node Exporter — Custom metric collection" ;;
+        11-monitoring)       echo "Grafana monitoring (Operator required)" ;;
+        12-mtv)              echo "MTV — VMware → OpenShift migration (Operator required)" ;;
+        13-oadp)             echo "OADP — VM backup/restore (Operator required)" ;;
+        14-node-maintenance) echo "Node Maintenance — Node maintenance VM Migration (Operator required)" ;;
+        15-snr)              echo "SNR — Node self-restart recovery (Operator required)" ;;
+        16-far)              echo "FAR — IPMI/BMC power restart recovery (Operator required)" ;;
+        17-add-node)         echo "Worker node removal and rejoin" ;;
+        18-hyperconverged)   echo "HyperConverged — CPU Overcommit configuration" ;;
         *)                   echo "$1" ;;
     esac
 }
 
-# 진행 상황 테이블 출력
+# Print progress table
 print_progress() {
     local completed=0 skipped=0 failed=0
     for r in "${STEP_RESULTS[@]}"; do
@@ -288,7 +288,7 @@ print_progress() {
 
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    printf "${CYAN}  진행 상황  완료:%-3d 건너뜀:%-3d 실패:%-3d / 전체:%-3d${NC}\n" \
+    printf "${CYAN}  Progress  Completed:%-3d Skipped:%-3d Failed:%-3d / Total:%-3d${NC}\n" \
         "$completed" "$skipped" "$failed" "$TOTAL"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     printf "  %-28s %s\n" "Step" "Status"
@@ -301,19 +301,19 @@ print_progress() {
         desc=$(step_desc "$dir")
         case "$result" in
             ok)
-                printf "  ${GREEN}[✔]${NC} %-26s ${GREEN}→ 완료${NC}  ${DIM}%s${NC}\n" \
+                printf "  ${GREEN}[✔]${NC} %-26s ${GREEN}→ Done${NC}  ${DIM}%s${NC}\n" \
                     "$dir" "$desc"
                 ;;
             skip)
-                printf "  ${YELLOW}[~]${NC} %-26s ${YELLOW}→ 건너뜀${NC}  ${DIM}%s${NC}\n" \
+                printf "  ${YELLOW}[~]${NC} %-26s ${YELLOW}→ Skipped${NC}  ${DIM}%s${NC}\n" \
                     "$dir" "$desc"
                 ;;
             fail)
-                printf "  ${RED}[✘]${NC} %-26s ${RED}→ 실패${NC}  ${DIM}%s${NC}\n" \
+                printf "  ${RED}[✘]${NC} %-26s ${RED}→ Failed${NC}  ${DIM}%s${NC}\n" \
                     "$dir" "$desc"
                 ;;
             pending)
-                printf "  ${DIM}[·] %-26s   대기 중  %s${NC}\n" \
+                printf "  ${DIM}[·] %-26s   Pending  %s${NC}\n" \
                     "$dir" "$desc"
                 ;;
         esac
@@ -324,7 +324,7 @@ print_progress() {
 }
 
 # =============================================================================
-# oc patch wrapper — patch 실행 후 최종 YAML 을 poc-setup/<step>/ 에 저장
+# oc patch wrapper — saves final YAML to poc-setup/<step>/ after patch execution
 # =============================================================================
 _OC_WRAP_DIR=""
 if command -v oc &>/dev/null; then
@@ -333,7 +333,7 @@ if command -v oc &>/dev/null; then
     echo "${_OC_REAL}" > "${_OC_WRAP_DIR}/.oc_real"
     cat > "${_OC_WRAP_DIR}/oc" <<'OC_WRAPPER_EOF'
 #!/bin/bash
-# oc wrapper: 'oc patch' 실행 후 최종 YAML 을 POC_PATCH_SAVE_DIR 에 저장
+# oc wrapper: saves final YAML to POC_PATCH_SAVE_DIR after 'oc patch' execution
 _R=$(cat "$(dirname "${BASH_SOURCE[0]}")/.oc_real")
 "$_R" "$@"
 _X=$?
@@ -361,20 +361,20 @@ OC_WRAPPER_EOF
     chmod +x "${_OC_WRAP_DIR}/oc"
 fi
 
-# 시작 헤더
+# Start header
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 case "$MODE" in
-    only) echo -e "${CYAN}  virt-poc-sample — ${START_NUM} 단계만 실행${NC}" ;;
-    from) echo -e "${CYAN}  virt-poc-sample — ${START_NUM} 단계부터 실행 (총 ${TOTAL}단계)${NC}" ;;
-    all)  echo -e "${CYAN}  virt-poc-sample 전체 실행 (총 ${TOTAL}단계)${NC}" ;;
+    only) echo -e "${CYAN}  virt-poc-sample — Running step ${START_NUM} only${NC}" ;;
+    from) echo -e "${CYAN}  virt-poc-sample — Running from step ${START_NUM} (total ${TOTAL} steps)${NC}" ;;
+    all)  echo -e "${CYAN}  virt-poc-sample running all steps (total ${TOTAL} steps)${NC}" ;;
 esac
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# 초기 상태 테이블 출력
+# Print initial status table
 print_progress
 
-# 순서대로 실행
+# Run in order
 IDX=0
 for dir in "${STEPS[@]}"; do
     SH_FILE="${SCRIPT_DIR}/${dir}/${dir}.sh"
@@ -384,7 +384,7 @@ for dir in "${STEPS[@]}"; do
     echo -e "${CYAN}━━━ [${IDX}/${TOTAL}] ${dir} ━━━${NC}"
 
     if [ ! -f "$SH_FILE" ]; then
-        print_error "스크립트를 찾을 수 없습니다: ${dir}/${dir}.sh — 건너뜁니다"
+        print_error "Script not found: ${dir}/${dir}.sh — skipping"
         STEP_RESULTS[$((IDX-1))]="skip"
         print_progress
         continue
@@ -393,7 +393,7 @@ for dir in "${STEPS[@]}"; do
     OUT_DIR="${POC_SETUP_DIR}/${dir}"
     mkdir -p "$OUT_DIR"
 
-    print_info "실행: ${dir}/${dir}.sh  (생성 파일 → poc-setup/${dir}/)"
+    print_info "Running: ${dir}/${dir}.sh  (generated files → poc-setup/${dir}/)"
     set +e
     if [ -n "${_OC_WRAP_DIR:-}" ]; then
         (cd "$OUT_DIR" && PATH="${_OC_WRAP_DIR}:${PATH}" POC_PATCH_SAVE_DIR="$OUT_DIR" bash "$SH_FILE")
@@ -405,13 +405,13 @@ for dir in "${STEPS[@]}"; do
 
     if [ $EXIT_CODE -eq 0 ]; then
         STEP_RESULTS[$((IDX-1))]="ok"
-        print_ok "${dir} 완료"
+        print_ok "${dir} done"
     elif [ $EXIT_CODE -eq 77 ]; then
         STEP_RESULTS[$((IDX-1))]="skip"
-        echo -e "${YELLOW}[make]${NC} ${dir} 건너뜀 (오퍼레이터 미설치)"
+        echo -e "${YELLOW}[make]${NC} ${dir} skipped (operator not installed)"
     else
         STEP_RESULTS[$((IDX-1))]="fail"
-        print_error "${dir} 실패 (exit code: ${EXIT_CODE})"
+        print_error "${dir} failed (exit code: ${EXIT_CODE})"
         print_progress
         exit $EXIT_CODE
     fi
@@ -419,7 +419,7 @@ for dir in "${STEPS[@]}"; do
     print_progress
 done
 
-# oc wrapper 정리
+# Clean up oc wrapper
 if [ -n "${_OC_WRAP_DIR:-}" ]; then
     rm -rf "${_OC_WRAP_DIR}"
 fi
@@ -427,29 +427,29 @@ fi
 if [ "$MODE" != "only" ]; then
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  모든 단계 완료!${NC}"
+echo -e "${GREEN}  All steps complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "${CYAN}  poc- 네임스페이스 목록:${NC}"
+echo -e "${CYAN}  poc- namespace list:${NC}"
 echo ""
 ns_desc() {
     case "$1" in
-        poc-vm-management)  echo "03 VM 생성·스토리지·네트워크·Live Migration 실습" ;;
-        tenant-ns1)               echo "04 멀티 테넌트 — NS1 (user1 admin / user3 view)" ;;
-        tenant-ns2)               echo "04 멀티 테넌트 — NS2 (user2 admin / user4 view)" ;;
-        poc-network-policy-1)     echo "05 NetworkPolicy 실습 — NS1 (Deny All / Allow Same NS)" ;;
-        poc-network-policy-2)     echo "05 NetworkPolicy 실습 — NS2 (Deny All / Allow Same NS)" ;;
-        poc-resource-quota)       echo "06 ResourceQuota 실습 — CPU·Memory·Pod·PVC 제한" ;;
-        poc-descheduler)          echo "07 Descheduler 실습 — 노드 과부하 시 VM 자동 재배치" ;;
-        poc-liveness-probe)       echo "08 Liveness Probe 실습 — HTTP·TCP·Exec Probe 설정 및 자동 재시작" ;;
-        poc-alert)                echo "09 VM Alert 실습 — PrometheusRule VM 상태 알림" ;;
-        poc-node-exporter)        echo "10 Node Exporter 실습 — 커스텀 메트릭 수집" ;;
-        poc-monitoring)           echo "11 모니터링 실습 — Grafana·Dell·Hitachi 스토리지" ;;
-        poc-mtv)                  echo "12 MTV 실습 — VMware → OpenShift 마이그레이션" ;;
-        poc-oadp)                 echo "13 OADP 실습 — VM 백업/복원" ;;
-        poc-maintenance)          echo "14 Node Maintenance 실습 — 노드 유지보수 시 VM Live Migration" ;;
-        poc-snr)                  echo "15 SNR 실습 — NHC 감지 → 노드 자가 재시작 복구" ;;
-        poc-far)                  echo "16 FAR 실습 — NHC 감지 → IPMI/BMC 전원 재시작 복구" ;;
+        poc-vm-management)  echo "03 VM creation, storage, networking, Live Migration lab" ;;
+        tenant-ns1)               echo "04 Multi-tenancy — NS1 (user1 admin / user3 view)" ;;
+        tenant-ns2)               echo "04 Multi-tenancy — NS2 (user2 admin / user4 view)" ;;
+        poc-network-policy-1)     echo "05 NetworkPolicy lab — NS1 (Deny All / Allow Same NS)" ;;
+        poc-network-policy-2)     echo "05 NetworkPolicy lab — NS2 (Deny All / Allow Same NS)" ;;
+        poc-resource-quota)       echo "06 ResourceQuota lab — CPU, Memory, Pod, PVC limits" ;;
+        poc-descheduler)          echo "07 Descheduler lab — VM automatic rescheduling on node overload" ;;
+        poc-liveness-probe)       echo "08 Liveness Probe lab — HTTP, TCP, Exec Probe configuration and auto-restart" ;;
+        poc-alert)                echo "09 VM Alert lab — PrometheusRule VM status notification" ;;
+        poc-node-exporter)        echo "10 Node Exporter lab — Custom metric collection" ;;
+        poc-monitoring)           echo "11 Monitoring lab — Grafana, Dell, Hitachi storage" ;;
+        poc-mtv)                  echo "12 MTV lab — VMware → OpenShift migration" ;;
+        poc-oadp)                 echo "13 OADP lab — VM backup/restore" ;;
+        poc-maintenance)          echo "14 Node Maintenance lab — VM Live Migration during node maintenance" ;;
+        poc-snr)                  echo "15 SNR lab — NHC detection → node self-restart recovery" ;;
+        poc-far)                  echo "16 FAR lab — NHC detection → IPMI/BMC power restart recovery" ;;
         *)                  echo "" ;;
     esac
 }

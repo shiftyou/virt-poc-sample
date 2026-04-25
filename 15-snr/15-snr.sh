@@ -2,13 +2,13 @@
 # =============================================================================
 # 15-snr.sh
 #
-# Self Node Remediation (SNR) 실습 환경 구성
-#   1. poc-snr 네임스페이스 생성
-#   2. SelfNodeRemediationTemplate 생성
-#   3. NodeHealthCheck CR 생성 (SNR 연동)
-#   4. poc 템플릿으로 VM 2개 배포 → TEST_NODE에 배치
+# Self Node Remediation (SNR) lab environment setup
+#   1. Create poc-snr namespace
+#   2. Create SelfNodeRemediationTemplate
+#   3. Create NodeHealthCheck CR (SNR integration)
+#   4. Deploy 2 VMs using poc template → place on TEST_NODE
 #
-# 사용법: ./15-snr.sh
+# Usage: ./15-snr.sh
 # =============================================================================
 
 set -euo pipefail
@@ -40,15 +40,15 @@ print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 confirm_and_apply() {
     local file="$1"
     echo ""
-    print_info "적용할 YAML:"
+    print_info "YAML to apply:"
     echo "────────────────────────────────────────"
     cat "$file"
     echo "────────────────────────────────────────"
     oc apply -f "$file"
 }
 
-# spec.running(deprecated) -> spec.runStrategy 마이그레이션
-# oc patch vm 전에 호출하여 admission webhook 경고 제거
+# spec.running(deprecated) -> spec.runStrategy migration
+# Call before oc patch vm to remove admission webhook warnings
 ensure_runstrategy() {
     local vm="$1" ns="$2"
     local running
@@ -64,63 +64,63 @@ ensure_runstrategy() {
 }
 
 # =============================================================================
-# 사전 확인
+# Pre-flight check
 # =============================================================================
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight check"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged in to OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
     if [ "${SNR_INSTALLED:-false}" != "true" ]; then
-        print_warn "Self Node Remediation Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/snr-operator.md"
+        print_warn "Self Node Remediation Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/snr-operator.md"
         exit 77
     fi
-    print_ok "Self Node Remediation Operator 확인"
+    print_ok "Self Node Remediation Operator confirmed"
 
     if [ "${NHC_INSTALLED:-false}" != "true" ]; then
-        print_warn "Node Health Check Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/nhc-operator.md"
+        print_warn "Node Health Check Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/nhc-operator.md"
         exit 77
     fi
-    print_ok "Node Health Check Operator 확인"
+    print_ok "Node Health Check Operator confirmed"
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_error "poc Template 이 없습니다. 01-template 을 먼저 실행하세요."
+        print_error "poc Template not found. Please run 01-template first."
         exit 1
     fi
-    print_ok "poc Template 확인"
+    print_ok "poc Template confirmed"
 
     if ! oc get node "$NODE1" &>/dev/null; then
-        print_error "노드 $NODE1 를 찾을 수 없습니다. env.conf 의 TEST_NODE 를 확인하세요."
+        print_error "Node $NODE1 not found. Please check TEST_NODE in env.conf."
         exit 1
     fi
-    print_ok "대상 노드: $NODE1"
+    print_ok "Target node: $NODE1"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 생성
+# Step 1: Create namespace
 # =============================================================================
 step_namespace() {
-    print_step "1/4  네임스페이스 생성 (${NS})"
+    print_step "1/4  Create namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 이미 존재 — 스킵"
+        print_ok "Namespace $NS already exists — skipping"
     else
         oc new-project "$NS" > /dev/null
-        print_ok "네임스페이스 $NS 생성 완료"
+        print_ok "Namespace $NS created successfully"
     fi
 }
 
 # =============================================================================
-# 2단계: SelfNodeRemediationTemplate 생성
+# Step 2: Create SelfNodeRemediationTemplate
 # =============================================================================
 step_snr_template() {
-    print_step "2/4  SelfNodeRemediationTemplate 생성"
+    print_step "2/4  Create SelfNodeRemediationTemplate"
 
     cat > snr-template.yaml <<EOF
 apiVersion: self-node-remediation.medik8s.io/v1alpha1
@@ -134,14 +134,14 @@ spec:
       remediationStrategy: ResourceDeletion
 EOF
     confirm_and_apply snr-template.yaml
-    print_ok "SelfNodeRemediationTemplate poc-snr-template 생성 완료"
+    print_ok "SelfNodeRemediationTemplate poc-snr-template created successfully"
 }
 
 # =============================================================================
-# 3단계: NodeHealthCheck 생성
+# Step 3: Create NodeHealthCheck
 # =============================================================================
 step_nhc() {
-    print_step "3/5  NodeHealthCheck 생성 (SNR 연동)"
+    print_step "3/5  Create NodeHealthCheck (SNR integration)"
 
     cat > nhc-snr.yaml <<EOF
 apiVersion: remediation.medik8s.io/v1alpha1
@@ -168,15 +168,15 @@ spec:
       duration: 300s
 EOF
     confirm_and_apply nhc-snr.yaml
-    print_ok "NodeHealthCheck poc-snr-nhc 생성 완료"
-    print_info "  조건: Ready=False 또는 Unknown 300초 이상 → SNR 발동"
+    print_ok "NodeHealthCheck poc-snr-nhc created successfully"
+    print_info "  Condition: Ready=False or Unknown for 300s or more → SNR triggered"
 }
 
 # =============================================================================
-# 4단계: VM 배포
+# Step 4: Deploy VMs
 # =============================================================================
 step_consoleyamlsamples() {
-    print_step "5/5  ConsoleYAMLSample 등록"
+    print_step "5/5  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-nhc-snr.yaml <<'EOF'
 apiVersion: console.openshift.io/v1
@@ -184,8 +184,8 @@ kind: ConsoleYAMLSample
 metadata:
   name: poc-nodehealthcheck-snr
 spec:
-  title: "POC NodeHealthCheck (SNR 연동)"
-  description: "Self Node Remediation과 연동하여 비정상 워커 노드를 자동 복구하는 NodeHealthCheck CR 예시입니다. Ready=False 또는 Unknown 상태가 300초 이상 지속되면 SNR이 발동됩니다."
+  title: "POC NodeHealthCheck (SNR integration)"
+  description: "Example NodeHealthCheck CR for auto-recovering unhealthy worker nodes using Self Node Remediation. SNR is triggered when Ready=False or Unknown state persists for 300 seconds."
   targetResource:
     apiVersion: remediation.medik8s.io/v1alpha1
     kind: NodeHealthCheck
@@ -214,15 +214,15 @@ spec:
           duration: 300s
 EOF
     oc apply -f consoleyamlsample-nhc-snr.yaml
-    print_ok "ConsoleYAMLSample poc-nodehealthcheck-snr 등록 완료"
+    print_ok "ConsoleYAMLSample poc-nodehealthcheck-snr registered successfully"
 }
 
 step_vms() {
-    print_step "4/5  VM 배포 → ${NODE1}"
+    print_step "4/5  Deploy VMs → ${NODE1}"
 
     for VM in poc-snr-vm-1 poc-snr-vm-2; do
         if oc get vm "$VM" -n "$NS" &>/dev/null; then
-            print_ok "VM $VM 이미 존재 — 스킵"
+            print_ok "VM $VM already exists — skipping"
             continue
         fi
 
@@ -243,33 +243,33 @@ step_vms() {
         }"
 
         virtctl start "$VM" -n "$NS" 2>/dev/null || true
-        print_ok "VM $VM 배포 완료 (노드: ${NODE1})"
+        print_ok "VM $VM deployed successfully (node: ${NODE1})"
     done
 }
 
 # =============================================================================
-# 완료 요약
+# Completion summary
 # =============================================================================
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! SNR 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! SNR lab environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  VM 배치 확인:"
+    echo -e "  Check VM placement:"
     echo -e "    ${CYAN}oc get vmi -n ${NS} -o wide${NC}"
     echo ""
-    echo -e "  NHC 상태 확인:"
+    echo -e "  Check NHC status:"
     echo -e "    ${CYAN}oc get nodehealthcheck poc-snr-nhc${NC}"
     echo ""
-    echo -e "  장애 시뮬레이션:"
+    echo -e "  Failure simulation:"
     echo -e "    ${CYAN}oc debug node/${NODE1} -- chroot /host systemctl stop kubelet${NC}"
     echo ""
-    echo -e "  SNR 발동 확인 (300초 후):"
+    echo -e "  Verify SNR triggered (after 300 seconds):"
     echo -e "    ${CYAN}oc get selfnoderemediation -A${NC}"
     echo -e "    ${CYAN}oc get nodes -w${NC}"
     echo ""
-    echo -e "  자세한 내용: 15-snr.md 참조"
+    echo -e "  For details: 15-snr.md"
     echo ""
 }
 
@@ -277,22 +277,22 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 15-snr 리소스 삭제"
+    print_step "--cleanup: Delete 15-snr resources"
     local _rem_ns="openshift-workload-availability"
     oc delete project poc-snr --ignore-not-found 2>/dev/null || true
     oc delete nodehealthcheck poc-snr-nhc --ignore-not-found 2>/dev/null || true
     oc delete selfnoderemediationtemplate poc-snr-template -n "$_rem_ns" --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-nodehealthcheck-snr --ignore-not-found 2>/dev/null || true
-    print_ok "15-snr 리소스 삭제 완료"
+    print_ok "15-snr resources deleted successfully"
 }
 
 # =============================================================================
-# 메인
+# Main
 # =============================================================================
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  SNR 실습 환경 구성${NC}"
+    echo -e "${CYAN}  SNR lab environment setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

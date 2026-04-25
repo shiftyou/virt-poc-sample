@@ -1,38 +1,39 @@
-# Kube Descheduler Operator 설치
+# Kube Descheduler Operator Installation
 
-## 개요
+## Overview
 
-Kube Descheduler Operator는 클러스터의 Pod 분배를 최적화하기 위해 불균형하게 배치된 Pod를
-재스케줄링하는 Operator입니다.
+The Kube Descheduler Operator is an Operator that reschedules unevenly placed Pods
+to optimize Pod distribution across the cluster.
 
-VM(VirtualMachineInstance)도 Pod처럼 관리되므로, VM의 노드 분배 최적화에도 사용됩니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
+Since VMs (VirtualMachineInstances) are managed like Pods, it is also used to optimize
+node distribution for VMs.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Kube Descheduler` 검색
-3. **Kube Descheduler Operator** 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Kube Descheduler`
+3. Select **Kube Descheduler Operator**
+4. Click `Install`
+5. Settings:
    - Update channel: `stable`
    - Installation mode: `All namespaces on the cluster`
    - Installed Namespace: `openshift-kube-descheduler-operator`
-6. `Install` 클릭
+6. Click `Install`
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# 1. Namespace 생성
+# 1. Create Namespace
 oc apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
@@ -42,7 +43,7 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
-# 2. OperatorGroup 생성
+# 2. Create OperatorGroup
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -54,7 +55,7 @@ spec:
     - openshift-kube-descheduler-operator
 EOF
 
-# 3. Subscription 생성
+# 3. Create Subscription
 oc apply -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
@@ -71,21 +72,21 @@ EOF
 
 ---
 
-## 설치 확인
+## Verify Installation
 
 ```bash
-# CSV 상태 확인
+# Check CSV status
 oc get csv -n openshift-kube-descheduler-operator
 
-# Descheduler Pod 상태 확인
+# Check Descheduler Pod status
 oc get pods -n openshift-kube-descheduler-operator
 ```
 
 ---
 
-## Descheduler 구성
+## Descheduler Configuration
 
-설치 후 `01-environment/descheduler/` 디렉토리의 가이드를 참조합니다.
+After installation, refer to the guide in the `01-environment/descheduler/` directory.
 
 ```bash
 cd 01-environment/descheduler
@@ -94,15 +95,15 @@ cd 01-environment/descheduler
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
 ```bash
-# Descheduler Operator 로그 확인
+# Check Descheduler Operator logs
 oc logs -n openshift-kube-descheduler-operator deployment/descheduler-operator
 
-# KubeDescheduler CR 상태 확인
+# Check KubeDescheduler CR status
 oc get kubedescheduler -n openshift-kube-descheduler-operator -o yaml
 
-# Descheduler 이벤트 확인
+# Check Descheduler events
 oc get events -n openshift-kube-descheduler-operator --sort-by='.lastTimestamp'
 ```

@@ -2,22 +2,22 @@
 # =============================================================================
 # 13-oadp.sh
 #
-# OADP 실습 환경 구성
-#   1. OADP Operator 네임스페이스 확인 (기본: openshift-adp)
-#   2. ObjectBucketClaim 생성 및 버킷/자격증명 취득 (ODF 백엔드 전용)
-#   3. cloud-credentials Secret 생성
-#   4. VolumeSnapshotClass YAML 생성 (CSI 스냅샷용, 스토리지 환경에 맞게 적용)
-#   5. DataProtectionApplication 배포
-#   6. BackupStorageLocation 확인
-#   7. poc-oadp 네임스페이스 생성
-#   8. poc-oadp VM 생성 (poc DataSource 사용)
-#   9. Backup CR 생성 (poc-oadp 백업) + Restore YAML 생성 (미적용)
+# OADP lab environment setup
+#   1. Verify OADP Operator namespace (default: openshift-adp)
+#   2. Create ObjectBucketClaim and obtain bucket/credentials (ODF backend only)
+#   3. Create cloud-credentials Secret
+#   4. Generate VolumeSnapshotClass YAML (for CSI snapshots, apply as appropriate for storage environment)
+#   5. Deploy DataProtectionApplication
+#   6. Verify BackupStorageLocation
+#   7. Create poc-oadp namespace
+#   8. Create poc-oadp VM (using poc DataSource)
+#   9. Create Backup CR (poc-oadp backup) + Generate Restore YAML (not applied)
 #
-# 실행 조건:
-#   - OADP Operator 설치 필수 (기본 네임스페이스: openshift-adp)
-#   - 백엔드: MinIO 커뮤니티 버전 배포 + 설정 완료, 또는 ODF Operator 설치
+# Requirements:
+#   - OADP Operator must be installed (default namespace: openshift-adp)
+#   - Backend: MinIO community version deployed and configured, or ODF Operator installed
 #
-# 사용법: ./13-oadp.sh
+# Usage: ./13-oadp.sh
 # =============================================================================
 
 set -euo pipefail
@@ -31,10 +31,10 @@ fi
 
 NS="${OADP_NS:-openshift-adp}"
 
-# 사용할 백엔드: minio | odf (preflight 에서 결정)
+# Backend to use: minio | odf (determined in preflight)
 BACKEND=""
 
-# 통합 S3 변수 (preflight 에서 백엔드에 따라 설정)
+# Unified S3 variables (set in preflight based on backend)
 S3_ENDPOINT=""
 S3_BUCKET=""
 S3_ACCESS_KEY=""
@@ -56,11 +56,11 @@ print_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 print_error() { echo -e "${RED}[ERR ]${NC} $1"; }
 print_step()  { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
-# YAML 미리보기 후 적용
+# Preview YAML then apply
 confirm_and_apply() {
     local file="$1"
     echo ""
-    print_info "적용할 YAML:"
+    print_info "YAML to apply:"
     echo "────────────────────────────────────────"
     cat "$file"
     echo "────────────────────────────────────────"
@@ -68,23 +68,23 @@ confirm_and_apply() {
 }
 
 preflight() {
-    print_step "사전 확인"
+    print_step "Pre-flight check"
 
     if ! oc whoami &>/dev/null; then
-        print_error "OpenShift 에 로그인되어 있지 않습니다."
+        print_error "Not logged in to OpenShift."
         exit 1
     fi
-    print_ok "클러스터 접속: $(oc whoami) @ $(oc whoami --show-server)"
+    print_ok "Cluster connection: $(oc whoami) @ $(oc whoami --show-server)"
 
-    # OADP Operator 필수
+    # OADP Operator required
     if [ "${OADP_INSTALLED:-false}" != "true" ]; then
-        print_warn "OADP Operator 미설치 → 건너뜁니다."
-        print_warn "  설치 가이드: 00-operator/oadp-operator.md"
+        print_warn "OADP Operator not installed → skipping."
+        print_warn "  Installation guide: 00-operator/oadp-operator.md"
         exit 77
     fi
-    print_ok "OADP Operator 확인 (ns: ${NS})"
+    print_ok "OADP Operator confirmed (ns: ${NS})"
 
-    # S3 초기값 결정: MinIO 우선, 없으면 ODF, 없으면 빈값(직접 입력)
+    # Determine initial S3 values: MinIO preferred, then ODF, then empty (manual input)
     if [ "${MINIO_INSTALLED:-false}" = "true" ] && [ -n "${MINIO_ENDPOINT:-}" ]; then
         BACKEND="minio"
         S3_ENDPOINT="${MINIO_ENDPOINT}"
@@ -95,7 +95,7 @@ preflight() {
     elif [ "${ODF_INSTALLED:-false}" = "true" ] && [ -n "${ODF_S3_ENDPOINT:-}" ]; then
         BACKEND="odf"
         S3_ENDPOINT="${ODF_S3_ENDPOINT}"
-        S3_BUCKET="(OBC 자동 생성 — step_obc 에서 결정)"
+        S3_BUCKET="(OBC auto-created — determined in step_obc)"
         S3_ACCESS_KEY="${ODF_S3_ACCESS_KEY:-}"
         S3_SECRET_KEY="${ODF_S3_SECRET_KEY:-}"
         S3_REGION="${OADP_S3_REGION:-${ODF_S3_REGION:-us-east-1}}"
@@ -106,19 +106,19 @@ preflight() {
         S3_ACCESS_KEY="${OADP_S3_ACCESS_KEY:-}"
         S3_SECRET_KEY="${OADP_S3_SECRET_KEY:-}"
         S3_REGION="${OADP_S3_REGION:-us-east-1}"
-        print_warn "Object Storage 자동 감지 실패 — 아래에서 직접 입력하세요."
+        print_warn "Object Storage auto-detection failed — please enter values below."
     fi
 
     echo ""
-    print_info "── Object Storage (S3) — OADP 백업용 ──"
-    print_info "  백엔드      : ${BACKEND}"
-    print_info "  S3 Endpoint : ${S3_ENDPOINT:-(미설정)}"
+    print_info "── Object Storage (S3) — for OADP backup ──"
+    print_info "  Backend     : ${BACKEND}"
+    print_info "  S3 Endpoint : ${S3_ENDPOINT:-(not set)}"
     print_info "  S3 Bucket   : ${S3_BUCKET}"
     print_info "  S3 Region   : ${S3_REGION}"
-    print_info "  S3 AccessKey: ${S3_ACCESS_KEY:-(미설정)}"
+    print_info "  S3 AccessKey: ${S3_ACCESS_KEY:-(not set)}"
     print_info "  S3 SecretKey: ****"
     echo ""
-    read -r -p "  위 내용이 맞습니까? (Y/n): " _confirm
+    read -r -p "  Is the above information correct? (Y/n): " _confirm
     if [[ "${_confirm:-}" =~ ^[Nn]$ ]]; then
         read -r -p "  S3 Endpoint  [${S3_ENDPOINT}]: " _input
         [ -n "$_input" ] && S3_ENDPOINT="$_input"
@@ -134,51 +134,51 @@ preflight() {
     fi
 
     if [ -z "${S3_ENDPOINT}" ] || [ -z "${S3_ACCESS_KEY}" ]; then
-        print_error "S3 Endpoint 또는 AccessKey가 비어 있습니다."
+        print_error "S3 Endpoint or AccessKey is empty."
         exit 1
     fi
-    print_ok "Object Storage 설정 확인 완료 (백엔드: ${BACKEND}, bucket: ${S3_BUCKET})"
+    print_ok "Object Storage configuration confirmed (backend: ${BACKEND}, bucket: ${S3_BUCKET})"
 }
 
 # =============================================================================
-# 1단계: 네임스페이스 확인 (OADP Operator 설치 네임스페이스)
+# Step 1: Verify namespace (OADP Operator installation namespace)
 # =============================================================================
 step_namespace() {
-    print_step "1/6  네임스페이스 확인 (${NS})"
+    print_step "1/6  Verify namespace (${NS})"
 
     if oc get namespace "$NS" &>/dev/null; then
-        print_ok "네임스페이스 $NS 확인 완료"
+        print_ok "Namespace $NS confirmed"
     else
-        print_error "네임스페이스 $NS 없음 — OADP Operator 가 설치되어 있는지 확인하세요."
-        print_error "  설치 가이드: 00-operator/oadp-operator.md"
+        print_error "Namespace $NS not found — please verify OADP Operator is installed."
+        print_error "  Installation guide: 00-operator/oadp-operator.md"
         exit 1
     fi
 }
 
 # =============================================================================
-# 2단계: ObjectBucketClaim 생성 및 버킷/자격증명 취득 (ODF 백엔드 전용)
+# Step 2: Create ObjectBucketClaim and obtain bucket/credentials (ODF backend only)
 # =============================================================================
 step_obc() {
     if [ "$BACKEND" != "odf" ]; then
-        print_step "2/6  OBC — MinIO 백엔드이므로 스킵"
+        print_step "2/6  OBC — MinIO backend, skipping"
         return
     fi
 
-    print_step "2/6  ObjectBucketClaim 생성 (ns: ${NS})"
+    print_step "2/6  Create ObjectBucketClaim (ns: ${NS})"
 
-    # NooBaa StorageClass 자동 감지
+    # Auto-detect NooBaa StorageClass
     local obc_sc
     obc_sc=$(oc get storageclass -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
         tr ' ' '\n' | grep -i "noobaa" | head -1 || true)
     if [ -z "$obc_sc" ]; then
         obc_sc="openshift-storage.noobaa.io"
-        print_warn "NooBaa StorageClass 자동 감지 실패 → 기본값: ${obc_sc}"
+        print_warn "NooBaa StorageClass auto-detection failed → using default: ${obc_sc}"
     else
         print_info "OBC StorageClass: ${obc_sc}"
     fi
 
     if oc get obc obc-backups -n "$NS" &>/dev/null; then
-        print_ok "ObjectBucketClaim obc-backups 이미 존재 — 스킵"
+        print_ok "ObjectBucketClaim obc-backups already exists — skipping"
     else
         cat > obc-backups.yaml <<EOF
 apiVersion: objectbucket.io/v1alpha1
@@ -190,13 +190,13 @@ spec:
   generateBucketName: backups
   storageClassName: ${obc_sc}
 EOF
-        echo "생성된 파일: obc-backups.yaml"
+        echo "Generated file: obc-backups.yaml"
         oc apply -f obc-backups.yaml
-        print_ok "ObjectBucketClaim obc-backups 생성 완료 → ns: ${NS}"
+        print_ok "ObjectBucketClaim obc-backups created successfully → ns: ${NS}"
     fi
 
-    # Bound 대기
-    print_info "OBC Bound 대기 중..."
+    # Wait for Bound
+    print_info "Waiting for OBC to be Bound..."
     local retries=12
     local i=0
     while [ $i -lt $retries ]; do
@@ -204,32 +204,32 @@ EOF
         phase=$(oc get obc obc-backups -n "$NS" \
             -o jsonpath='{.status.phase}' 2>/dev/null || true)
         if [ "$phase" = "Bound" ]; then
-            print_ok "OBC 상태: Bound"
+            print_ok "OBC status: Bound"
             break
         fi
-        printf "  [%d/%d] 대기 중... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
+        printf "  [%d/%d] Waiting... (%s)\r" "$((i+1))" "$retries" "${phase:-Pending}"
         sleep 5
         i=$((i+1))
     done
     echo ""
 
     if [ $i -eq $retries ]; then
-        print_error "OBC Bound 시간 초과. ODF/NooBaa 상태를 확인하세요."
+        print_error "OBC Bound timed out. Please check ODF/NooBaa status."
         exit 1
     fi
 
-    # ConfigMap 에서 버킷명 취득
-    # S3_ENDPOINT, S3_REGION 은 env.conf(ODF_S3_ENDPOINT/REGION) 값 유지
+    # Get bucket name from ConfigMap
+    # S3_ENDPOINT and S3_REGION retain values from env.conf (ODF_S3_ENDPOINT/REGION)
     S3_BUCKET=$(oc get cm obc-backups -n "$NS" \
         -o jsonpath='{.data.BUCKET_NAME}' 2>/dev/null || true)
 
-    # Secret 에서 per-bucket 자격증명 취득 (noobaa-admin 대신)
+    # Get per-bucket credentials from Secret (instead of noobaa-admin)
     S3_ACCESS_KEY=$(oc get secret obc-backups -n "$NS" \
         -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' 2>/dev/null | base64 -d || true)
     S3_SECRET_KEY=$(oc get secret obc-backups -n "$NS" \
         -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' 2>/dev/null | base64 -d || true)
 
-    print_ok "OBC 버킷/자격증명 취득 완료"
+    print_ok "OBC bucket/credentials obtained successfully"
     print_info "  Bucket   : ${S3_BUCKET}"
     print_info "  Endpoint : ${S3_ENDPOINT}"
     print_info "  Region   : ${S3_REGION}"
@@ -237,10 +237,10 @@ EOF
 }
 
 # =============================================================================
-# 3단계: cloud-credentials Secret 생성 (OADP Operator 네임스페이스)
+# Step 3: Create cloud-credentials Secret (OADP Operator namespace)
 # =============================================================================
 step_credentials() {
-    print_step "3/6  cloud-credentials Secret 생성 (백엔드: ${BACKEND}, ns: ${NS})"
+    print_step "3/6  Create cloud-credentials Secret (backend: ${BACKEND}, ns: ${NS})"
 
     cat > cloud-credentials-secret.yaml <<EOF
 apiVersion: v1
@@ -255,26 +255,26 @@ stringData:
     aws_secret_access_key=${S3_SECRET_KEY}
 EOF
     confirm_and_apply cloud-credentials-secret.yaml
-    print_ok "cloud-credentials Secret 생성 완료 → ns: ${NS}"
+    print_ok "cloud-credentials Secret created successfully → ns: ${NS}"
 }
 
 # =============================================================================
-# 3단계: VolumeSnapshotClass YAML 생성 (CSI 스냅샷용)
+# Step 3: Generate VolumeSnapshotClass YAML (for CSI snapshots)
 # =============================================================================
 step_volumesnapshotclass() {
-    print_step "4/6  VolumeSnapshotClass YAML 생성"
+    print_step "4/6  Generate VolumeSnapshotClass YAML"
 
-    # 클러스터의 CSI 드라이버 자동 감지
+    # Auto-detect cluster's CSI driver
     local csi_driver
     csi_driver=$(oc get csidrivers -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
         tr ' ' '\n' | grep -v "^kubernetes\|^csi-snapshot\|^file" | head -1 || true)
 
     if [ -z "$csi_driver" ]; then
         csi_driver="your.csi.driver.com"
-        print_warn "CSI 드라이버 자동 감지 실패 → 기본값: ${csi_driver}"
-        print_warn "  실제 드라이버명으로 수정 후 적용하세요: oc get csidrivers"
+        print_warn "CSI driver auto-detection failed → using default: ${csi_driver}"
+        print_warn "  Please update with the actual driver name and apply: oc get csidrivers"
     else
-        print_info "CSI 드라이버 감지: ${csi_driver}"
+        print_info "CSI driver detected: ${csi_driver}"
     fi
 
     cat > volumesnapshotclass.yaml <<EOF
@@ -287,37 +287,37 @@ metadata:
 driver: ${csi_driver}
 deletionPolicy: Delete
 EOF
-    echo "생성된 파일: volumesnapshotclass.yaml"
-    print_info "CSI 스냅샷 사용 시 아래 명령으로 적용하세요:"
+    echo "Generated file: volumesnapshotclass.yaml"
+    print_info "To use CSI snapshots, apply with the following command:"
     echo -e "    ${CYAN}oc apply -f volumesnapshotclass.yaml${NC}"
 }
 
 # =============================================================================
-# 4단계: DataProtectionApplication 배포 (OADP Operator 네임스페이스)
+# Step 4: Deploy DataProtectionApplication (OADP Operator namespace)
 # =============================================================================
 step_dpa() {
-    print_step "5/6  DataProtectionApplication 배포 (백엔드: ${BACKEND}, ns: ${NS})"
+    print_step "5/6  Deploy DataProtectionApplication (backend: ${BACKEND}, ns: ${NS})"
 
-    # OADP는 네임스페이스 당 DPA 하나만 허용 — 기존 DPA가 있으면 버킷/credentials 업데이트
+    # OADP allows only one DPA per namespace — update bucket/credentials if DPA already exists
     local _existing_dpa
     _existing_dpa=$(oc get dpa -n "$NS" --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | head -1 || true)
     if [ -n "$_existing_dpa" ] && [ "$_existing_dpa" != "poc-dpa" ]; then
-        print_warn "이미 DPA '${_existing_dpa}' 가 존재합니다 (OADP는 네임스페이스 당 DPA 하나만 허용)."
+        print_warn "DPA '${_existing_dpa}' already exists (OADP allows only one DPA per namespace)."
         DPA_NAME="${_existing_dpa}"
         BSL_NAME="${_existing_dpa}-1"
-        print_info "기존 DPA '${_existing_dpa}' 의 bucket/endpoint/credentials를 업데이트합니다."
+        print_info "Updating bucket/endpoint/credentials for existing DPA '${_existing_dpa}'."
 
         oc patch dpa "${_existing_dpa}" -n "$NS" --type=json -p="[
           {\"op\":\"replace\",\"path\":\"/spec/backupLocations/0/velero/objectStorage/bucket\",\"value\":\"${S3_BUCKET}\"},
           {\"op\":\"replace\",\"path\":\"/spec/backupLocations/0/velero/config/s3Url\",\"value\":\"${S3_ENDPOINT}\"},
           {\"op\":\"replace\",\"path\":\"/spec/backupLocations/0/velero/config/region\",\"value\":\"${S3_REGION}\"}
-        ]" 2>/dev/null && print_ok "DPA bucket/endpoint/region 업데이트 완료" || \
-            print_warn "DPA 패치 실패 — 수동 확인 필요: oc edit dpa ${_existing_dpa} -n ${NS}"
+        ]" 2>/dev/null && print_ok "DPA bucket/endpoint/region updated successfully" || \
+            print_warn "DPA patch failed — manual check required: oc edit dpa ${_existing_dpa} -n ${NS}"
         return
     fi
 
     if oc get dpa poc-dpa -n "$NS" &>/dev/null; then
-        print_ok "DataProtectionApplication poc-dpa 이미 존재 — 스킵"
+        print_ok "DataProtectionApplication poc-dpa already exists — skipping"
         return
     fi
 
@@ -358,47 +358,47 @@ spec:
           name: cloud-credentials
 EOF
     confirm_and_apply poc-dpa.yaml
-    print_ok "DataProtectionApplication poc-dpa 배포 완료 → ns: ${NS}"
+    print_ok "DataProtectionApplication poc-dpa deployed successfully → ns: ${NS}"
 }
 
 # =============================================================================
-# 5단계: BackupStorageLocation 확인
+# Step 5: Verify BackupStorageLocation
 # =============================================================================
 step_verify() {
-    print_step "6/6  BackupStorageLocation 확인 (ns: ${NS})"
+    print_step "6/6  Verify BackupStorageLocation (ns: ${NS})"
 
-    # DPA_NAME/BSL_NAME 은 step_dpa() 에서 결정 (기존 DPA 재사용 시 변경됨)
+    # DPA_NAME/BSL_NAME are determined in step_dpa() (may change when reusing existing DPA)
 
     echo ""
-    # 네임스페이스에 다른 DPA/BSL이 있으면 경고
+    # Warn if there are other DPAs/BSLs in the namespace
     local other_bsl
     other_bsl=$(oc get backupstoragelocation -n "$NS" \
         --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null | grep -v "^${BSL_NAME}$" || true)
     if [ -n "$other_bsl" ]; then
-        print_warn "다른 BackupStorageLocation이 감지되었습니다:"
+        print_warn "Other BackupStorageLocations detected:"
         echo "$other_bsl" | while read -r b; do
-            print_warn "  - ${b} (이 스크립트가 생성한 것이 아님, 상태 무관)"
+            print_warn "  - ${b} (not created by this script, status irrelevant)"
         done
         echo ""
     fi
 
-    print_info "연결 대상 정보 (BSL: ${BSL_NAME}):"
+    print_info "Connection target information (BSL: ${BSL_NAME}):"
     print_info "  S3 Endpoint : ${S3_ENDPOINT}"
     print_info "  S3 Bucket   : ${S3_BUCKET}"
     print_info "  S3 Region   : ${S3_REGION}"
     echo ""
-    print_warn "주의: BSL 검증 실패의 주요 원인"
-    print_warn "  1) 버킷 미존재 — Velero는 버킷을 자동 생성하지 않습니다."
+    print_warn "Note: Common causes of BSL validation failure"
+    print_warn "  1) Bucket does not exist — Velero does not auto-create buckets."
     if [ "$BACKEND" = "odf" ]; then
-        print_warn "     ODF: OBC(obc-backups)로 생성된 버킷 이름을 사용합니다 → ${S3_BUCKET}"
+        print_warn "     ODF: Uses bucket name created by OBC (obc-backups) → ${S3_BUCKET}"
     else
-        print_warn "     MinIO: mc mb <alias>/${S3_BUCKET}  또는 콘솔에서 직접 생성"
+        print_warn "     MinIO: mc mb <alias>/${S3_BUCKET}  or create directly in the console"
     fi
-    print_warn "  2) Endpoint 불통 — Velero Pod에서 ${S3_ENDPOINT} 에 도달 가능해야 합니다."
-    print_warn "  3) 자격증명 오류 — AccessKey / SecretKey 확인"
+    print_warn "  2) Endpoint unreachable — Velero Pod must be able to reach ${S3_ENDPOINT}."
+    print_warn "  3) Credentials error — Check AccessKey / SecretKey"
     echo ""
 
-    print_info "BackupStorageLocation 준비 대기 중 (BSL: ${BSL_NAME})..."
+    print_info "Waiting for BackupStorageLocation to be ready (BSL: ${BSL_NAME})..."
     local retries=18
     local i=0
     while [ $i -lt $retries ]; do
@@ -406,84 +406,84 @@ step_verify() {
         phase=$(oc get backupstoragelocation "${BSL_NAME}" -n "$NS" \
             -o jsonpath='{.status.phase}' 2>/dev/null || true)
         if [ "$phase" = "Available" ]; then
-            print_ok "BackupStorageLocation ${BSL_NAME} 상태: Available"
+            print_ok "BackupStorageLocation ${BSL_NAME} status: Available"
             oc get backupstoragelocation -n "$NS" 2>/dev/null || true
             return
         fi
         err_msg=$(oc get backupstoragelocation "${BSL_NAME}" -n "$NS" \
             -o jsonpath='{.status.message}' 2>/dev/null || true)
-        printf "  [%d/%d] 상태: %-12s %s\r" "$((i+1))" "$retries" "${phase:-Pending}" "${err_msg:+| $err_msg}"
+        printf "  [%d/%d] Status: %-12s %s\r" "$((i+1))" "$retries" "${phase:-Pending}" "${err_msg:+| $err_msg}"
         sleep 10
         i=$((i+1))
     done
     echo ""
 
-    print_warn "BackupStorageLocation 준비 시간 초과."
+    print_warn "BackupStorageLocation readiness timed out."
     echo ""
-    print_info "현재 BSL 상태:"
+    print_info "Current BSL status:"
     oc get backupstoragelocation -n "$NS" 2>/dev/null || true
     echo ""
-    print_info "상세 오류 확인 (${BSL_NAME}):"
+    print_info "Check detailed error (${BSL_NAME}):"
     oc describe backupstoragelocation "${BSL_NAME}" -n "$NS" 2>/dev/null | grep -A5 "Status:\|Message:\|Phase:" || true
     echo ""
     print_info "  → oc describe backupstoragelocation ${BSL_NAME} -n ${NS}"
 }
 
 # =============================================================================
-# 7단계: poc-oadp 네임스페이스 생성 (백업 대상)
+# Step 7: Create poc-oadp namespace (backup target)
 # =============================================================================
 VM_NS="poc-oadp"
 
 step_vm_namespace() {
-    print_step "7/9  백업 대상 네임스페이스 생성 (${VM_NS})"
+    print_step "7/9  Create backup target namespace (${VM_NS})"
 
     if oc get namespace "$VM_NS" &>/dev/null; then
-        print_ok "네임스페이스 $VM_NS 이미 존재 — 스킵"
+        print_ok "Namespace $VM_NS already exists — skipping"
     else
         oc new-project "$VM_NS" > /dev/null
-        print_ok "네임스페이스 $VM_NS 생성 완료"
+        print_ok "Namespace $VM_NS created successfully"
     fi
 }
 
 # =============================================================================
-# 8단계: VM 생성 (poc-oadp, poc DataSource 사용)
+# Step 8: Create VM (poc-oadp, using poc DataSource)
 # =============================================================================
 step_vm() {
-    print_step "8/9  VM 생성 (ns: ${VM_NS})"
+    print_step "8/9  Create VM (ns: ${VM_NS})"
 
     if oc get vm poc-oadp-vm -n "$VM_NS" &>/dev/null; then
-        print_ok "VM poc-oadp-vm 이미 존재 — 스킵"
+        print_ok "VM poc-oadp-vm already exists — skipping"
         return
     fi
 
     if ! oc get template poc -n openshift &>/dev/null; then
-        print_warn "poc Template 없음 — VM 생성을 건너뜁니다. (01-template 먼저 실행 필요)"
+        print_warn "poc Template not found — skipping VM creation. (Run 01-template first)"
         return
     fi
 
     local vm_yaml="${SCRIPT_DIR}/poc-oadp-vm.yaml"
     oc process -n openshift poc -p NAME="poc-oadp-vm" | \
         sed 's/  running: false/  runStrategy: Always/' > "${vm_yaml}"
-    echo "생성된 파일: ${vm_yaml}"
+    echo "Generated file: ${vm_yaml}"
     confirm_and_apply "${vm_yaml}"
-    print_ok "VM poc-oadp-vm 생성 완료 → ns: ${VM_NS}"
-    print_info "  VM 상태 확인: oc get vm -n ${VM_NS}"
+    print_ok "VM poc-oadp-vm created successfully → ns: ${VM_NS}"
+    print_info "  Check VM status: oc get vm -n ${VM_NS}"
 }
 
 # =============================================================================
-# 9단계: Backup CR 생성 + Restore YAML 생성 (미적용)
+# Step 9: Create Backup CR + Generate Restore YAML (not applied)
 # =============================================================================
 step_backup() {
-    print_step "9/9  Backup CR 생성 (대상: ${VM_NS}, ns: ${NS})"
+    print_step "9/9  Create Backup CR (target: ${VM_NS}, ns: ${NS})"
 
-    # BSL 이름 동적 감지 (OADP Operator가 DPA 이름 기반으로 자동 생성, 예: poc-dpa-1)
+    # Dynamically detect BSL name (OADP Operator auto-creates based on DPA name, e.g.: poc-dpa-1)
     local bsl_name
     bsl_name=$(oc get backupstoragelocation -n "$NS" \
         -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "default")
     print_info "BackupStorageLocation: ${bsl_name}"
 
     if oc get backup poc-oadp-backup -n "$NS" &>/dev/null; then
-        print_ok "Backup poc-oadp-backup 이미 존재 — 스킵"
+        print_ok "Backup poc-oadp-backup already exists — skipping"
     else
         cat > poc-oadp-backup.yaml <<EOF
 apiVersion: velero.io/v1
@@ -499,10 +499,10 @@ spec:
   snapshotVolumes: true
 EOF
         confirm_and_apply poc-oadp-backup.yaml
-        print_ok "Backup poc-oadp-backup 생성 완료 → ns: ${NS}"
+        print_ok "Backup poc-oadp-backup created successfully → ns: ${NS}"
     fi
 
-    # Restore YAML 생성 (적용 안 함)
+    # Generate Restore YAML (not applied)
     cat > poc-oadp-restore.yaml <<EOF
 apiVersion: velero.io/v1
 kind: Restore
@@ -515,13 +515,13 @@ spec:
     - ${VM_NS}
   restorePVs: true
 EOF
-    echo "생성된 파일: poc-oadp-restore.yaml"
-    print_info "복원 시 아래 명령으로 적용하세요:"
+    echo "Generated file: poc-oadp-restore.yaml"
+    print_info "To restore, apply with the following command:"
     echo -e "    ${CYAN}oc apply -f poc-oadp-restore.yaml${NC}"
 }
 
 step_consoleyamlsamples() {
-    print_step "10/10  ConsoleYAMLSample 등록"
+    print_step "10/10  Register ConsoleYAMLSample"
 
     cat > consoleyamlsample-dpa.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -530,7 +530,7 @@ metadata:
   name: poc-dataprotectionapplication
 spec:
   title: "POC DataProtectionApplication (OADP)"
-  description: "S3 호환 오브젝트 스토리지(MinIO/ODF)를 백업 스토리지로 사용하는 DataProtectionApplication 예시입니다. kubevirt, csi, openshift 플러그인을 포함합니다."
+  description: "Example DataProtectionApplication using S3-compatible object storage (MinIO/ODF) as backup storage. Includes kubevirt, csi, and openshift plugins."
   targetResource:
     apiVersion: oadp.openshift.io/v1alpha1
     kind: DataProtectionApplication
@@ -571,7 +571,7 @@ spec:
               name: cloud-credentials
 EOF
     oc apply -f consoleyamlsample-dpa.yaml
-    print_ok "ConsoleYAMLSample poc-dataprotectionapplication 등록 완료"
+    print_ok "ConsoleYAMLSample poc-dataprotectionapplication registered successfully"
 
     cat > consoleyamlsample-backup.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -580,7 +580,7 @@ metadata:
   name: poc-backup
 spec:
   title: "POC Backup (Velero)"
-  description: "특정 네임스페이스의 VM과 볼륨을 백업하는 Velero Backup CR 예시입니다. storageLocation은 DataProtectionApplication에서 자동 생성된 BSL 이름을 사용합니다."
+  description: "Example Velero Backup CR for backing up VMs and volumes in a specific namespace. Uses the BSL name auto-created by DataProtectionApplication for storageLocation."
   targetResource:
     apiVersion: velero.io/v1
     kind: Backup
@@ -598,7 +598,7 @@ spec:
       snapshotVolumes: true
 EOF
     oc apply -f consoleyamlsample-backup.yaml
-    print_ok "ConsoleYAMLSample poc-backup 등록 완료"
+    print_ok "ConsoleYAMLSample poc-backup registered successfully"
 
     cat > consoleyamlsample-restore.yaml <<EOF
 apiVersion: console.openshift.io/v1
@@ -607,7 +607,7 @@ metadata:
   name: poc-restore
 spec:
   title: "POC Restore (Velero)"
-  description: "Velero Backup으로부터 VM과 PV를 복원하는 Restore CR 예시입니다. 백업 완료 후 적용하세요."
+  description: "Example Restore CR for restoring VMs and PVs from a Velero Backup. Apply after backup is complete."
   targetResource:
     apiVersion: velero.io/v1
     kind: Restore
@@ -624,30 +624,30 @@ spec:
       restorePVs: true
 EOF
     oc apply -f consoleyamlsample-restore.yaml
-    print_ok "ConsoleYAMLSample poc-restore 등록 완료"
+    print_ok "ConsoleYAMLSample poc-restore registered successfully"
 }
 
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  완료! OADP 실습 환경이 준비되었습니다.${NC}"
+    echo -e "${GREEN}  Done! OADP lab environment is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  백엔드 : ${BACKEND}"
+    echo -e "  Backend : ${BACKEND}"
     echo ""
-    echo -e "  BackupStorageLocation 확인:"
+    echo -e "  Check BackupStorageLocation:"
     echo -e "    ${CYAN}oc get backupstoragelocation -n ${NS}${NC}"
     echo ""
-    echo -e "  VM 상태 확인 (백업 대상):"
+    echo -e "  Check VM status (backup target):"
     echo -e "    ${CYAN}oc get vm -n ${VM_NS}${NC}"
     echo ""
-    echo -e "  Backup 상태 확인:"
+    echo -e "  Check Backup status:"
     echo -e "    ${CYAN}oc get backup poc-oadp-backup -n ${NS}${NC}"
     echo ""
-    echo -e "  복원 실행 (백업 완료 후):"
+    echo -e "  Run restore (after backup completes):"
     echo -e "    ${CYAN}oc apply -f poc-oadp-restore.yaml${NC}"
     echo ""
-    echo -e "  자세한 내용: 13-oadp.md 참조"
+    echo -e "  For details: 13-oadp.md"
     echo ""
 }
 
@@ -655,7 +655,7 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: 13-oadp 리소스 삭제"
+    print_step "--cleanup: Delete 13-oadp resources"
     local _oadp_ns="${OADP_NS:-openshift-adp}"
     oc delete project poc-oadp --ignore-not-found 2>/dev/null || true
     oc delete dataprotectionapplication poc-dpa -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
@@ -663,13 +663,13 @@ cleanup() {
     oc delete objectbucketclaim obc-backups -n "$_oadp_ns" --ignore-not-found 2>/dev/null || true
     oc delete volumesnapshotclass poc-volumesnapshotclass --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-dataprotectionapplication poc-backup poc-restore --ignore-not-found 2>/dev/null || true
-    print_ok "13-oadp 리소스 삭제 완료"
+    print_ok "13-oadp resources deleted successfully"
 }
 
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  OADP 실습 환경 구성${NC}"
+    echo -e "${CYAN}  OADP lab environment setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

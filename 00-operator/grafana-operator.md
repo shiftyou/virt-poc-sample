@@ -1,39 +1,39 @@
-# Grafana Operator 설치
+# Grafana Operator Installation
 
-## 개요
+## Overview
 
-Grafana Operator는 OpenShift 클러스터에 Grafana 인스턴스를 배포하고 관리합니다.
-OpenShift Virtualization의 VM 메트릭(CPU, 메모리, 네트워크, 디스크)을 시각화하는 대시보드를 구성할 수 있습니다.
-
----
-
-## 사전 조건
-
-- cluster-admin 권한
-- OpenShift User Workload Monitoring 활성화
+The Grafana Operator deploys and manages Grafana instances in the OpenShift cluster.
+It can configure dashboards to visualize VM metrics (CPU, memory, network, disk) from OpenShift Virtualization.
 
 ---
 
-## 설치 방법
+## Prerequisites
 
-### 방법 1: OpenShift Console (Web UI)
+- cluster-admin privileges
+- OpenShift User Workload Monitoring enabled
 
-1. **Operators > OperatorHub** 메뉴로 이동
-2. `Grafana` 검색
-3. **Grafana Operator** (Community) 선택
-4. `Install` 클릭
-5. 설정:
+---
+
+## Installation Methods
+
+### Method 1: OpenShift Console (Web UI)
+
+1. Navigate to **Operators > OperatorHub** menu
+2. Search for `Grafana`
+3. Select **Grafana Operator** (Community)
+4. Click `Install`
+5. Settings:
    - Installation mode: `A specific namespace on the cluster`
-   - Installed Namespace: `poc-grafana` (신규 생성)
-6. `Install` 클릭
+   - Installed Namespace: `poc-grafana` (create new)
+6. Click `Install`
 
-### 방법 2: CLI (YAML)
+### Method 2: CLI (YAML)
 
 ```bash
-# Namespace 생성
+# Create Namespace
 oc new-project poc-grafana
 
-# Operator 설치
+# Install Operator
 cat <<'EOF' | oc apply -f -
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -57,7 +57,7 @@ spec:
 EOF
 ```
 
-### 설치 확인
+### Verify Installation
 
 ```bash
 oc get csv -n poc-grafana | grep grafana
@@ -65,7 +65,7 @@ oc get csv -n poc-grafana | grep grafana
 
 ---
 
-## Grafana 인스턴스 생성
+## Create Grafana Instance
 
 ```bash
 cat <<'EOF' | oc apply -f -
@@ -90,7 +90,7 @@ spec:
 EOF
 ```
 
-### 접속 URL 확인
+### Check Access URL
 
 ```bash
 oc get route grafana-route -n poc-grafana
