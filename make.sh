@@ -271,6 +271,7 @@ step_desc() {
         16-far)              echo "FAR — IPMI/BMC power restart recovery (Operator required)" ;;
         17-add-node)         echo "Worker node removal and rejoin" ;;
         18-hyperconverged)   echo "HyperConverged — CPU Overcommit configuration" ;;
+        21-storage-migration) echo "Storage migration — VM disk StorageClass migration (OCP Virt built-in, no S3 needed)" ;;
         *)                   echo "$1" ;;
     esac
 }
@@ -450,6 +451,7 @@ ns_desc() {
         poc-maintenance)          echo "14 Node Maintenance lab — VM Live Migration during node maintenance" ;;
         poc-snr)                  echo "15 SNR lab — NHC detection → node self-restart recovery" ;;
         poc-far)                  echo "16 FAR lab — NHC detection → IPMI/BMC power restart recovery" ;;
+        poc-storage)              echo "21 Storage migration lab — VM disk StorageClass migration" ;;
         *)                  echo "" ;;
     esac
 }
