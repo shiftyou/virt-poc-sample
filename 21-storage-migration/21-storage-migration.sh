@@ -147,9 +147,10 @@ step_vm() {
     else
         local vm_yaml="${SCRIPT_DIR}/poc-storage-vm.yaml"
         oc process -n openshift poc -p NAME="$VM_NAME" | \
-            sed 's/  running: false/  runStrategy: Always/' | \
-            sed "s/storageClassName:.*/storageClassName: ${SRC_SC}/" \
-            > "${vm_yaml}"
+            jq --arg sc "${SRC_SC}" '
+              .items[0].spec.runStrategy = "Always" |
+              .items[0].spec.dataVolumeTemplates[0].spec.storage.storageClassName = $sc
+            ' > "${vm_yaml}"
         echo "Generated file: poc-storage-vm.yaml"
         oc apply -f "${vm_yaml}"
         print_ok "VM $VM_NAME created (StorageClass: ${SRC_SC})"
