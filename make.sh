@@ -263,7 +263,8 @@ step_desc() {
         08-liveness-probe)   echo "VM Liveness Probe — HTTP, TCP, Exec" ;;
         09-alert)            echo "VM Alert — PrometheusRule notification" ;;
         10-node-exporter)    echo "Node Exporter — Custom metric collection" ;;
-        11-monitoring)       echo "Grafana monitoring (Operator required)" ;;
+        11-coo)              echo "COO — Cluster Observability Operator MonitoringStack + VM node_exporter" ;;
+        11-grafana)          echo "Grafana — Grafana Operator + OpenShift Prometheus datasource + OCP-V dashboard" ;;
         12-mtv)              echo "MTV — VMware → OpenShift migration (Operator required)" ;;
         13-oadp)             echo "OADP — VM backup/restore (Operator required)" ;;
         14-node-maintenance) echo "Node Maintenance — Node maintenance VM Migration (Operator required)" ;;
