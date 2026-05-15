@@ -6,7 +6,7 @@
 # Run setup.sh first to generate env.conf.
 #   e.g.) 01-template/01-template.sh
 #         02-network/02-network.sh
-#         03-vm-management/03-vm-management.sh
+#         03-vm-deploy/03-vm-deploy.sh
 #
 # Usage:
 #   ./make.sh            Print usage
@@ -255,7 +255,7 @@ step_desc() {
     case "$1" in
         01-template)         echo "DataVolume upload → DataSource → Template registration" ;;
         02-network)          echo "NNCP Linux Bridge (${BRIDGE_NAME:-br-poc}) + NAD + VM creation" ;;
-        03-vm-management)    echo "Namespace + NAD preparation" ;;
+        03-vm-deploy)        echo "VM Deploy — Namespace + NAD + VM (poc template + bridge network)" ;;
         04-multitenancy)     echo "Multi-tenancy — Namespaces, Users, RBAC, VMs" ;;
         05-network-policy)   echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
         06-resource-quota)   echo "ResourceQuota — CPU, Memory, Pod, PVC limits" ;;
@@ -436,7 +436,7 @@ echo -e "${CYAN}  poc- namespace list:${NC}"
 echo ""
 ns_desc() {
     case "$1" in
-        poc-vm-management)  echo "03 VM creation, storage, networking, Live Migration lab" ;;
+        poc-vm)             echo "03 VM Deploy lab — VM creation, storage, networking, Live Migration" ;;
         tenant-ns1)               echo "04 Multi-tenancy — NS1 (user1 admin / user3 view)" ;;
         tenant-ns2)               echo "04 Multi-tenancy — NS2 (user2 admin / user4 view)" ;;
         poc-network-policy-1)     echo "05 NetworkPolicy lab — NS1 (Deny All / Allow Same NS)" ;;

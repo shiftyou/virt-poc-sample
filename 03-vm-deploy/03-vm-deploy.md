@@ -1,12 +1,12 @@
-# VM Management
+# VM Deploy
 
-Explains how to create and manage VMs in the `poc-vm-management` namespace.
+Explains how to deploy VMs in the `poc-vm` namespace using the poc template with bridge network and cloud-init static IP.
 
 ```
 poc Template (openshift namespace)
         │  oc process → VirtualMachine creation
         ▼
-VirtualMachine (poc-vm-management)
+VirtualMachine (poc-vm)
         │
         ├─ rootdisk (DataVolume ← poc DataSource clone)
         ├─ additional disk (PVC)
@@ -21,14 +21,14 @@ VirtualMachine (poc-vm-management)
 
 - `01-template` complete — `poc` Template and DataSource registered
 - `02-network` complete — NNCP / NAD configured
-- `03-vm-management.sh` complete — `poc-vm-management` namespace and NAD registered
+- `03-vm-deploy.sh` complete — `poc-vm` namespace and NAD registered
 
 ```bash
 # Check prerequisites
 oc get template poc -n openshift
 oc get datasource poc -n openshift-virtualization-os-images
 oc get nncp poc-bridge-nncp
-oc get net-attach-def poc-bridge-nad -n poc-vm-management
+oc get net-attach-def poc-bridge-nad -n poc-vm
 ```
 
 ---
@@ -39,34 +39,34 @@ Process the `poc` Template to create a VirtualMachine object.
 
 ```bash
 # Basic creation (auto-generated name)
-oc process -n openshift poc | oc apply -n poc-vm-management -f -
+oc process -n openshift poc | oc apply -n poc-vm -f -
 
 # Specify VM name
 oc process -n openshift poc \
   -p NAME=my-poc-vm \
-  | oc apply -n poc-vm-management -f -
+  | oc apply -n poc-vm -f -
 
 # Start VM
-virtctl start my-poc-vm -n poc-vm-management
+virtctl start my-poc-vm -n poc-vm
 ```
 
 ### VM Status Check
 
 ```bash
 # VM list
-oc get vm -n poc-vm-management
+oc get vm -n poc-vm
 
 # VM details (check Phase)
-oc get vmi -n poc-vm-management
+oc get vmi -n poc-vm
 
 # Check Pod
-oc get pods -n poc-vm-management
+oc get pods -n poc-vm
 
 # Console access
-virtctl console my-poc-vm -n poc-vm-management
+virtctl console my-poc-vm -n poc-vm
 
 # VNC access
-virtctl vnc my-poc-vm -n poc-vm-management
+virtctl vnc my-poc-vm -n poc-vm
 ```
 
 ---
@@ -84,7 +84,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: my-poc-vm-data
-  namespace: poc-vm-management
+  namespace: poc-vm
 spec:
   accessModes:
     - ReadWriteMany
@@ -99,14 +99,14 @@ EOF
 virtctl addvolume my-poc-vm \
   --volume-name=my-poc-vm-data \
   --disk-type=disk \
-  -n poc-vm-management
+  -n poc-vm
 ```
 
 ### Add disk after VM stop (permanent attachment)
 
 ```bash
 # Add disk directly to VM spec
-oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
+oc patch vm my-poc-vm -n poc-vm --type=json -p='[
   {
     "op": "add",
     "path": "/spec/template/spec/domain/devices/disks/-",
@@ -127,7 +127,7 @@ oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
 
 ```bash
 # Check disk inside VM
-virtctl console my-poc-vm -n poc-vm-management
+virtctl console my-poc-vm -n poc-vm
 # lsblk
 # fdisk -l
 ```
@@ -142,10 +142,10 @@ Connect `poc-bridge-nad` as a secondary network to the VM.
 
 ```bash
 # Stop VM
-virtctl stop my-poc-vm -n poc-vm-management
+virtctl stop my-poc-vm -n poc-vm
 
 # Add secondary NIC
-oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
+oc patch vm my-poc-vm -n poc-vm --type=json -p='[
   {
     "op": "add",
     "path": "/spec/template/spec/domain/devices/interfaces/-",
@@ -162,14 +162,14 @@ oc patch vm my-poc-vm -n poc-vm-management --type=json -p='[
 ]'
 
 # Start VM
-virtctl start my-poc-vm -n poc-vm-management
+virtctl start my-poc-vm -n poc-vm
 ```
 
 ### Verification
 
 ```bash
 # Check NIC in VMI
-oc get vmi my-poc-vm -n poc-vm-management \
+oc get vmi my-poc-vm -n poc-vm \
   -o jsonpath='{range .status.interfaces[*]}{.name}: {.ipAddress}{"\n"}{end}'
 ```
 
@@ -180,7 +180,7 @@ oc get vmi my-poc-vm -n poc-vm-management \
 Configure a static IP on the secondary NIC (`eth1`).
 Configure via cloud-init during initial setup, or set directly inside the VM.
 
-> The ConsoleYAMLSample VM created by `03-vm-management.sh` already includes cloud-init networkData.
+> The ConsoleYAMLSample VM created by `03-vm-deploy.sh` already includes cloud-init networkData.
 
 ### Method A — Initial configuration via cloud-init networkData
 
@@ -192,23 +192,23 @@ Since it must be applied **before VM boot**, patch it in `runStrategy: Halted` s
 oc process -n openshift poc \
   -p NAME=my-poc-vm \
   | sed 's/  running: false/  runStrategy: Halted/' \
-  | oc apply -n poc-vm-management -f -
+  | oc apply -n poc-vm -f -
 
 # Check cloudinitdisk volume index (grep -n is 1-based → convert to 0-based)
-CI_IDX=$(oc get vm my-poc-vm -n poc-vm-management \
+CI_IDX=$(oc get vm my-poc-vm -n poc-vm \
   -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}{"\n"}{end}' | \
   grep -n "cloudinitdisk" | cut -d: -f1 | head -1)
 CI_IDX=$(( CI_IDX - 1 ))
 
 # Add networkData to existing cloudinitdisk (before VM start)
-oc patch vm my-poc-vm -n poc-vm-management --type=json -p="[
+oc patch vm my-poc-vm -n poc-vm --type=json -p="[
   {\"op\": \"add\",
    \"path\": \"/spec/template/spec/volumes/${CI_IDX}/cloudInitNoCloud/networkData\",
    \"value\": \"version: 2\nethernets:\n  eth1:\n    dhcp4: false\n    addresses:\n      - 192.168.100.10/24\n    gateway4: 192.168.100.1\n    nameservers:\n      addresses:\n        - 8.8.8.8\n\"}
 ]"
 
 # Start VM
-virtctl start my-poc-vm -n poc-vm-management
+virtctl start my-poc-vm -n poc-vm
 ```
 
 The resulting `cloudinitdisk` volume is configured as follows:
@@ -239,7 +239,7 @@ The resulting `cloudinitdisk` volume is configured as follows:
 Connect to the VM console and configure directly.
 
 ```bash
-virtctl console my-poc-vm -n poc-vm-management
+virtctl console my-poc-vm -n poc-vm
 ```
 
 Inside the VM:
@@ -289,18 +289,18 @@ Move a VM to another node without interruption.
 
 ```bash
 # Check current node running the VM
-oc get vmi my-poc-vm -n poc-vm-management \
+oc get vmi my-poc-vm -n poc-vm \
   -o jsonpath='{.status.nodeName}{"\n"}'
 
 # Check storage ReadWriteMany (required for Live Migration)
-oc get pvc -n poc-vm-management
+oc get pvc -n poc-vm
 ```
 
 ### Execute Live Migration
 
 ```bash
 # Start migration with virtctl
-virtctl migrate my-poc-vm -n poc-vm-management
+virtctl migrate my-poc-vm -n poc-vm
 
 # Or create VirtualMachineInstanceMigration object directly
 oc apply -f - <<EOF
@@ -308,7 +308,7 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachineInstanceMigration
 metadata:
   name: my-poc-vm-migration
-  namespace: poc-vm-management
+  namespace: poc-vm
 spec:
   vmiName: my-poc-vm
 EOF
@@ -318,20 +318,20 @@ EOF
 
 ```bash
 # Migration progress
-oc get vmim -n poc-vm-management
+oc get vmim -n poc-vm
 
 # Detailed check
-oc describe vmim my-poc-vm-migration -n poc-vm-management
+oc describe vmim my-poc-vm-migration -n poc-vm
 
 # Verify node change after migration completes
-oc get vmi my-poc-vm -n poc-vm-management \
+oc get vmi my-poc-vm -n poc-vm \
   -o jsonpath='{.status.nodeName}{"\n"}'
 ```
 
 ### Cancel Migration
 
 ```bash
-virtctl migrate-cancel my-poc-vm -n poc-vm-management
+virtctl migrate-cancel my-poc-vm -n poc-vm
 ```
 
 ---
@@ -340,17 +340,17 @@ virtctl migrate-cancel my-poc-vm -n poc-vm-management
 
 ```bash
 # VM / VMI overall status
-oc get vm,vmi -n poc-vm-management
+oc get vm,vmi -n poc-vm
 
 # VM events
-oc describe vm my-poc-vm -n poc-vm-management
+oc describe vm my-poc-vm -n poc-vm
 
 # VM Runner Pod logs
-oc logs -n poc-vm-management \
-  $(oc get pod -n poc-vm-management -l vm.kubevirt.io/name=my-poc-vm -o name)
+oc logs -n poc-vm \
+  $(oc get pod -n poc-vm -l vm.kubevirt.io/name=my-poc-vm -o name)
 
 # DataVolume status (root disk clone progress)
-oc get dv -n poc-vm-management
+oc get dv -n poc-vm
 ```
 
 ---
@@ -359,18 +359,18 @@ oc get dv -n poc-vm-management
 
 ```bash
 # Stop and delete VM
-virtctl stop my-poc-vm -n poc-vm-management
-oc delete vm my-poc-vm -n poc-vm-management
+virtctl stop my-poc-vm -n poc-vm
+oc delete vm my-poc-vm -n poc-vm
 
 # Delete DataVolume (root disk)
-oc delete dv my-poc-vm -n poc-vm-management
+oc delete dv my-poc-vm -n poc-vm
 
 # Delete additional PVC
-oc delete pvc my-poc-vm-data -n poc-vm-management
+oc delete pvc my-poc-vm-data -n poc-vm
 
 # Delete NAD
-oc delete net-attach-def poc-bridge-nad -n poc-vm-management
+oc delete net-attach-def poc-bridge-nad -n poc-vm
 
 # Delete namespace
-oc delete namespace poc-vm-management
+oc delete namespace poc-vm
 ```
