@@ -146,13 +146,22 @@ step_vm() {
         print_ok "VM $VM_NAME already exists — skipping"
     else
         local vm_yaml="${SCRIPT_DIR}/poc-storage-vm.yaml"
-        oc process -n openshift poc -p NAME="$VM_NAME" | \
-            jq --arg sc "${SRC_SC}" '
-              .items[0].spec.runStrategy = "Always" |
-              .items[0].spec.dataVolumeTemplates[0].spec.storage.storageClassName = $sc
-            ' > "${vm_yaml}"
-        echo "Generated file: poc-storage-vm.yaml"
-        oc apply -f "${vm_yaml}"
+        if command -v jq &>/dev/null; then
+            oc process -n openshift poc -p NAME="$VM_NAME" | \
+                jq --arg sc "${SRC_SC}" '
+                  .items[0].spec.runStrategy = "Always" |
+                  .items[0].spec.dataVolumeTemplates[0].spec.storage.storageClassName = $sc
+                ' > "${vm_yaml}"
+            oc apply -f "${vm_yaml}"
+        else
+            # jq not available: apply template then patch immediately before CDI reconciles
+            oc process -n openshift poc -p NAME="$VM_NAME" | oc apply -f -
+            oc patch vm "$VM_NAME" -n "$VM_NS" --type=merge \
+                -p '{"spec":{"runStrategy":"Always"}}'
+            oc patch vm "$VM_NAME" -n "$VM_NS" --type=json -p "[
+                {\"op\":\"add\",\"path\":\"/spec/dataVolumeTemplates/0/spec/storage/storageClassName\",\"value\":\"${SRC_SC}\"}
+            ]"
+        fi
         print_ok "VM $VM_NAME created (StorageClass: ${SRC_SC})"
     fi
 
@@ -460,12 +469,12 @@ step_verify() {
 print_summary() {
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  Done! Storage migration lab completed.${NC}"
+    echo -e "${GREEN}  Done! Source VM is ready.${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  Migration method    : ${MIGRATE_METHOD}"
-    echo -e "  StorageClass        : ${SRC_SC} → ${DST_SC}"
-    echo -e "  Namespace           : ${VM_NS}"
+    echo -e "  Namespace     : ${VM_NS}"
+    echo -e "  VM            : ${VM_NAME}"
+    echo -e "  StorageClass  : ${SRC_SC}"
     echo ""
     echo -e "  Check VM status:"
     echo -e "    ${CYAN}oc get vm,vmi -n ${VM_NS}${NC}"
@@ -473,7 +482,7 @@ print_summary() {
     echo -e "  Check PVC:"
     echo -e "    ${CYAN}oc get pvc -n ${VM_NS}${NC}"
     echo ""
-    echo -e "  For details: 21-storage-migration.md"
+    echo -e "  For storage migration steps: 21-storage-migration.md"
     echo ""
 }
 
@@ -495,9 +504,6 @@ main() {
     preflight
     step_namespace
     step_vm
-    step_clone
-    step_migrate
-    step_verify
     print_summary
 }
 

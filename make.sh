@@ -264,15 +264,15 @@ step_desc() {
         09-alert)            echo "VM Alert — PrometheusRule notification" ;;
         10-node-exporter)    echo "Node Exporter — Custom metric collection" ;;
         11-coo)              echo "COO — Cluster Observability Operator MonitoringStack + VM node_exporter" ;;
-        11-grafana)          echo "Grafana — Grafana Operator + OpenShift Prometheus datasource + OCP-V dashboard" ;;
-        12-mtv)              echo "MTV — VMware → OpenShift migration (Operator required)" ;;
-        13-oadp)             echo "OADP — VM backup/restore (Operator required)" ;;
-        14-node-maintenance) echo "Node Maintenance — Node maintenance VM Migration (Operator required)" ;;
-        15-snr)              echo "SNR — Node self-restart recovery (Operator required)" ;;
-        16-far)              echo "FAR — IPMI/BMC power restart recovery (Operator required)" ;;
-        17-add-node)         echo "Worker node removal and rejoin" ;;
-        18-hyperconverged)   echo "HyperConverged — CPU Overcommit configuration" ;;
-        21-storage-migration) echo "Storage migration — VM disk StorageClass migration (OCP Virt built-in, no S3 needed)" ;;
+        12-grafana)          echo "Grafana — Grafana Operator + OpenShift Prometheus datasource + OCP-V dashboard" ;;
+        13-mtv)              echo "MTV — VMware → OpenShift migration (Operator required)" ;;
+        14-oadp)             echo "OADP — VM backup/restore (Operator required)" ;;
+        15-node-maintenance) echo "Node Maintenance — Node maintenance VM Migration (Operator required)" ;;
+        16-snr)              echo "SNR — Node self-restart recovery (Operator required)" ;;
+        17-far)              echo "FAR — IPMI/BMC power restart recovery (Operator required)" ;;
+        18-add-node)         echo "Worker node removal and rejoin" ;;
+        19-hyperconverged)   echo "HyperConverged — CPU Overcommit configuration" ;;
+        22-storage-migration) echo "Storage migration — VM disk StorageClass migration (OCP Virt built-in, no S3 needed)" ;;
         *)                   echo "$1" ;;
     esac
 }
@@ -447,12 +447,12 @@ ns_desc() {
         poc-alert)                echo "09 VM Alert lab — PrometheusRule VM status notification" ;;
         poc-node-exporter)        echo "10 Node Exporter lab — Custom metric collection" ;;
         poc-monitoring)           echo "11 Monitoring lab — Grafana, Dell, Hitachi storage" ;;
-        poc-mtv)                  echo "12 MTV lab — VMware → OpenShift migration" ;;
-        poc-oadp)                 echo "13 OADP lab — VM backup/restore" ;;
-        poc-maintenance)          echo "14 Node Maintenance lab — VM Live Migration during node maintenance" ;;
-        poc-snr)                  echo "15 SNR lab — NHC detection → node self-restart recovery" ;;
-        poc-far)                  echo "16 FAR lab — NHC detection → IPMI/BMC power restart recovery" ;;
-        poc-storage)              echo "21 Storage migration lab — VM disk StorageClass migration" ;;
+        poc-mtv)                  echo "13 MTV lab — VMware → OpenShift migration" ;;
+        poc-oadp)                 echo "14 OADP lab — VM backup/restore" ;;
+        poc-maintenance)          echo "15 Node Maintenance lab — VM Live Migration during node maintenance" ;;
+        poc-snr)                  echo "16 SNR lab — NHC detection → node self-restart recovery" ;;
+        poc-far)                  echo "17 FAR lab — NHC detection → IPMI/BMC power restart recovery" ;;
+        poc-storage)              echo "22 Storage migration lab — VM disk StorageClass migration" ;;
         *)                  echo "" ;;
     esac
 }

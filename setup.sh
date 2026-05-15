@@ -478,7 +478,7 @@ ask "API server URL" "${DETECTED_API:-https://api.${CLUSTER_DOMAIN}:6443}" CLUST
 print_step_header "[01]" "Template — DataVolume / DataSource / Template registration"
 
 ask "StorageClass to use for VM image upload" "${DETECTED_SC:-ocs-external-storagecluster-ceph-rbd}" STORAGE_CLASS
-ask "poc-golden.qcow2 image download URL" "http://krssa.ddns.net/vm-images/rhel9-poc-golden.qcow2" GOLDEN_IMAGE_URL
+ask "poc-golden.qcow2 image download URL" "http://146.56.160.95/poc-golden.qcow2" GOLDEN_IMAGE_URL
 
 # =============================================================================
 # [02] Network — NNCP / NAD / VM creation
@@ -617,6 +617,8 @@ fi
 # =============================================================================
 if [ "${MTV_INSTALLED:-false}" = "true" ]; then
     print_step_header "[11]" "MTV — VMware → OpenShift migration"
+    print_info "VDDK 7 download url http://146.56.160.95/VMware-vix-disklib-7.0.3-23007270.x86_64.tar.gz"
+    print_info "VDDK 8 download url http://146.56.160.95/VMware-vix-disklib-8.0.3-23950268.x86_64.tar.gz"
     print_info "VDDK image path (enter after pushing directly to the internal registry)"
     ask "VDDK image path" "image-registry.openshift-image-registry.svc:5000/openshift/vddk:latest" VDDK_IMAGE
 else
