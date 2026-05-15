@@ -1,4 +1,4 @@
-# VM Deploy
+# VM Workload
 
 Explains how to deploy VMs in the `poc-vm` namespace using the poc template with bridge network and cloud-init static IP.
 
@@ -21,7 +21,7 @@ VirtualMachine (poc-vm)
 
 - `01-template` complete — `poc` Template and DataSource registered
 - `02-network` complete — NNCP / NAD configured
-- `03-vm-deploy.sh` complete — `poc-vm` namespace and NAD registered
+- `03-vm-workload.sh` complete — `poc-vm` namespace and NAD registered
 
 ```bash
 # Check prerequisites
@@ -180,7 +180,7 @@ oc get vmi my-poc-vm -n poc-vm \
 Configure a static IP on the secondary NIC (`eth1`).
 Configure via cloud-init during initial setup, or set directly inside the VM.
 
-> The ConsoleYAMLSample VM created by `03-vm-deploy.sh` already includes cloud-init networkData.
+> The ConsoleYAMLSample VM created by `03-vm-workload.sh` already includes cloud-init networkData.
 
 ### Method A — Initial configuration via cloud-init networkData
 

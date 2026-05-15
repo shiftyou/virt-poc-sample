@@ -1,11 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# 03-vm-deploy.sh
+# 03-vm-workload.sh
 #
 # Create poc-vm namespace, register NAD, and deploy VM (poc template + bridge network)
 # Prepares the VM workload execution environment.
 #
-# Usage: ./03-vm-deploy.sh
+# Usage: ./03-vm-workload.sh
 # =============================================================================
 
 set -euo pipefail
@@ -353,7 +353,7 @@ print_summary() {
     echo -e "  Namespace : ${CYAN}oc get namespace ${VM_NS}${NC}"
     echo -e "  NAD check : ${CYAN}oc get net-attach-def -n ${VM_NS}${NC}"
     echo ""
-    echo -e "  Next steps: Refer to 03-vm-deploy.md"
+    echo -e "  Next steps: Refer to 03-vm-workload.md"
     echo -e "    - VM creation using poc template"
     echo -e "    - Storage addition"
     echo -e "    - Network addition"
@@ -366,10 +366,10 @@ print_summary() {
 # Cleanup
 # =============================================================================
 cleanup() {
-    print_step "--cleanup: Delete 03-vm-deploy resources"
+    print_step "--cleanup: Delete 03-vm-workload resources"
     oc delete project poc-vm --ignore-not-found 2>/dev/null || true
     oc delete consoleyamlsample poc-virtualmachine --ignore-not-found 2>/dev/null || true
-    print_ok "03-vm-deploy resources deleted"
+    print_ok "03-vm-workload resources deleted"
 }
 
 # =============================================================================
@@ -378,7 +378,7 @@ cleanup() {
 main() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  VM Deploy — Namespace + NAD + VM (poc template + bridge network)${NC}"
+    echo -e "${CYAN}  VM Workload — Namespace + NAD + VM (poc template + bridge network)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     preflight

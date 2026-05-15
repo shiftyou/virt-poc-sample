@@ -6,7 +6,7 @@
 # Run setup.sh first to generate env.conf.
 #   e.g.) 01-template/01-template.sh
 #         02-network/02-network.sh
-#         03-vm-deploy/03-vm-deploy.sh
+#         03-vm-workload/03-vm-workload.sh
 #
 # Usage:
 #   ./make.sh            Print usage
@@ -255,7 +255,7 @@ step_desc() {
     case "$1" in
         01-template)         echo "DataVolume upload → DataSource → Template registration" ;;
         02-network)          echo "NNCP Linux Bridge (${BRIDGE_NAME:-br-poc}) + NAD + VM creation" ;;
-        03-vm-deploy)        echo "VM Deploy — Namespace + NAD + VM (poc template + bridge network)" ;;
+        03-vm-workload)      echo "VM Workload — Namespace + NAD + VM (poc template + bridge network)" ;;
         04-multitenancy)     echo "Multi-tenancy — Namespaces, Users, RBAC, VMs" ;;
         05-network-policy)   echo "NetworkPolicy — Deny All / Allow Same NS / Allow IP" ;;
         06-resource-quota)   echo "ResourceQuota — CPU, Memory, Pod, PVC limits" ;;
@@ -272,7 +272,6 @@ step_desc() {
         17-far)              echo "FAR — IPMI/BMC power restart recovery (Operator required)" ;;
         18-add-node)         echo "Worker node removal and rejoin" ;;
         19-hyperconverged)   echo "HyperConverged — CPU Overcommit configuration" ;;
-        22-storage-migration) echo "Storage migration — VM disk StorageClass migration (OCP Virt built-in, no S3 needed)" ;;
         *)                   echo "$1" ;;
     esac
 }
@@ -436,7 +435,7 @@ echo -e "${CYAN}  poc- namespace list:${NC}"
 echo ""
 ns_desc() {
     case "$1" in
-        poc-vm)             echo "03 VM Deploy lab — VM creation, storage, networking, Live Migration" ;;
+        poc-vm)             echo "03 VM Workload lab — VM creation, storage, networking, Live Migration" ;;
         tenant-ns1)               echo "04 Multi-tenancy — NS1 (user1 admin / user3 view)" ;;
         tenant-ns2)               echo "04 Multi-tenancy — NS2 (user2 admin / user4 view)" ;;
         poc-network-policy-1)     echo "05 NetworkPolicy lab — NS1 (Deny All / Allow Same NS)" ;;
@@ -452,7 +451,6 @@ ns_desc() {
         poc-maintenance)          echo "15 Node Maintenance lab — VM Live Migration during node maintenance" ;;
         poc-snr)                  echo "16 SNR lab — NHC detection → node self-restart recovery" ;;
         poc-far)                  echo "17 FAR lab — NHC detection → IPMI/BMC power restart recovery" ;;
-        poc-storage)              echo "22 Storage migration lab — VM disk StorageClass migration" ;;
         *)                  echo "" ;;
     esac
 }
