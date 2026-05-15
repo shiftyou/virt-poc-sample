@@ -973,7 +973,6 @@ spec:
   instanceSelector:
     matchLabels:
       dashboards: poc-grafana
-  folder: "Openshift Virtualization"
   url: https://raw.githubusercontent.com/leoaaraujo/articles/master/openshift-virtualization-monitoring/files/ocp-v-dashboard.json
 EOF
     oc apply -f ./grafana-dashboard-ocp-v.yaml
